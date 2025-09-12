@@ -16,12 +16,12 @@ class FaceService:
         if cls._instance is None:
             cls._instance = super(FaceService, cls).__new__(cls)
             cls._instance.initialized = False
+            cls._instance.model = None
         return cls._instance
     
     def __init__(self):
-        if not self.initialized:
-            self.model = None
-            self.initialized = False
+        # Initialize will be called explicitly, so we don't need to do anything here
+        pass
     
     def initialize(self):
         """Initialize the face detection and recognition model"""
@@ -36,6 +36,7 @@ class FaceService:
             self.model = FaceAnalysis(name=detector_backend, root=model_path, providers=['CPUExecutionProvider'])
             self.model.prepare(ctx_id=0, det_size=(640, 640))
             self.initialized = True
+            current_app.logger.info("Face recognition model successfully initialized")
             return True
         except Exception as e:
             current_app.logger.error(f"Failed to initialize face model: {str(e)}")
@@ -43,7 +44,7 @@ class FaceService:
     
     def detect_and_embed_face(self, image_data):
         """Detect face in an image and return the embedding"""
-        if not self.initialized:
+        if not self.initialized or self.model is None:
             if not self.initialize():
                 raise RuntimeError("Face recognition model could not be initialized")
         
@@ -114,6 +115,11 @@ class FaceService:
         """Process an image for attendance checking"""
         start_time = time.time()
         
+        # Ensure model is initialized
+        if not self.initialized or self.model is None:
+            if not self.initialize():
+                raise RuntimeError("Face recognition model could not be initialized")
+                
         # Convert bytes to image
         if isinstance(image_data, bytes):
             np_arr = np.frombuffer(image_data, np.uint8)
@@ -136,29 +142,40 @@ class FaceService:
         
         if not faces:
             processing_time = int((time.time() - start_time) * 1000)  # ms
-            return {"recognized": [], "unrecognized_count": 0, "processing_time_ms": processing_time}
+            return {"recognized": [], "unrecognized_count": 0, "unrecognized_faces": [], "processing_time_ms": processing_time}
         
         recognized = []
         unrecognized = 0
+        unrecognized_faces = []
         threshold = current_app.config.get('FACE_MATCH_THRESHOLD', 0.60)
         
         for face in faces:
             embedding = face.embedding
+            bbox = face.bbox.astype(int)  # Get bounding box for each face
             student, score = self.match_face(embedding, threshold)
             
             if student:
                 recognized.append({
                     "student_id": student.student_id,
                     "name": student.name,
-                    "score": float(score)
+                    "score": float(score),
+                    "bbox": bbox.tolist()  # Add bounding box information
                 })
             else:
                 unrecognized += 1
+                # Add information about unrecognized face
+                unrecognized_faces.append({
+                    "id": f"unknown_{unrecognized}",
+                    "bbox": bbox.tolist(),
+                    "score": float(score) if score else 0.0
+                })
         
         processing_time = int((time.time() - start_time) * 1000)  # ms
         
         return {
             "recognized": recognized,
             "unrecognized_count": unrecognized,
-            "processing_time_ms": processing_time
+            "unrecognized_faces": unrecognized_faces,
+            "processing_time_ms": processing_time,
+            "total_faces": len(faces)
         }

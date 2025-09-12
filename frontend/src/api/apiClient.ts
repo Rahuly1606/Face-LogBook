@@ -7,6 +7,11 @@ const API_ROOT = import.meta.env.VITE_API_ROOT || 'http://127.0.0.1:5000/api/v1'
 const apiClient = axios.create({
   baseURL: API_ROOT,
   timeout: 20000,
+  withCredentials: false, // Important for CORS
+  headers: {
+    'Content-Type': 'application/json',
+    // Don't include Access-Control-Allow-Origin here as it's a response header, not request header
+  }
 });
 
 // Request interceptor to add admin token

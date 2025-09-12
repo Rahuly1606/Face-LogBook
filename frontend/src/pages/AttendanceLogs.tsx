@@ -30,19 +30,31 @@ const AttendanceLogs: React.FC = () => {
         data = await getAttendanceByDate(dateStr);
       }
       
-      setRecords(data.attendance.map(record => ({
-        ...record,
-        // Ensure name is available by using either name or student_name field
-        name: record.name || record.student_name,
-        // Ensure date is available
-        date: record.date || new Date().toISOString().split('T')[0]
-      })));
+      if (data && data.attendance) {
+        setRecords(data.attendance.map(record => ({
+          ...record,
+          // Ensure name is available by using either name or student_name field
+          name: record.name || record.student_name,
+          // Ensure date is available
+          date: record.date || new Date().toISOString().split('T')[0]
+        })));
+      } else {
+        // Handle empty data
+        setRecords([]);
+        toast({
+          title: "Information",
+          description: "No attendance records found for the selected date",
+        });
+      }
     } catch (error) {
+      console.error("Error fetching attendance:", error);
       toast({
         title: "Error",
-        description: "Failed to fetch attendance records",
+        description: "Failed to fetch attendance records. Server might be unreachable.",
         variant: "destructive",
       });
+      // Set empty array to prevent UI errors
+      setRecords([]);
     } finally {
       setLoading(false);
     }

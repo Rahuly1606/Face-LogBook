@@ -13,6 +13,7 @@ face_service = FaceService()
 @check_auth_optional
 def process_live_attendance():
     """Process a single frame for attendance"""
+    
     # Get image data (either form data or base64 JSON)
     if request.content_type and request.content_type.startswith('multipart/form-data'):
         if 'image' not in request.files:

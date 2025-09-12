@@ -2,11 +2,12 @@ import React, { useRef, useCallback, useState, useEffect } from 'react';
 import Webcam from 'react-webcam';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
-import { Camera, CameraOff, Play, Pause } from 'lucide-react';
+import { Camera, CameraOff, Play, Pause, RefreshCw } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
-import { submitLiveAttendance } from '@/api/attendance';
+import { submitLiveAttendance, RecognizedStudent, UnrecognizedFace } from '@/api/attendance';
 import { useAppContext } from '@/context/AppContext';
 import GreetingToast from './GreetingToast';
+import LiveStudentList from './LiveStudentList';
 
 const WebcamCapture: React.FC = () => {
   const webcamRef = useRef<Webcam>(null);
@@ -15,6 +16,10 @@ const WebcamCapture: React.FC = () => {
   const [lastCapture, setLastCapture] = useState<string | null>(null);
   const [greetingData, setGreetingData] = useState<{ name: string; action: string } | null>(null);
   const [processingTime, setProcessingTime] = useState<number | null>(null);
+  const [recognizedStudents, setRecognizedStudents] = useState<RecognizedStudent[]>([]);
+  const [unrecognizedCount, setUnrecognizedCount] = useState(0);
+  const [unrecognizedFaces, setUnrecognizedFaces] = useState<UnrecognizedFace[]>([]);
+  const [totalFaces, setTotalFaces] = useState(0);
   const { captureInterval } = useAppContext();
   const { toast } = useToast();
 
@@ -23,6 +28,13 @@ const WebcamCapture: React.FC = () => {
     height: 720,
     facingMode: "user"
   };
+
+  const clearStudentList = useCallback(() => {
+    setRecognizedStudents([]);
+    setUnrecognizedCount(0);
+    setUnrecognizedFaces([]);
+    setTotalFaces(0);
+  }, []);
 
   const captureAndProcess = useCallback(async () => {
     if (!webcamRef.current) return;
@@ -39,10 +51,41 @@ const WebcamCapture: React.FC = () => {
 
       // Submit to backend
       const response = await submitLiveAttendance(blob);
+      
+      // Check if there was an error
+      if (response.error) {
+        console.error('API error:', response.errorMessage);
+        toast({
+          title: "Connection Error",
+          description: "Could not connect to the backend server. Retrying...",
+          variant: "destructive",
+        });
+        return;
+      }
+      
       setProcessingTime(response.processing_time_ms);
+      setTotalFaces(response.total_faces || 0);
+      
+      // Update unrecognized count
+      setUnrecognizedCount(response.unrecognized_count || 0);
+      
+      // Update unrecognized faces
+      if (response.unrecognized_faces) {
+        setUnrecognizedFaces(response.unrecognized_faces);
+      }
 
       // Handle recognized students
       if (response.recognized && response.recognized.length > 0) {
+        // Add timestamp to each student
+        const studentsWithTimestamp = response.recognized.map(student => ({
+          ...student,
+          timestamp: new Date().toISOString()
+        }));
+        
+        // Update the recognized students list
+        setRecognizedStudents(prev => [...prev, ...studentsWithTimestamp]);
+
+        // Show greeting toast for each newly recognized student
         response.recognized.forEach((student) => {
           if (student.action) {
             setGreetingData({
@@ -96,7 +139,7 @@ const WebcamCapture: React.FC = () => {
       stopAutoCapture();
       startAutoCapture();
     }
-  }, [captureInterval]);
+  }, [captureInterval, startAutoCapture, stopAutoCapture]);
 
   return (
     <>
@@ -149,16 +192,21 @@ const WebcamCapture: React.FC = () => {
               </div>
             )}
           </div>
-
-          {processingTime !== null && (
-            <div className="mt-4 text-sm text-muted-foreground">
-              Processing time: {processingTime}ms
-            </div>
-          )}
         </Card>
 
         <Card className="p-6 shadow-lg">
-          <h3 className="text-lg font-semibold mb-4 text-card-foreground">Last Capture</h3>
+          <div className="flex justify-between items-center mb-4">
+            <h3 className="text-lg font-semibold text-card-foreground">Last Capture</h3>
+            <Button 
+              variant="ghost" 
+              size="sm" 
+              onClick={clearStudentList}
+              className="gap-1"
+            >
+              <RefreshCw className="h-4 w-4" />
+              Reset List
+            </Button>
+          </div>
           <div className="rounded-lg overflow-hidden bg-secondary">
             {lastCapture ? (
               <img 
@@ -175,8 +223,23 @@ const WebcamCapture: React.FC = () => {
               </div>
             )}
           </div>
+          
+          {processingTime !== null && (
+            <div className="mt-4 text-sm text-muted-foreground">
+              Processing time: {processingTime}ms
+            </div>
+          )}
         </Card>
       </div>
+
+      <LiveStudentList
+        recognizedStudents={recognizedStudents}
+        unrecognizedCount={unrecognizedCount}
+        unrecognizedFaces={unrecognizedFaces}
+        totalFaces={totalFaces}
+        processingTime={processingTime || undefined}
+        clearList={clearStudentList}
+      />
 
       {greetingData && (
         <GreetingToast

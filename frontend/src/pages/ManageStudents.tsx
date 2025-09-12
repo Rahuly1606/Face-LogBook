@@ -17,15 +17,29 @@ const ManageStudents: React.FC = () => {
   }, []);
 
   const fetchStudents = async () => {
+    setLoading(true);
     try {
       const data = await getStudents();
-      setStudents(data.students);
+      if (data && data.students) {
+        setStudents(data.students);
+      } else {
+        // Handle empty data
+        setStudents([]);
+        toast({
+          title: "Warning",
+          description: "No students data available",
+          variant: "default",
+        });
+      }
     } catch (error) {
+      console.error("Error fetching students:", error);
       toast({
         title: "Error",
-        description: "Failed to fetch students",
+        description: "Failed to fetch students. Server might be unreachable.",
         variant: "destructive",
       });
+      // Set empty array to prevent UI errors
+      setStudents([]);
     } finally {
       setLoading(false);
     }

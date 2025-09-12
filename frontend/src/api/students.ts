@@ -50,14 +50,25 @@ export const registerStudent = async (data: RegisterStudentData) => {
 
 // Get all students
 export const getStudents = async (): Promise<{ students: Student[] }> => {
-  const response = await apiClient.get('/students');
-  return response.data;
+  try {
+    const response = await apiClient.get('/students');
+    return response.data;
+  } catch (error) {
+    console.error('Error fetching students:', error);
+    // Return a fallback response to prevent UI errors
+    return { students: [] };
+  }
 };
 
 // Get a single student
-export const getStudent = async (id: string): Promise<Student> => {
-  const response = await apiClient.get(`/students/${id}`);
-  return response.data;
+export const getStudent = async (id: string): Promise<Student | null> => {
+  try {
+    const response = await apiClient.get(`/students/${id}`);
+    return response.data;
+  } catch (error) {
+    console.error(`Error fetching student ${id}:`, error);
+    return null;
+  }
 };
 
 // Update a student

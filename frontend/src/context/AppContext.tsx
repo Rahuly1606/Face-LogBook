@@ -25,7 +25,7 @@ interface AppProviderProps {
 
 export const AppProvider: React.FC<AppProviderProps> = ({ children }) => {
   const [adminToken, setAdminToken] = useState(import.meta.env.VITE_ADMIN_TOKEN || 'dev-admin-token');
-  const [captureInterval, setCaptureInterval] = useState(800); // milliseconds
+  const [captureInterval, setCaptureInterval] = useState(3000); // 3 seconds default
   const [isLiveCapturing, setIsLiveCapturing] = useState(false);
 
   const value = {
