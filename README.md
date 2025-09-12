@@ -1,195 +1,281 @@
-# Face Attendance App
+# Face-LogBook - Facial Recognition Attendance System
 
-A modern, full-stack web application for managing student attendance using advanced face recognition technology. Built with a Flask backend and a React frontend.
+A modern, full-stack web application for managing student attendance using advanced facial recognition technology. This system allows you to register students with their photos, take attendance using a webcam, track attendance history, and more.
 
-## ✨ Features
+![Face-LogBook Banner](https://img.shields.io/badge/Face--LogBook-Attendance%20System-blue)
 
--   **Student Management**: Register, view, update, and delete student profiles.
--   **Face-Powered Registration**: Automatically extracts and stores facial embeddings from an uploaded photo.
--   **Live Attendance**: Mark attendance in real-time using a live camera feed.
--   **Bulk Attendance**: Upload a group photo to mark attendance for multiple students at once.
--   **Attendance Tracking**: View and manage historical attendance records.
--   **Secure Admin Operations**: Protected endpoints for administrative tasks.
+## 📋 Features
 
----
+- **Face Recognition**: Automatically identify registered students using webcam
+- **Multiple Face Detection**: Process multiple students in a single frame
+- **Real-time Attendance**: Mark attendance with live camera feed
+- **Student Management**: Easily register, view, and manage student profiles
+- **Attendance History**: View and export attendance records by date
+- **Admin Dashboard**: Complete overview of system usage and statistics
 
 ## 🛠️ Technology Stack
 
--   **Backend**: Flask, Python, SQLAlchemy, Flask-Migrate
--   **Frontend**: React, Vite, TypeScript, Tailwind CSS
--   **Face Recognition**: `insightface` library
--   **Database**: MySQL (or SQLite for quick testing)
--   **API Communication**: Axios, RESTful principles
+- **Backend**: 
+  - Flask (Python)
+  - SQLAlchemy (ORM)
+  - InsightFace (Face Recognition)
+  - MySQL/SQLite (Database)
 
----
+- **Frontend**: 
+  - React
+  - TypeScript
+  - Tailwind CSS
+  - Shadcn UI Components
 
-## 🚀 Getting Started
+## 📋 Prerequisites
 
-Follow these instructions to get the development environment up and running on your local machine.
+Before starting installation, make sure you have the following installed:
 
-### Prerequisites
+- **Python 3.9+**
+- **Node.js 16+**
+- **npm or bun**
+- **Git**
+- **MySQL** (optional, can use SQLite for testing)
 
--   Python 3.9+ and Pip
--   Node.js 16+ and npm
--   A running MySQL server (recommended)
+## 🚀 Installation Guide
 
-### 1. Backend Setup
-
-The backend server handles all business logic, database interactions, and face recognition tasks.
-
-**A. Clone and Set Up Virtual Environment**
+### Step 1: Clone the Repository
 
 ```bash
-# Navigate to the backend directory
+git clone https://github.com/Rahuly1606/Face-LogBook.git
+cd face_logbook
+```
+
+### Step 2: Backend Setup
+
+#### A. Create Virtual Environment
+
+```bash
+# Navigate to backend directory
 cd backend
 
-# Create a virtual environment
+# Create and activate virtual environment
+# For Windows:
 python -m venv venv
-source venv/bin/activate  # On Windows, use `venv\Scripts\activate`
+venv\Scripts\activate
+
+# For macOS/Linux:
+python -m venv venv
+source venv/bin/activate
 ```
 
-**B. Install Dependencies**
-
-Create a file named `requirements.txt` in the `backend` directory and add the following contents. Then, run `pip install -r requirements.txt`.
-
-```text name=backend/requirements.txt
-flask==2.2.3
-flask-sqlalchemy==3.0.3
-flask-migrate==4.0.4
-flask-cors==3.0.10
-pymysql==1.0.3
-cryptography==40.0.2
-python-dotenv==1.0.0
-gunicorn==20.1.0
-insightface>=0.7.3
-onnxruntime>=1.17.0
-opencv-python==4.7.0.72
-numpy==1.24.3
-Werkzeug==2.2.3
-```
+#### B. Install Python Dependencies
 
 ```bash
-# Install the packages from the file you just created
+# Install all required packages
 pip install -r requirements.txt
 ```
 
-**C. Configure Environment Variables**
+#### C. Download Face Recognition Model
 
-Create a `.env` file in the `backend` directory. This file will store your secret keys and database configuration.
+The application uses InsightFace for facial recognition, which requires pre-trained models:
 
-```ini name=backend/.env
-# Flask Configuration
-FLASK_APP=run.py
-FLASK_DEBUG=1
+1. Download the `buffalo_l` model from [InsightFace Model Zoo](https://github.com/deepinsight/insightface/releases/tag/v0.7)
+2. Create a directory: `backend/models/`
+3. Extract the downloaded zip and place the entire `buffalo_l` folder inside the `models` directory
 
-# Security Keys (change these to your own random strings)
-SECRET_KEY=a_very_secret_and_long_random_string
-ADMIN_TOKEN=a_secure_admin_token_for_api_access
-
-# Database URL
-# Replace user, password, and db_name with your MySQL credentials
-DEV_DATABASE_URL="mysql+pymysql://user:password@localhost/your_db_name"
-
-# Face Recognition Model
-# This must match the model folder you download (e.g., 'buffalo_l')
-FACE_MODEL_NAME=buffalo_l
+Your folder structure should look like:
+```
+backend/
+├── models/
+│   └── buffalo_l/
+│       ├── 1k3d68.onnx
+│       ├── 2d106det.onnx
+│       ├── genderage.onnx
+│       └── w600k_r50.onnx
+└── ...
 ```
 
-**D. Download Face Recognition Models**
+#### D. Configure Environment
 
-The `insightface` library requires pre-trained model files to function. These must be downloaded manually and placed in the correct directory to avoid runtime errors.
+Create a `.env` file in the `backend` directory with the following content:
 
-1.  **Download the Model Pack**: The `buffalo_l` model is recommended. Download it from the official [InsightFace Model Zoo](https://github.com/deepinsight/insightface/releases/tag/v0.7).
-    -   **File to download**: `buffalo_l.zip` (approx. 275 MB)
+```env
+# Flask Configuration
+FLASK_APP=run.py
+FLASK_ENV=development
 
-2.  **Create the Directory and Place the Model**:
-    -   In the `backend` directory, find or create a folder named `models`.
-    -   Unzip the `buffalo_l.zip` file. You will get a folder named `buffalo_l`.
-    -   Move the entire `buffalo_l` folder into the `models` directory.
+# Security
+SECRET_KEY=your_secret_key_here
+ADMIN_TOKEN=your_admin_token_here
 
-    Your final directory structure should look like this:
-    ```
-    backend/
-    ├── models/
-    │   └── buffalo_l/      <-- The unzipped model folder
-    │       ├── 1k3d68.onnx
-    │       ├── 2d106det.onnx
-    │       ├── genderage.onnx
-    │       └── w600k_r50.onnx
-    ├── app/
-    └── ...
-    ```
-    > **Note**: The `buffalo_l` pack includes the necessary face detector models (like `retinaface`), so you only need this one download. The application will find them automatically if they are in this structure.
+# Database Configuration
+# For SQLite (easy setup):
+DEV_DATABASE_URL=sqlite:///attendance.db
 
-**E. Initialize and Migrate the Database**
+# For MySQL (recommended for production):
+# DEV_DATABASE_URL=mysql+pymysql://username:password@localhost/face_logbook
+```
 
-Make sure your MySQL server is running and you have created the database specified in your `.env` file.
+#### E. Initialize Database
 
 ```bash
-# Create the database in MySQL first:
-# CREATE DATABASE your_db_name;
-
-# Initialize the migration folder (only run this once)
+# Initialize migration repository
 flask db init
 
-# Generate the initial migration script
+# Create migration script
 flask db migrate -m "Initial database setup"
 
-# Apply the migration to create the tables in your database
+# Apply migrations
 flask db upgrade
 ```
 
-**F. Run the Backend Server**
+#### F. Run Backend Server
 
 ```bash
-flask run
+# Start the Flask development server
+python run.py
 ```
 
-The backend API will now be running at `http://127.0.0.1:5000`.
+The backend server will start on http://127.0.0.1:5000
 
----
+### Step 3: Frontend Setup
 
-### 2. Frontend Setup
-
-The frontend is a responsive React application for interacting with the backend API.
-
-**A. Install Dependencies**
+#### A. Install Dependencies
 
 ```bash
-# Navigate to the frontend directory
-cd frontend
+# Navigate to frontend directory
+cd ../frontend
 
-# Install required npm packages
+# Install dependencies
+npm install
+# OR if you use bun
+bun install
+```
+
+#### B. Configure Environment
+
+Create a `.env` file in the `frontend` directory:
+
+```env
+VITE_API_ROOT=http://127.0.0.1:5000/api/v1
+VITE_ADMIN_TOKEN=your_admin_token_here
+```
+
+> ⚠️ Make sure the admin token matches the one in your backend `.env` file
+
+#### C. Run Frontend Development Server
+
+```bash
+# Start the development server
+npm run dev
+# OR if you use bun
+bun run dev
+```
+
+The frontend application will be available at http://localhost:5173 (or another port if 5173 is in use)
+
+## 📱 Using the Application
+
+1. **First-time Setup**:
+   - Use the provided admin token to access the admin features
+   - Register students with clear facial photos
+   - Set up attendance sessions
+
+2. **Taking Attendance**:
+   - Navigate to the "Live Attendance" page
+   - Click "Start Capture" to begin detecting faces
+   - Recognized students will be automatically marked present
+   - Unregistered faces will be counted and displayed
+
+3. **Viewing Records**:
+   - Go to the "Attendance Logs" page to view historical records
+   - Filter by date to see specific attendance sessions
+   - Export data as needed
+
+## ⚠️ Troubleshooting
+
+### Common Issues and Solutions
+
+#### Backend Issues
+
+- **Model Initialization Error**: 
+  - Ensure the face recognition model is downloaded and placed in the correct directory
+  - Check if all model files are present in the `backend/models/buffalo_l` folder
+
+- **Database Connection Error**: 
+  - Verify your database credentials in the `.env` file
+  - Make sure the database exists and is accessible
+
+- **CORS Errors**: 
+  - Check that the frontend URL is accessible from the backend
+  - Ensure CORS is properly configured in the Flask application
+
+#### Frontend Issues
+
+- **API Connection Error**: 
+  - Verify the backend server is running
+  - Check if the API URL in the frontend `.env` file is correct
+  - Ensure the admin token is correctly set
+
+- **Webcam Access Issues**: 
+  - Grant camera permissions in your browser
+  - Try using a different browser if problems persist
+
+## 🔄 Updating
+
+To update to the latest version:
+
+```bash
+# Pull the latest changes
+git pull
+
+# Update backend dependencies
+cd backend
+pip install -r requirements.txt
+
+# Update database schema if needed
+flask db migrate
+flask db upgrade
+
+# Update frontend dependencies
+cd ../frontend
 npm install
 ```
 
-**B. Configure Environment Variables**
+## 📚 Project Structure
 
-Create a `.env` file in the `frontend` directory to tell the app where the backend API is located.
-
-```ini name=frontend/.env
-VITE_API_ROOT=http://127.0.0.1:5000/api/v1
+```
+face_logbook/
+├── backend/               # Flask backend
+│   ├── app/               # Main application code
+│   │   ├── api/           # API endpoints
+│   │   ├── models/        # Database models
+│   │   ├── services/      # Business logic
+│   │   └── utils/         # Utilities
+│   ├── migrations/        # Database migrations
+│   ├── models/            # Face recognition models
+│   ├── tests/             # Test files
+│   └── run.py             # Application entry point
+├── frontend/              # React frontend
+│   ├── public/            # Static files
+│   ├── src/               # Source code
+│   │   ├── api/           # API clients
+│   │   ├── components/    # React components
+│   │   ├── contexts/      # React contexts
+│   │   ├── pages/         # Page components
+│   │   └── utils/         # Utility functions
+│   └── package.json       # Frontend dependencies
+└── README.md              # This file
 ```
 
-**C. Run the Frontend Development Server**
+## 📄 License
 
-```bash
-npm run dev
-```
+This project is licensed under the MIT License - see the LICENSE file for details.
 
-The frontend will now be running and accessible at `http://localhost:5173` (or another port if 5173 is busy).
+## 🙏 Acknowledgements
+
+- [InsightFace](https://github.com/deepinsight/insightface) for the face recognition models
+- [Flask](https://flask.palletsprojects.com/) for the backend framework
+- [React](https://reactjs.org/) for the frontend library
+- [Tailwind CSS](https://tailwindcss.com/) for the styling
+- [Shadcn UI](https://ui.shadcn.com/) for the UI components
 
 ---
 
-## 🚨 Troubleshooting
-
--   **`RuntimeError: Face recognition model could not be initialized`**: This is the most common error. It almost always means the model files from step `1-D` are missing or in the wrong directory. Double-check the `backend/models/buffalo_l` folder structure.
-
--   **CORS Policy Errors**: If your browser shows a CORS error, it's usually a symptom of a backend crash (`500 Internal Server Error`). Check the Flask terminal for the real error message. If the backend is running fine, ensure your frontend's URL (`http://localhost:5173`) is listed in the `CORS_ORIGINS` setting in `backend/app/__init__.py`.
-
--   **`Access denied for user 'root'@'localhost'`**: This is a database connection error. Verify that the `DEV_DATABASE_URL` in your `backend/.env` file has the correct username, password, and database name.
-
--   **File Uploads Failing (4xx Errors)**:
-    -   Ensure you are sending the `X-ADMIN-TOKEN` in the request header and that it matches the token in your `backend/.env` file.
-    -   Check that the student ID is unique.
-    -   Make sure the photo contains a single, clearly visible face.
+Made with ❤️ by [Rahuly1606](https://github.com/Rahuly1606)
