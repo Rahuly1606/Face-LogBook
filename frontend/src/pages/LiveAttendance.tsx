@@ -1,8 +1,9 @@
-import React, { useState } from 'react';
+import React, { useState, useRef, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
-import { ArrowLeft } from 'lucide-react';
+import { ArrowLeft, RefreshCw } from 'lucide-react';
 import WebcamCapture from '@/components/WebcamCapture';
+import AllStudentsList from '@/components/AllStudentsList';
 import { useAppContext } from '@/context/AppContext';
 
 import {
@@ -16,10 +17,16 @@ import {
 const LiveAttendance: React.FC = () => {
   const navigate = useNavigate();
   const { captureInterval, setCaptureInterval } = useAppContext();
+  const [refreshTrigger, setRefreshTrigger] = useState(0);
 
   const handleIntervalChange = (value: string) => {
     setCaptureInterval(parseInt(value));
   };
+
+  // Function to refresh the student list, will be called when face is recognized
+  const refreshStudentList = useCallback(() => {
+    setRefreshTrigger(prev => prev + 1);
+  }, []);
 
   return (
     <div className="max-w-7xl mx-auto p-8">
@@ -61,6 +68,8 @@ const LiveAttendance: React.FC = () => {
       </div>
       
       <WebcamCapture />
+      
+      <AllStudentsList onRefresh={refreshStudentList} key={refreshTrigger} />
     </div>
   );
 };

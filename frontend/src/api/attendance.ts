@@ -1,4 +1,4 @@
-import apiClient from './apiClient';
+import apiClient from './api_client_fixed';
 
 export interface RecognizedStudent {
   student_id: string;
@@ -44,6 +44,20 @@ export interface AttendanceRecord {
   status: 'present' | 'absent' | 'late';
 }
 
+export interface StudentStatus {
+  student_id: string;
+  name: string;
+  in_time: string | null;
+  out_time: string | null;
+  status: 'present' | 'absent' | 'late';
+  date: string;
+}
+
+export interface AllStudentsStatusResponse {
+  date: string;
+  students: StudentStatus[];
+}
+
 // Live attendance capture
 export const submitLiveAttendance = async (imageBlob: Blob): Promise<LiveAttendanceResponse> => {
   try {
@@ -52,8 +66,8 @@ export const submitLiveAttendance = async (imageBlob: Blob): Promise<LiveAttenda
 
     const response = await apiClient.post('/attendance/live', formData, {
       headers: {
-        'Content-Type': 'multipart/form-data',
-        // No Access-Control-Allow-Origin header here, as it's set by the server
+        // Let the browser set the Content-Type with proper boundary
+        'Content-Type': undefined
       },
     });
     return response.data;
@@ -78,7 +92,8 @@ export const uploadGroupAttendance = async (image: File): Promise<UploadAttendan
 
   const response = await apiClient.post('/attendance/upload', formData, {
     headers: {
-      'Content-Type': 'multipart/form-data',
+      // Let the browser set the Content-Type with proper boundary
+      'Content-Type': undefined
     },
   });
   return response.data;
@@ -119,5 +134,26 @@ export const getAttendanceByDateRange = async (startDate: string, endDate: strin
   const response = await apiClient.get('/attendance', {
     params: { start_date: startDate, end_date: endDate }
   });
+  return response.data;
+};
+
+// Get all students with their current attendance status
+export const getAllStudentsStatus = async (): Promise<AllStudentsStatusResponse> => {
+  try {
+    const response = await apiClient.get('/attendance/status/all');
+    return response.data;
+  } catch (error) {
+    console.error('Error fetching student status:', error);
+    // Return a fallback response to prevent UI errors
+    return {
+      date: new Date().toISOString().split('T')[0],
+      students: []
+    };
+  }
+};
+
+// Manually reset daily attendance
+export const resetDailyAttendance = async (): Promise<{ success: boolean; count: number }> => {
+  const response = await apiClient.post('/attendance/reset/daily');
   return response.data;
 };

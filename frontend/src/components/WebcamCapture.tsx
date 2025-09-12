@@ -9,7 +9,11 @@ import { useAppContext } from '@/context/AppContext';
 import GreetingToast from './GreetingToast';
 import LiveStudentList from './LiveStudentList';
 
-const WebcamCapture: React.FC = () => {
+interface WebcamCaptureProps {
+  onFaceRecognized?: () => void;
+}
+
+const WebcamCapture: React.FC<WebcamCaptureProps> = ({ onFaceRecognized }) => {
   const webcamRef = useRef<Webcam>(null);
   const intervalRef = useRef<NodeJS.Timeout | null>(null);
   const [isCapturing, setIsCapturing] = useState(false);
@@ -94,6 +98,11 @@ const WebcamCapture: React.FC = () => {
             });
           }
         });
+        
+        // Call the onFaceRecognized callback if provided
+        if (onFaceRecognized) {
+          onFaceRecognized();
+        }
       }
     } catch (error: any) {
       console.error('Capture error:', error);

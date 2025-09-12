@@ -22,9 +22,7 @@ def create_app(config_name='dev'):
     
     # Configure CORS with explicit settings to avoid duplicate headers
     CORS(app, 
-         origins="*",  # Allow all origins in development
-         allow_headers=["Content-Type", "Authorization", "X-ADMIN-TOKEN"],
-         methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+         resources={r"/api/*": {"origins": "*"}},
          supports_credentials=False)
     
     # Register blueprints
@@ -39,7 +37,13 @@ def create_app(config_name='dev'):
     # Initialize the face recognition service at app startup
     with app.app_context():
         from app.services.face_service import FaceService
+        from app.services.attendance_service import AttendanceService
+        
+        # Initialize face service
         face_service = FaceService()
         face_service.initialize()
+        
+        # Start daily attendance reset scheduler
+        AttendanceService.start_daily_reset_scheduler()
     
     return app

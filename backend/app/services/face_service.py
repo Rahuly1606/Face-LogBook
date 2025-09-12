@@ -149,7 +149,7 @@ class FaceService:
         unrecognized_faces = []
         threshold = current_app.config.get('FACE_MATCH_THRESHOLD', 0.60)
         
-        for face in faces:
+        for i, face in enumerate(faces):
             embedding = face.embedding
             bbox = face.bbox.astype(int)  # Get bounding box for each face
             student, score = self.match_face(embedding, threshold)
@@ -165,7 +165,7 @@ class FaceService:
                 unrecognized += 1
                 # Add information about unrecognized face
                 unrecognized_faces.append({
-                    "id": f"unknown_{unrecognized}",
+                    "id": f"unknown_{i}",
                     "bbox": bbox.tolist(),
                     "score": float(score) if score else 0.0
                 })

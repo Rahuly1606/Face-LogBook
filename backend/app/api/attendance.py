@@ -90,3 +90,21 @@ def get_student_attendance(student_id):
     """Get attendance history for a specific student"""
     result = AttendanceService.get_student_attendance_history(student_id)
     return jsonify(result), 200
+
+@attendance_bp.route('/status/all', methods=['GET'])
+@require_admin
+def get_all_students_status():
+    """Get current attendance status for all students"""
+    result = AttendanceService.get_all_students_status()
+    return jsonify(result), 200
+
+@attendance_bp.route('/reset/daily', methods=['POST'])
+@require_admin
+def reset_daily_attendance():
+    """Manually reset attendance status for all students"""
+    count = AttendanceService.reset_daily_attendance()
+    return jsonify({
+        "success": True,
+        "message": f"Reset attendance status for {count} students",
+        "count": count
+    }), 200

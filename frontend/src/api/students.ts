@@ -39,10 +39,11 @@ export const registerStudent = async (data: RegisterStudentData) => {
     });
   }
 
+  // Use the fixed API client that doesn't set Content-Type by default
   const response = await apiClient.post('/students/register', formData, {
     headers: {
-      // Content-Type is automatically set by axios for FormData
-      // DO NOT set 'Content-Type': 'multipart/form-data' manually
+      // Let the browser set the Content-Type with the proper boundary for FormData
+      'Content-Type': undefined
     },
   });
   return response.data;
@@ -81,7 +82,8 @@ export const updateStudent = async (id: string, data: UpdateStudentData) => {
 
   const response = await apiClient.put(`/students/${id}`, formData, {
     headers: {
-      'Content-Type': 'multipart/form-data',
+      // Let the browser set the Content-Type with the proper boundary for FormData
+      'Content-Type': undefined
     },
   });
   return response.data;

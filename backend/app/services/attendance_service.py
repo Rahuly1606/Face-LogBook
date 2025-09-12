@@ -3,8 +3,74 @@ from app import db
 from app.models.attendance import Attendance
 from app.models.student import Student
 from flask import current_app
+import threading
+import time
 
 class AttendanceService:
+    _daily_reset_thread = None
+    
+    @classmethod
+    def start_daily_reset_scheduler(cls):
+        """Start a background thread to reset attendance status daily"""
+        if cls._daily_reset_thread is None or not cls._daily_reset_thread.is_alive():
+            cls._daily_reset_thread = threading.Thread(target=cls._daily_reset_scheduler, daemon=True)
+            cls._daily_reset_thread.start()
+            current_app.logger.info("Daily attendance reset scheduler started")
+    
+    @classmethod
+    def _daily_reset_scheduler(cls):
+        """Background thread that resets attendance status at midnight"""
+        while True:
+            # Get current time
+            now = datetime.now()
+            
+            # Calculate time until next midnight (00:00)
+            tomorrow = now.replace(hour=0, minute=0, second=0, microsecond=0) + timedelta(days=1)
+            seconds_until_midnight = (tomorrow - now).total_seconds()
+            
+            # Sleep until next midnight
+            time.sleep(seconds_until_midnight)
+            
+            # Reset attendance status
+            with current_app.app_context():
+                try:
+                    current_app.logger.info("Performing daily attendance reset")
+                    cls.reset_daily_attendance()
+                except Exception as e:
+                    current_app.logger.error(f"Error in daily attendance reset: {str(e)}")
+    
+    @staticmethod
+    def reset_daily_attendance():
+        """Reset all students' attendance status to 'absent' for today"""
+        today = date.today()
+        
+        # Get all students
+        students = Student.query.all()
+        
+        for student in students:
+            # Check if attendance record exists for today
+            attendance = Attendance.query.filter_by(
+                student_id=student.student_id,
+                date=today
+            ).first()
+            
+            if attendance:
+                # Update existing record to absent
+                attendance.status = 'absent'
+                attendance.in_time = None
+                attendance.out_time = None
+            else:
+                # Create new record for today with absent status
+                attendance = Attendance(
+                    student_id=student.student_id,
+                    date=today,
+                    status='absent'
+                )
+                db.session.add(attendance)
+        
+        db.session.commit()
+        current_app.logger.info(f"Reset attendance status to 'absent' for {len(students)} students")
+        return len(students)
     @staticmethod
     def process_attendance(student_id):
         """Process attendance for a student, handling check-in/check-out logic"""
@@ -28,6 +94,11 @@ class AttendanceService:
                 status='present'
             )
             db.session.add(attendance)
+            action = "checkin"
+        elif attendance.status == 'absent':
+            # Student was marked absent but is now present
+            attendance.status = 'present'
+            attendance.in_time = now
             action = "checkin"
         elif attendance.in_time and not attendance.out_time:
             # Already checked in, so this is a check-out
@@ -142,4 +213,54 @@ class AttendanceService:
             "student_id": student_id,
             "name": student.name,
             "history": history
+        }
+        
+    @staticmethod
+    def get_all_students_status():
+        """Get all students with their current attendance status for today"""
+        today = date.today()
+        
+        # First get all students
+        all_students = Student.query.all()
+        
+        # Create a lookup of student_id to attendance status
+        today_attendance = Attendance.query.filter_by(date=today).all()
+        attendance_lookup = {a.student_id: a for a in today_attendance}
+        
+        result = []
+        for student in all_students:
+            attendance = attendance_lookup.get(student.student_id)
+            
+            # If no attendance record exists for today, student is 'absent'
+            if not attendance:
+                # Create a new record
+                attendance = Attendance(
+                    student_id=student.student_id,
+                    date=today,
+                    status='absent'
+                )
+                db.session.add(attendance)
+                db.session.commit()
+                
+                result.append({
+                    "student_id": student.student_id,
+                    "name": student.name,
+                    "in_time": None,
+                    "out_time": None,
+                    "status": 'absent',
+                    "date": today.isoformat()
+                })
+            else:
+                result.append({
+                    "student_id": student.student_id,
+                    "name": student.name,
+                    "in_time": attendance.in_time.isoformat() if attendance.in_time else None,
+                    "out_time": attendance.out_time.isoformat() if attendance.out_time else None,
+                    "status": attendance.status,
+                    "date": attendance.date.isoformat()
+                })
+        
+        return {
+            "date": today.isoformat(),
+            "students": result
         }

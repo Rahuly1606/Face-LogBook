@@ -8,10 +8,6 @@ const apiClient = axios.create({
   baseURL: API_ROOT,
   timeout: 20000,
   withCredentials: false, // Important for CORS
-  headers: {
-    'Content-Type': 'application/json',
-    // Don't include Access-Control-Allow-Origin here as it's a response header, not request header
-  }
 });
 
 // Request interceptor to add admin token
@@ -23,6 +19,11 @@ apiClient.interceptors.request.use(
       if (runtimeToken) {
         config.headers['X-ADMIN-TOKEN'] = runtimeToken;
       }
+    }
+    
+    // Only add Content-Type: application/json for non-FormData payloads
+    if (config.data && !(config.data instanceof FormData) && !config.headers['Content-Type']) {
+      config.headers['Content-Type'] = 'application/json';
     }
     
     // Log request info (in development only)
