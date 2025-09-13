@@ -3,22 +3,22 @@ import axios from 'axios';
 // Base API configuration
 const API_ROOT = import.meta.env.VITE_API_ROOT || 'http://127.0.0.1:5000/api/v1';
 
+console.log('API Root configured as:', API_ROOT);
+
 // Create axios instance
 const apiClient = axios.create({
   baseURL: API_ROOT,
   timeout: 20000,
-  withCredentials: false, // Important for CORS
+  withCredentials: true, // Important for CORS with credentials
 });
 
 // Request interceptor to add admin token
 apiClient.interceptors.request.use(
   (config) => {
-    // Add admin token for admin routes
-    if (config.url?.includes('/students') || config.url?.includes('/attendance')) {
-      const runtimeToken = (typeof window !== 'undefined' && localStorage.getItem('adminToken')) || '';
-      if (runtimeToken) {
-        config.headers['X-ADMIN-TOKEN'] = runtimeToken;
-      }
+    // Add admin token for all routes that need authentication
+    const adminToken = localStorage.getItem('adminToken');
+    if (adminToken) {
+      config.headers['X-ADMIN-TOKEN'] = adminToken;
     }
     
     // Only add Content-Type: application/json for non-FormData payloads

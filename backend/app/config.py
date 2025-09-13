@@ -4,15 +4,19 @@ from datetime import timedelta
 class Config:
     """Base configuration class. Contains default settings."""
     SECRET_KEY = os.getenv('SECRET_KEY', 'a_very_secret_dev_key')
-    ADMIN_TOKEN = os.getenv('ADMIN_TOKEN', 'admin_secret_token')
+    ADMIN_TOKEN = os.getenv('ADMIN_TOKEN', 'admin_secret_token')  # For legacy auth
     DEBUG = False
     TESTING = False
     SQLALCHEMY_TRACK_MODIFICATIONS = False
     
+    # JWT Settings
+    JWT_SECRET_KEY = os.getenv('JWT_SECRET_KEY', 'jwt_secret_dev_key')
+    JWT_ACCESS_TOKEN_EXPIRES = int(os.getenv('JWT_ACCESS_EXPIRES', 3600))  # 1 hour default
+    
     # Face recognition settings
-    FACE_MATCH_THRESHOLD = float(os.getenv('FACE_MATCH_THRESHOLD', 0.60))
+    FACE_MATCH_THRESHOLD = float(os.getenv('MATCH_THRESHOLD', 0.60))
     FACE_DETECTOR_BACKEND = os.getenv('FACE_DETECTOR_BACKEND', 'retinaface')
-    FACE_MODEL_PATH = os.getenv('FACE_MODEL_PATH', 'models')
+    FACE_MODEL_PATH = os.getenv('INSIGHTFACE_MODEL_ROOT', 'models')
     MAX_IMAGE_SIZE = int(os.getenv('MAX_IMAGE_SIZE', 800))
     
     # Attendance settings
@@ -21,6 +25,16 @@ class Config:
     # Upload settings
     UPLOAD_FOLDER = os.getenv('UPLOAD_FOLDER', 'uploads')
     MAX_CONTENT_LENGTH = 16 * 1024 * 1024  # 16MB max upload
+    
+    # CORS settings
+    ALLOWED_ORIGINS = os.getenv('ALLOWED_ORIGINS', 'http://localhost:8080,http://127.0.0.1:8080,http://localhost:3000,http://127.0.0.1:3000,http://localhost:5173,http://127.0.0.1:5173')
+    
+    # Google Drive settings
+    GOOGLE_SERVICE_ACCOUNT_JSON = os.getenv('GOOGLE_SERVICE_ACCOUNT_JSON', None)
+    
+    # Bulk import settings
+    BULK_IMPORT_BATCH_SIZE = int(os.getenv('BULK_IMPORT_BATCH_SIZE', 10))
+    BULK_IMPORT_TIMEOUT = int(os.getenv('BULK_IMPORT_TIMEOUT', 300))  # 5 minutes default
 
 class DevelopmentConfig(Config):
     """Development configuration."""
@@ -28,7 +42,7 @@ class DevelopmentConfig(Config):
     # Use a specific environment variable for the development database
     SQLALCHEMY_DATABASE_URI = os.getenv(
         'DEV_DATABASE_URL', 
-        'mysql+pymysql://root:password@localhost/attendance_dev'
+        'mysql+pymysql://root:Rahul@1606@localhost/face_logbook'
     )
 
 class TestingConfig(Config):
@@ -38,7 +52,7 @@ class TestingConfig(Config):
     # Use a specific environment variable for the testing database
     SQLALCHEMY_DATABASE_URI = os.getenv(
         'TEST_DATABASE_URL', 
-        'mysql+pymysql://root:password@localhost/attendance_test'
+        'mysql+pymysql://root:Rahul@1606@localhost/face_logbook_test'
     )
     # Use a predictable admin token for tests
     ADMIN_TOKEN = 'test_token'

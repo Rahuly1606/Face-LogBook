@@ -63,6 +63,7 @@ class AttendanceService:
                 # Create new record for today with absent status
                 attendance = Attendance(
                     student_id=student.student_id,
+                    group_id=student.group_id,
                     date=today,
                     status='absent'
                 )
@@ -78,6 +79,13 @@ class AttendanceService:
         now = datetime.utcnow()
         debounce_seconds = current_app.config.get('DEBOUNCE_SECONDS', 30)
         
+        # Get the student to get their group_id
+        student = Student.query.get(student_id)
+        if not student:
+            return "not_found"
+            
+        group_id = student.group_id
+        
         # Get today's attendance record for the student
         attendance = Attendance.query.filter_by(
             student_id=student_id,
@@ -89,6 +97,7 @@ class AttendanceService:
             # First check-in of the day
             attendance = Attendance(
                 student_id=student_id,
+                group_id=group_id,
                 date=today,
                 in_time=now,
                 status='present'

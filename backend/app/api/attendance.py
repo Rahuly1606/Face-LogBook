@@ -2,15 +2,20 @@ import base64
 import numpy as np
 import cv2
 from flask import Blueprint, request, jsonify, current_app
+from datetime import datetime, date
 from app.services.face_service import FaceService
 from app.services.attendance_service import AttendanceService
-from app.utils.auth import require_admin, check_auth_optional
+from app.utils.auth import require_admin, admin_required
+from app.models.group import Group
+from app.models.attendance import Attendance
+from app.models.student import Student
+from app import db
 
 attendance_bp = Blueprint('attendance', __name__)
 face_service = FaceService()
 
 @attendance_bp.route('/live', methods=['POST'])
-@check_auth_optional
+@admin_required()
 def process_live_attendance():
     """Process a single frame for attendance"""
     
@@ -48,7 +53,7 @@ def process_live_attendance():
     return jsonify(result), 200
 
 @attendance_bp.route('/upload', methods=['POST'])
-@require_admin
+@admin_required()
 def process_group_photo():
     """Process a group photo for attendance"""
     if 'image' not in request.files:
@@ -68,14 +73,14 @@ def process_group_photo():
     return jsonify(result), 200
 
 @attendance_bp.route('/today', methods=['GET'])
-@require_admin
+@admin_required()
 def get_today_attendance():
     """Get all attendance records for today"""
     result = AttendanceService.get_today_attendance()
     return jsonify(result), 200
 
 @attendance_bp.route('/date/<date_str>', methods=['GET'])
-@require_admin
+@admin_required()
 def get_attendance_by_date(date_str):
     """Get all attendance records for a specific date"""
     try:
@@ -85,21 +90,21 @@ def get_attendance_by_date(date_str):
         return jsonify({"success": False, "message": str(e)}), 400
 
 @attendance_bp.route('/<student_id>', methods=['GET'])
-@require_admin
+@admin_required()
 def get_student_attendance(student_id):
     """Get attendance history for a specific student"""
     result = AttendanceService.get_student_attendance_history(student_id)
     return jsonify(result), 200
 
 @attendance_bp.route('/status/all', methods=['GET'])
-@require_admin
+@admin_required()
 def get_all_students_status():
     """Get current attendance status for all students"""
     result = AttendanceService.get_all_students_status()
     return jsonify(result), 200
 
 @attendance_bp.route('/reset/daily', methods=['POST'])
-@require_admin
+@admin_required()
 def reset_daily_attendance():
     """Manually reset attendance status for all students"""
     count = AttendanceService.reset_daily_attendance()
@@ -107,4 +112,90 @@ def reset_daily_attendance():
         "success": True,
         "message": f"Reset attendance status for {count} students",
         "count": count
+    }), 200
+
+@attendance_bp.route('/logs/<int:group_id>', methods=['GET'])
+@admin_required()
+def get_attendance_logs_by_group(group_id):
+    """Get attendance logs for a specific group with date range and student filtering"""
+    # Check if group exists
+    group = Group.query.get_or_404(group_id)
+    
+    # Get query parameters
+    date_from = request.args.get('date_from', str(date.today()))
+    date_to = request.args.get('date_to', str(date.today()))
+    student_id = request.args.get('student_id')
+    
+    try:
+        # Parse dates
+        from_date = datetime.strptime(date_from, '%Y-%m-%d').date()
+        to_date = datetime.strptime(date_to, '%Y-%m-%d').date()
+        
+        # Build the query
+        query = db.session.query(
+            Attendance, Student.name
+        ).join(
+            Student, Attendance.student_id == Student.student_id
+        ).filter(
+            Attendance.group_id == group_id,
+            Attendance.date >= from_date,
+            Attendance.date <= to_date
+        )
+        
+        # Add student filter if provided
+        if student_id:
+            query = query.filter(Attendance.student_id == student_id)
+        
+        # Execute query
+        attendance_records = query.order_by(
+            Attendance.date.desc(),
+            Student.name
+        ).all()
+        
+        # Format results
+        result = []
+        for record, name in attendance_records:
+            result.append({
+                "id": record.id,
+                "student_id": record.student_id,
+                "name": name,
+                "date": record.date.isoformat(),
+                "in_time": record.in_time.isoformat() if record.in_time else None,
+                "out_time": record.out_time.isoformat() if record.out_time else None,
+                "status": record.status
+            })
+        
+        return jsonify({
+            "group_id": group_id,
+            "group_name": group.name,
+            "date_from": from_date.isoformat(),
+            "date_to": to_date.isoformat(),
+            "attendance": result
+        }), 200
+        
+    except ValueError as e:
+        return jsonify({"success": False, "message": f"Invalid date format: {str(e)}"}), 400
+
+@attendance_bp.route('/debug/embeddings/<student_id>', methods=['GET'])
+@admin_required()
+def debug_student_embedding(student_id):
+    """Debug endpoint to check if a student has a valid embedding"""
+    # Check if student exists
+    student = Student.query.get_or_404(student_id)
+    
+    # Check embedding
+    embedding = student.get_embedding()
+    
+    if embedding is None:
+        return jsonify({
+            "student_id": student_id,
+            "exists": False,
+            "message": "No embedding found"
+        }), 200
+    
+    return jsonify({
+        "student_id": student_id,
+        "exists": True,
+        "shape": embedding.shape,
+        "dtype": str(embedding.dtype)
     }), 200

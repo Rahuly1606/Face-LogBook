@@ -5,12 +5,14 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import UploadPhoto from './UploadPhoto';
-import { Student } from '@/api/students';
+import { Student, addStudentToGroup, registerStudent } from '@/api/students';
+import { useToast } from '@/hooks/use-toast';
 
 interface StudentFormProps {
   student?: Student;
-  onSubmit: (values: any) => Promise<void>;
-  onCancel: () => void;
+  groupId?: number;
+  onSuccess?: () => void;
+  onCancel?: () => void;
   isSubmitting?: boolean;
 }
 
@@ -26,24 +28,86 @@ const validationSchema = Yup.object({
 
 const StudentForm: React.FC<StudentFormProps> = ({ 
   student, 
-  onSubmit, 
-  onCancel, 
+  groupId,
+  onSuccess,
+  onCancel,
   isSubmitting: externalSubmitting 
 }) => {
+  const { toast } = useToast();
   const [selectedImage, setSelectedImage] = useState<File | null>(null);
+  const [isLoading, setIsLoading] = useState(false);
+  const [driveLink, setDriveLink] = useState('');
+  const [useImageUpload, setUseImageUpload] = useState(true);
 
   const initialValues = {
     student_id: student?.student_id || '',
     name: student?.name || '',
-    adminToken: (typeof window !== 'undefined' && localStorage.getItem('adminToken')) || '',
   };
 
   const handleSubmit = async (values: any) => {
-    const formData = {
-      ...values,
-      image: selectedImage,
-    };
-    await onSubmit(formData);
+    setIsLoading(true);
+    let registrationSuccess = false;
+    
+    try {
+      if (groupId) {
+        console.log('Adding student to group:', groupId);
+        // Add student to group
+        await addStudentToGroup(groupId, {
+          student_id: values.student_id,
+          name: values.name,
+          image: useImageUpload ? selectedImage : undefined,
+          drive_link: !useImageUpload ? driveLink : undefined,
+          group_id: groupId
+        });
+        registrationSuccess = true;
+      } else {
+        console.log('Using legacy registration path (no group ID)');
+        // Fallback to legacy registration if no group ID
+        await registerStudent({
+          student_id: values.student_id,
+          name: values.name,
+          image: selectedImage
+        });
+        registrationSuccess = true;
+      }
+      
+      toast({
+        title: "Success",
+        description: "Student registered successfully",
+        variant: "default",
+      });
+      
+    } catch (error: any) {
+      console.error('Error registering student:', error);
+      // Show error in a user-friendly way
+      if (error.message && error.message.includes('already exists')) {
+        toast({
+          title: "Registration Error",
+          description: `Student ID ${values.student_id} already exists. Please use a different ID.`,
+          variant: "destructive",
+        });
+      } else if (error.message && error.message.includes('No face detected')) {
+        toast({
+          title: "Registration Error",
+          description: "No face was detected in the uploaded image. Please try a clearer photo.",
+          variant: "destructive",
+        });
+      } else {
+        toast({
+          title: "Registration Error",
+          description: error.message || "An unexpected error occurred",
+          variant: "destructive",
+        });
+      }
+    } finally {
+      setIsLoading(false);
+      
+      // Always call onSuccess after registration attempt, regardless of outcome
+      // This allows the parent component to refresh the student list or navigate away
+      if (onSuccess) {
+        onSuccess();
+      }
+    }
   };
 
   return (
@@ -54,21 +118,10 @@ const StudentForm: React.FC<StudentFormProps> = ({
     >
       {({ errors, touched, isSubmitting: formSubmitting }) => {
         // Use external isSubmitting state if provided, otherwise use form's internal state
-        const submitting = externalSubmitting !== undefined ? externalSubmitting : formSubmitting;
+        const submitting = externalSubmitting !== undefined ? externalSubmitting : formSubmitting || isLoading;
         
         return (
           <Form className="space-y-4">
-            {!student && (
-              <div>
-                <Label htmlFor="adminToken">Admin Token</Label>
-                <Field
-                  as={Input}
-                  id="adminToken"
-                  name="adminToken"
-                  placeholder="Enter admin token"
-                />
-              </div>
-            )}
             <div>
               <Label htmlFor="student_id">Student ID</Label>
               <Field
@@ -98,23 +151,50 @@ const StudentForm: React.FC<StudentFormProps> = ({
               )}
             </div>
 
-            <UploadPhoto
-              onImageSelect={setSelectedImage}
-              currentImage={student?.photo_url}
-              label="Student Photo"
-            />
+            <div className="flex gap-2 items-center">
+              <Button 
+                type="button" 
+                variant={useImageUpload ? "default" : "outline"}
+                onClick={() => setUseImageUpload(true)}
+              >
+                Upload Image
+              </Button>
+              <Button 
+                type="button" 
+                variant={!useImageUpload ? "default" : "outline"}
+                onClick={() => setUseImageUpload(false)}
+              >
+                Google Drive Link
+              </Button>
+            </div>
 
-            {!student && !selectedImage && (
-              <p className="text-sm text-destructive">Photo is required for new students</p>
+            {useImageUpload ? (
+              <UploadPhoto
+                onImageSelect={setSelectedImage}
+                currentImage={student?.photo_url}
+                label="Student Photo"
+              />
+            ) : (
+              <div>
+                <Label htmlFor="drive_link">Google Drive Link</Label>
+                <Input
+                  id="drive_link"
+                  value={driveLink}
+                  onChange={(e) => setDriveLink(e.target.value)}
+                  placeholder="e.g., https://drive.google.com/file/d/..."
+                />
+              </div>
             )}
 
             <div className="flex gap-3 justify-end">
-              <Button type="button" variant="outline" onClick={onCancel} disabled={submitting}>
-                Cancel
-              </Button>
+              {onCancel && (
+                <Button type="button" variant="outline" onClick={onCancel} disabled={submitting}>
+                  Cancel
+                </Button>
+              )}
               <Button 
                 type="submit" 
-                disabled={submitting || (!student && !selectedImage)}
+                disabled={submitting || (!student && useImageUpload && !selectedImage) || (!student && !useImageUpload && !driveLink)}
               >
                 {submitting ? 'Saving...' : student ? 'Update' : 'Register'} Student
               </Button>

@@ -11,7 +11,8 @@ import {
   FileText, 
   UserPlus, 
   Home,
-  Fingerprint
+  Fingerprint,
+  Group
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -29,12 +30,8 @@ const Navbar: React.FC = () => {
   }, []);
 
   const navItems = [
-    { title: 'Dashboard', href: '/', icon: Home },
-    { title: 'Register', href: '/admin/register', icon: UserPlus },
-    { title: 'Students', href: '/admin/students', icon: Users },
-    { title: 'Live Capture', href: '/attendance/live', icon: Camera },
-    { title: 'Upload', href: '/attendance/upload', icon: Upload },
-    { title: 'Logs', href: '/attendance/logs', icon: FileText },
+    { title: 'Groups', href: '/groups', icon: Group },
+    { title: 'Dashboard', href: '/admin-dashboard', icon: Home },
   ];
 
   const isActive = (path: string) => location.pathname === path;

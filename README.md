@@ -1,41 +1,49 @@
-# Face-LogBook - Facial Recognition Attendance System
+# Face-LogBook - Advanced Facial Recognition Attendance System
 
-A modern, full-stack web application for managing student attendance using advanced facial recognition technology. This system allows you to register students with their photos, take attendance using a webcam, track attendance history, and more.
+A comprehensive, full-stack web application for managing student attendance using cutting-edge facial recognition technology. This system allows administrators to register students with their photos, organize them into groups, take attendance using webcam or photo uploads, and maintain detailed attendance records.
 
 ![Face-LogBook Banner](https://img.shields.io/badge/Face--LogBook-Attendance%20System-blue)
 
-## 📋 Features
+## 🌟 Key Features
 
-- **Face Recognition**: Automatically identify registered students using webcam
-- **Multiple Face Detection**: Process multiple students in a single frame
-- **Real-time Attendance**: Mark attendance with live camera feed
-- **Student Management**: Easily register, view, and manage student profiles
-- **Attendance History**: View and export attendance records by date
-- **Admin Dashboard**: Complete overview of system usage and statistics
+- **Advanced Face Recognition**: Accurately identify registered students using the InsightFace deep learning model
+- **Multiple Face Detection**: Process multiple students in a single photo
+- **Real-time Attendance**: Mark attendance with live webcam feed
+- **Student Management**: Register, view, edit, and manage student profiles
+- **Group Organization**: Create and manage logical student groups
+- **Attendance Records**: View, filter, and export attendance logs by date and group
+- **Google Drive Integration**: Import student photos directly from Google Drive links
+- **CSV Bulk Import**: Add multiple students at once using CSV files
+- **Secure Authentication**: JWT-based authentication for API endpoints
 
 ## 🛠️ Technology Stack
 
-- **Backend**: 
-  - Flask (Python)
-  - SQLAlchemy (ORM)
-  - InsightFace (Face Recognition)
-  - MySQL/SQLite (Database)
+### Backend
+- **Flask**: Python web framework
+- **SQLAlchemy**: ORM for database interactions
+- **InsightFace**: State-of-the-art facial recognition library
+- **Flask-JWT-Extended**: Authentication with JSON Web Tokens
+- **SQLite/MySQL**: Database options for storing data
+- **Google Drive API**: Integration for importing photos
 
-- **Frontend**: 
-  - React
-  - TypeScript
-  - Tailwind CSS
-  - Shadcn UI Components
+### Frontend
+- **React**: Frontend library for building user interfaces
+- **TypeScript**: Type-safe JavaScript for improved development
+- **Tailwind CSS**: Utility-first CSS framework
+- **Shadcn UI**: High-quality component library
+- **Vite**: Fast, modern frontend build tool
+- **Axios**: Promise-based HTTP client
 
 ## 📋 Prerequisites
 
-Before starting installation, make sure you have the following installed:
+Before installing Face-LogBook, ensure you have:
 
 - **Python 3.9+**
-- **Node.js 16+**
-- **npm or bun**
+- **Node.js 16+** (or **Bun**)
 - **Git**
-- **MySQL** (optional, can use SQLite for testing)
+- **MySQL** (optional, SQLite works for testing)
+- **Webcam** (for live attendance feature)
+- **Google Cloud account** (optional, for Google Drive integration)
 
 ## 🚀 Installation Guide
 
@@ -48,38 +56,36 @@ cd face_logbook
 
 ### Step 2: Backend Setup
 
-#### A. Create Virtual Environment
+#### Create Virtual Environment
 
 ```bash
 # Navigate to backend directory
 cd backend
 
-# Create and activate virtual environment
-# For Windows:
+# Windows
 python -m venv venv
 venv\Scripts\activate
 
-# For macOS/Linux:
+# macOS/Linux
 python -m venv venv
 source venv/bin/activate
 ```
 
-#### B. Install Python Dependencies
+#### Install Python Dependencies
 
 ```bash
-# Install all required packages
 pip install -r requirements.txt
 ```
 
-#### C. Download Face Recognition Model
+#### Download Face Recognition Model
 
-The application uses InsightFace for facial recognition, which requires pre-trained models:
+The system requires InsightFace pre-trained models:
 
 1. Download the `buffalo_l` model from [InsightFace Model Zoo](https://github.com/deepinsight/insightface/releases/tag/v0.7)
 2. Create a directory: `backend/models/`
 3. Extract the downloaded zip and place the entire `buffalo_l` folder inside the `models` directory
 
-Your folder structure should look like:
+Your structure should look like:
 ```
 backend/
 ├── models/
@@ -88,12 +94,11 @@ backend/
 │       ├── 2d106det.onnx
 │       ├── genderage.onnx
 │       └── w600k_r50.onnx
-└── ...
 ```
 
-#### D. Configure Environment
+#### Configure Environment
 
-Create a `.env` file in the `backend` directory with the following content:
+Create a `.env` file in the `backend` directory:
 
 ```env
 # Flask Configuration
@@ -102,179 +107,245 @@ FLASK_ENV=development
 
 # Security
 SECRET_KEY=your_secret_key_here
-ADMIN_TOKEN=your_admin_token_here
+JWT_SECRET_KEY=your_jwt_secret_key_here
+JWT_ACCESS_TOKEN_EXPIRES=86400  # 24 hours
 
 # Database Configuration
-# For SQLite (easy setup):
+# SQLite (easier setup):
 DEV_DATABASE_URL=sqlite:///attendance.db
 
-# For MySQL (recommended for production):
+# MySQL (recommended for production):
 # DEV_DATABASE_URL=mysql+pymysql://username:password@localhost/face_logbook
+
+# Face Recognition Settings
+FACE_MATCH_THRESHOLD=0.60
+FACE_DETECTOR_BACKEND=retinaface
+FACE_MODEL_PATH=models
+
+# Google Drive API (optional)
+# GOOGLE_APPLICATION_CREDENTIALS=credentials/service_account.json
 ```
 
-#### E. Initialize Database
+#### Setup Database
 
 ```bash
-# Initialize migration repository
+# Create database directories
+mkdir -p migrations/versions
+
+# Initialize database
 flask db init
-
-# Create migration script
 flask db migrate -m "Initial database setup"
-
-# Apply migrations
 flask db upgrade
+
+# Create initial admin user
+python scripts/create_user.py
 ```
 
-#### F. Run Backend Server
+#### Create Upload Directory
 
 ```bash
-# Start the Flask development server
+mkdir -p uploads
+```
+
+#### Google Drive Integration (Optional)
+
+To enable importing student photos from Google Drive:
+
+1. Create a Google Cloud project
+2. Enable the Google Drive API
+3. Create a service account with "Drive File Viewer" role
+4. Download the JSON key file
+5. Save it as `credentials/service_account.json`
+6. Uncomment the `GOOGLE_APPLICATION_CREDENTIALS` line in your `.env` file
+
+#### Start Backend Server
+
+```bash
 python run.py
 ```
 
-The backend server will start on http://127.0.0.1:5000
+The backend will run on http://127.0.0.1:5000
 
 ### Step 3: Frontend Setup
 
-#### A. Install Dependencies
+#### Install Dependencies
 
 ```bash
 # Navigate to frontend directory
 cd ../frontend
 
-# Install dependencies
+# Using npm
 npm install
-# OR if you use bun
+
+# Or using Bun
 bun install
 ```
 
-#### B. Configure Environment
+#### Configure Environment
 
 Create a `.env` file in the `frontend` directory:
 
 ```env
 VITE_API_ROOT=http://127.0.0.1:5000/api/v1
-VITE_ADMIN_TOKEN=your_admin_token_here
 ```
 
-> ⚠️ Make sure the admin token matches the one in your backend `.env` file
-
-#### C. Run Frontend Development Server
+#### Start Development Server
 
 ```bash
-# Start the development server
+# Using npm
 npm run dev
-# OR if you use bun
+
+# Or using Bun
 bun run dev
 ```
 
-The frontend application will be available at http://localhost:5173 (or another port if 5173 is in use)
+The frontend will be available at http://localhost:5173
 
-## 📱 Using the Application
+## 🖥️ Using the System
 
-1. **First-time Setup**:
-   - Use the provided admin token to access the admin features
-   - Register students with clear facial photos
-   - Set up attendance sessions
+### Initial Setup
 
-2. **Taking Attendance**:
-   - Navigate to the "Live Attendance" page
-   - Click "Start Capture" to begin detecting faces
-   - Recognized students will be automatically marked present
-   - Unregistered faces will be counted and displayed
+1. **Login**: Access the system using default credentials (username: `admin`, password: `admin123`)
+2. **Create Groups**: Set up logical groups (classes, departments, etc.)
+3. **Register Students**: Add students individually or through bulk import
 
-3. **Viewing Records**:
-   - Go to the "Attendance Logs" page to view historical records
-   - Filter by date to see specific attendance sessions
-   - Export data as needed
+### Managing Students
 
-## ⚠️ Troubleshooting
+1. **Individual Registration**:
+   - Enter student ID and name
+   - Upload a photo or provide a Google Drive link
+   - Assign to a group
 
-### Common Issues and Solutions
+2. **Bulk Import**:
+   - Prepare a CSV file with columns: `student_id`, `name`, `drive_link`
+   - Navigate to a group's student management page
+   - Click "Bulk Import" and upload your CSV
 
-#### Backend Issues
+### Taking Attendance
 
-- **Model Initialization Error**: 
-  - Ensure the face recognition model is downloaded and placed in the correct directory
-  - Check if all model files are present in the `backend/models/buffalo_l` folder
+1. **Live Attendance**:
+   - Select the relevant group
+   - Click "Start Capture" to activate webcam
+   - Students will be automatically recognized and marked present
 
-- **Database Connection Error**: 
-  - Verify your database credentials in the `.env` file
-  - Make sure the database exists and is accessible
+2. **Photo Upload**:
+   - Upload a photo containing multiple students
+   - The system will identify all recognized students
+   - View recognition results and attendance status
 
-- **CORS Errors**: 
-  - Check that the frontend URL is accessible from the backend
-  - Ensure CORS is properly configured in the Flask application
+### Viewing Records
 
-#### Frontend Issues
+- Access the "Attendance Logs" section
+- Filter by date, group, and student
+- View attendance details and statistics
 
-- **API Connection Error**: 
-  - Verify the backend server is running
-  - Check if the API URL in the frontend `.env` file is correct
-  - Ensure the admin token is correctly set
+## ⚙️ Configuration Options
 
-- **Webcam Access Issues**: 
-  - Grant camera permissions in your browser
-  - Try using a different browser if problems persist
+### Backend Settings
 
-## 🔄 Updating
+Key configurations in `.env`:
+
+- `FACE_MATCH_THRESHOLD`: Recognition confidence threshold (default: 0.60)
+- `FACE_DETECTOR_BACKEND`: Face detection model (default: retinaface)
+- `DEBOUNCE_SECONDS`: Minimum seconds between attendance records (default: 30)
+- `MAX_IMAGE_SIZE`: Maximum image dimension for processing (default: 800px)
+
+### Database Options
+
+- **SQLite**: Quick setup, suitable for testing
+  - `DEV_DATABASE_URL=sqlite:///attendance.db`
+
+- **MySQL**: Better for production use
+  - `DEV_DATABASE_URL=mysql+pymysql://username:password@localhost/face_logbook`
+
+## 🔍 Troubleshooting
+
+### Common Issues
+
+1. **Face Recognition Problems**:
+   - Ensure the `buffalo_l` model is correctly installed
+   - Check lighting conditions when taking photos
+   - Make sure student photos contain clear, front-facing faces
+
+2. **Google Drive Integration Issues**:
+   - Verify the service account has access to the Drive files
+   - Ensure the correct Drive link format is used
+   - Check service account permissions
+
+3. **Database Connection Errors**:
+   - Verify database credentials
+   - Ensure the database exists and is accessible
+   - Check for proper migrations
+
+4. **Performance Issues**:
+   - Reduce image size for faster processing
+   - Consider using a more powerful machine for large deployments
+
+## 📱 Mobile Compatibility
+
+The frontend is responsive and works on mobile devices, but the following features have limitations:
+
+- **Live Attendance**: Works best on devices with good quality cameras
+- **Photo Upload**: Fully functional on mobile devices
+- **Student Management**: Fully responsive for on-the-go administration
+
+## 🔄 Updating the System
 
 To update to the latest version:
 
 ```bash
-# Pull the latest changes
+# Pull latest code
 git pull
 
-# Update backend dependencies
+# Update backend
 cd backend
 pip install -r requirements.txt
-
-# Update database schema if needed
-flask db migrate
 flask db upgrade
 
-# Update frontend dependencies
+# Update frontend
 cd ../frontend
 npm install
+npm run build
 ```
 
-## 📚 Project Structure
+## 🧪 Testing
 
+Run the comprehensive test suite:
+
+```bash
+# Backend tests
+cd backend
+python -m pytest tests/
+
+# Integration tests
+python tests/integration_test.py
 ```
-face_logbook/
-├── backend/               # Flask backend
-│   ├── app/               # Main application code
-│   │   ├── api/           # API endpoints
-│   │   ├── models/        # Database models
-│   │   ├── services/      # Business logic
-│   │   └── utils/         # Utilities
-│   ├── migrations/        # Database migrations
-│   ├── models/            # Face recognition models
-│   ├── tests/             # Test files
-│   └── run.py             # Application entry point
-├── frontend/              # React frontend
-│   ├── public/            # Static files
-│   ├── src/               # Source code
-│   │   ├── api/           # API clients
-│   │   ├── components/    # React components
-│   │   ├── contexts/      # React contexts
-│   │   ├── pages/         # Page components
-│   │   └── utils/         # Utility functions
-│   └── package.json       # Frontend dependencies
-└── README.md              # This file
-```
+
+## 📚 Additional Documentation
+
+- [Authentication Setup Guide](AUTH_SETUP.md)
+- [Group Management Guide](GROUP_MANAGEMENT.md)
+- [CSV Bulk Import Guide](CSV_IMPORT_GUIDE.md)
+- [Testing Checklist](TEST_CHECKLIST.md)
+
+## 🔐 Security Considerations
+
+- The default admin password should be changed immediately
+- JWT tokens expire after 24 hours (configurable)
+- Student photos and face embeddings are stored securely
+- API endpoints are protected with JWT authentication
 
 ## 📄 License
 
-This project is licensed under the MIT License - see the LICENSE file for details.
+This project is licensed under the MIT License.
 
-## 🙏 Acknowledgements
+## 👏 Acknowledgements
 
-- [InsightFace](https://github.com/deepinsight/insightface) for the face recognition models
+- [InsightFace](https://github.com/deepinsight/insightface) for the facial recognition models
 - [Flask](https://flask.palletsprojects.com/) for the backend framework
 - [React](https://reactjs.org/) for the frontend library
-- [Tailwind CSS](https://tailwindcss.com/) for the styling
-- [Shadcn UI](https://ui.shadcn.com/) for the UI components
+- [Tailwind CSS](https://tailwindcss.com/) for styling
+- [Shadcn UI](https://ui.shadcn.com/) for UI components
 
 ---
 

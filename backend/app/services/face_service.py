@@ -33,11 +33,22 @@ class FaceService:
             model_path = current_app.config.get('FACE_MODEL_PATH')
             detector_backend = current_app.config.get('FACE_DETECTOR_BACKEND')
             
-            self.model = FaceAnalysis(name=detector_backend, root=model_path, providers=['CPUExecutionProvider'])
-            self.model.prepare(ctx_id=0, det_size=(640, 640))
-            self.initialized = True
-            current_app.logger.info("Face recognition model successfully initialized")
-            return True
+            try:
+                # Try to initialize the face model
+                self.model = FaceAnalysis(name=detector_backend, root=model_path, providers=['CPUExecutionProvider'])
+                self.model.prepare(ctx_id=0, det_size=(640, 640))
+                self.initialized = True
+                current_app.logger.info("Face recognition model successfully initialized")
+                return True
+            except ModuleNotFoundError as e:
+                current_app.logger.error(f"Module error during face model initialization: {str(e)}")
+                return False
+            except AttributeError as e:
+                current_app.logger.error(f"Attribute error during face model initialization (likely ml_dtypes issue): {str(e)}")
+                return False
+            except Exception as e:
+                current_app.logger.error(f"Unknown error during face model initialization: {str(e)}")
+                return False
         except Exception as e:
             current_app.logger.error(f"Failed to initialize face model: {str(e)}")
             return False
@@ -46,41 +57,53 @@ class FaceService:
         """Detect face in an image and return the embedding"""
         if not self.initialized or self.model is None:
             if not self.initialize():
-                raise RuntimeError("Face recognition model could not be initialized")
+                current_app.logger.warning("Face service not initialized and could not be initialized on-demand")
+                return None, None
         
-        # Convert bytes to image if needed
-        if isinstance(image_data, bytes):
-            np_arr = np.frombuffer(image_data, np.uint8)
-            img = cv2.imdecode(np_arr, cv2.IMREAD_COLOR)
-        else:
-            img = image_data
-        
-        # Resize image if too large
-        max_size = current_app.config.get('MAX_IMAGE_SIZE', 800)
-        h, w = img.shape[:2]
-        if max(h, w) > max_size:
-            scale = max_size / max(h, w)
-            img = cv2.resize(img, (int(w * scale), int(h * scale)))
-        
-        # BGR to RGB for insightface
-        img_rgb = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
-        
-        # Detect faces
-        faces = self.model.get(img_rgb)
-        
-        if not faces:
+        try:
+            # Convert bytes to image if needed
+            if isinstance(image_data, bytes):
+                np_arr = np.frombuffer(image_data, np.uint8)
+                img = cv2.imdecode(np_arr, cv2.IMREAD_COLOR)
+            else:
+                img = image_data
+            
+            # Resize image if too large
+            max_size = current_app.config.get('MAX_IMAGE_SIZE', 800)
+            h, w = img.shape[:2]
+            if max(h, w) > max_size:
+                scale = max_size / max(h, w)
+                img = cv2.resize(img, (int(w * scale), int(h * scale)))
+            
+            # BGR to RGB for insightface
+            img_rgb = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+            
+            # Detect faces
+            try:
+                faces = self.model.get(img_rgb)
+            except AttributeError as e:
+                current_app.logger.error(f"Face detection failed with attribute error: {str(e)}")
+                return None, None
+            except Exception as e:
+                current_app.logger.error(f"Face detection failed: {str(e)}")
+                return None, None
+            
+            if not faces:
+                return None, None
+            
+            # Get the largest face in the image (presumably the main subject)
+            # Sort by face box area (width * height)
+            faces = sorted(faces, key=lambda x: (x.bbox[2] - x.bbox[0]) * (x.bbox[3] - x.bbox[1]), reverse=True)
+            face = faces[0]
+            
+            # Return bounding box and embedding
+            bbox = face.bbox.astype(int)
+            embedding = face.embedding
+            
+            return bbox, embedding
+        except Exception as e:
+            current_app.logger.error(f"Error in face detection and embedding: {str(e)}")
             return None, None
-        
-        # Get the largest face in the image (presumably the main subject)
-        # Sort by face box area (width * height)
-        faces = sorted(faces, key=lambda x: (x.bbox[2] - x.bbox[0]) * (x.bbox[3] - x.bbox[1]), reverse=True)
-        face = faces[0]
-        
-        # Return bounding box and embedding
-        bbox = face.bbox.astype(int)
-        embedding = face.embedding
-        
-        return bbox, embedding
     
     def match_face(self, embedding, threshold=None):
         """Match a face embedding against all students in the database"""

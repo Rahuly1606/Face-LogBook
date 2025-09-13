@@ -10,6 +10,8 @@ import GreetingToast from './GreetingToast';
 import LiveStudentList from './LiveStudentList';
 
 interface WebcamCaptureProps {
+  groupId?: number;
+  standalone?: boolean;
   onFaceRecognized?: () => void;
 }
 

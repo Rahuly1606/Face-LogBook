@@ -1,8 +1,11 @@
 import apiClient from './api_client_fixed';
+import api from './auth';  // Import the auth-enabled API client
 
 export interface RecognizedStudent {
   student_id: string;
   name: string;
+  group_id?: number;
+  group_name?: string;
   score: number;
   action?: 'checkin' | 'checkout';
   timestamp?: string;
@@ -38,6 +41,8 @@ export interface AttendanceRecord {
   student_id: string;
   student_name?: string;
   name?: string;
+  group_id?: number;
+  group_name?: string;
   in_time: string;
   out_time?: string;
   date: string;
@@ -47,6 +52,8 @@ export interface AttendanceRecord {
 export interface StudentStatus {
   student_id: string;
   name: string;
+  group_id?: number;
+  group_name?: string;
   in_time: string | null;
   out_time: string | null;
   status: 'present' | 'absent' | 'late';
@@ -58,7 +65,16 @@ export interface AllStudentsStatusResponse {
   students: StudentStatus[];
 }
 
-// Live attendance capture
+export interface EmbeddingDebugInfo {
+  exists: boolean;
+  shape?: number[];
+  dtype?: string;
+  min_value?: number;
+  max_value?: number;
+  norm?: number;
+}
+
+// Live attendance capture (legacy method - keep for backward compatibility)
 export const submitLiveAttendance = async (imageBlob: Blob): Promise<LiveAttendanceResponse> => {
   try {
     const formData = new FormData();
@@ -90,7 +106,7 @@ export const uploadGroupAttendance = async (image: File): Promise<UploadAttendan
   const formData = new FormData();
   formData.append('image', image);
 
-  const response = await apiClient.post('/attendance/upload', formData, {
+  const response = await api.post('/attendance/upload', formData, {
     headers: {
       // Let the browser set the Content-Type with proper boundary
       'Content-Type': undefined
@@ -102,7 +118,7 @@ export const uploadGroupAttendance = async (image: File): Promise<UploadAttendan
 // Get today's attendance
 export const getTodayAttendance = async (): Promise<{ attendance: AttendanceRecord[] }> => {
   try {
-    const response = await apiClient.get('/attendance/today');
+    const response = await api.get('/attendance/logs');
     return response.data;
   } catch (error) {
     console.error('Error fetching today\'s attendance:', error);
@@ -111,6 +127,31 @@ export const getTodayAttendance = async (): Promise<{ attendance: AttendanceReco
   }
 };
 
+// Get attendance by group
+export const getAttendanceByGroup = async (groupId: number): Promise<{ attendance: AttendanceRecord[] }> => {
+  try {
+    const response = await api.get(`/attendance/logs/${groupId}`);
+    return response.data;
+  } catch (error) {
+    console.error(`Error fetching attendance for group ${groupId}:`, error);
+    // Return a fallback response to prevent UI errors
+    return { attendance: [] };
+  }
+};
+
+// Get embedding debug info for a student
+export const getEmbeddingDebugInfo = async (studentId: string): Promise<EmbeddingDebugInfo> => {
+  try {
+    const response = await api.get(`/attendance/debug/embeddings/${studentId}`);
+    return response.data;
+  } catch (error) {
+    console.error(`Error fetching embedding debug info for student ${studentId}:`, error);
+    // Return a fallback response
+    return { exists: false };
+  }
+};
+
+// Legacy endpoints for backward compatibility
 // Get attendance by specific date
 export const getAttendanceByDate = async (date: string): Promise<{ attendance: AttendanceRecord[] }> => {
   try {

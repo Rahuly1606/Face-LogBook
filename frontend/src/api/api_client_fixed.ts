@@ -7,17 +7,29 @@ const API_ROOT = import.meta.env.VITE_API_ROOT || 'http://127.0.0.1:5000/api/v1'
 const apiClient = axios.create({
   baseURL: API_ROOT,
   timeout: 20000,
+  withCredentials: true, // This is important for CORS with credentials
 });
 
-// Request interceptor to add admin token
+// Request interceptor to add authorization token
 apiClient.interceptors.request.use(
   (config) => {
-    // Add admin token for admin routes
-    if (config.url?.includes('/students') || config.url?.includes('/attendance')) {
-      const runtimeToken = (typeof window !== 'undefined' && localStorage.getItem('adminToken')) || '';
-      if (runtimeToken) {
-        config.headers['X-ADMIN-TOKEN'] = runtimeToken;
+    // Add JWT token from localStorage
+    const user = localStorage.getItem('user');
+    if (user) {
+      try {
+        const userData = JSON.parse(user);
+        if (userData.token) {
+          config.headers['Authorization'] = `Bearer ${userData.token}`;
+        }
+      } catch (error) {
+        console.error('Error parsing user data from localStorage', error);
       }
+    }
+    
+    // Add admin token for all routes that need authentication
+    const adminToken = localStorage.getItem('adminToken');
+    if (adminToken) {
+      config.headers['X-ADMIN-TOKEN'] = adminToken;
     }
     
     // Log request info (in development only)
