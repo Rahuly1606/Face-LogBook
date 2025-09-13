@@ -7,13 +7,13 @@ yarn-error.log*
 pnpm-debug.log*
 lerna-debug.log*
 venv/
-credentials/
 node_modules
 dist
 dist-ssr
 *.local
 .env
 models/models/retinaface/
+credentials
 
 # Editor directories and files
 .vscode/*
