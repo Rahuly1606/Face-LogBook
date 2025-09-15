@@ -1,10 +1,10 @@
 -- SQL Script to set up face-logbook database and admin user
 
 -- Create the database if it doesn't exist
-CREATE DATABASE IF NOT EXISTS face_logbook;
+CREATE DATABASE IF NOT EXISTS `face-logbook`;
 
--- Switch to the face_logbook database
-USE face_logbook;
+-- Switch to the face-logbook database
+USE `face-logbook`;
 
 -- Create users table if it doesn't exist
 CREATE TABLE IF NOT EXISTS users (

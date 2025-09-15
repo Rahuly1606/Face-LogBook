@@ -5,9 +5,42 @@ from app.models.student import Student
 from flask import current_app
 import threading
 import time
+import pytz
 
 class AttendanceService:
     _daily_reset_thread = None
+    
+    @staticmethod
+    def get_ist_now():
+        """Get current datetime in Indian Standard Time"""
+        return datetime.now(pytz.timezone('Asia/Kolkata'))
+    
+    @staticmethod
+    def get_ist_today():
+        """Get today's date in IST"""
+        return datetime.now(pytz.timezone('Asia/Kolkata')).date()
+    
+    @staticmethod
+    def format_datetime_ist(dt):
+        """Format datetime to IST string for API responses"""
+        if dt is None:
+            return None
+        if dt.tzinfo is None:
+            # If datetime is naive, assume it's already in IST
+            return dt.isoformat()
+        # Convert to IST and format
+        ist = pytz.timezone('Asia/Kolkata')
+        return dt.astimezone(ist).isoformat()
+    
+    @staticmethod
+    def make_timezone_aware(dt):
+        """Convert naive datetime to IST timezone-aware datetime"""
+        if dt is None:
+            return None
+        if dt.tzinfo is None:
+            ist = pytz.timezone('Asia/Kolkata')
+            return ist.localize(dt)
+        return dt
     
     @classmethod
     def start_daily_reset_scheduler(cls):
@@ -19,12 +52,12 @@ class AttendanceService:
     
     @classmethod
     def _daily_reset_scheduler(cls):
-        """Background thread that resets attendance status at midnight"""
+        """Background thread that resets attendance status at midnight IST"""
         while True:
-            # Get current time
-            now = datetime.now()
+            # Get current time in IST
+            now = cls.get_ist_now()
             
-            # Calculate time until next midnight (00:00)
+            # Calculate time until next midnight (00:00) IST
             tomorrow = now.replace(hour=0, minute=0, second=0, microsecond=0) + timedelta(days=1)
             seconds_until_midnight = (tomorrow - now).total_seconds()
             
@@ -42,7 +75,7 @@ class AttendanceService:
     @staticmethod
     def reset_daily_attendance():
         """Reset all students' attendance status to 'absent' for today"""
-        today = date.today()
+        today = AttendanceService.get_ist_today()
         
         # Get all students
         students = Student.query.all()
@@ -72,11 +105,12 @@ class AttendanceService:
         db.session.commit()
         current_app.logger.info(f"Reset attendance status to 'absent' for {len(students)} students")
         return len(students)
+    
     @staticmethod
     def process_attendance(student_id):
         """Process attendance for a student, handling check-in/check-out logic"""
-        today = date.today()
-        now = datetime.utcnow()
+        today = AttendanceService.get_ist_today()
+        now = AttendanceService.get_ist_now()
         debounce_seconds = current_app.config.get('DEBOUNCE_SECONDS', 30)
         
         # Get the student to get their group_id
@@ -112,7 +146,9 @@ class AttendanceService:
         elif attendance.in_time and not attendance.out_time:
             # Already checked in, so this is a check-out
             # But only if enough time has passed (debounce)
-            time_diff = now - attendance.in_time
+            # Make sure both datetimes are timezone-aware for comparison
+            in_time_aware = AttendanceService.make_timezone_aware(attendance.in_time)
+            time_diff = now - in_time_aware
             if time_diff.total_seconds() > debounce_seconds:
                 attendance.out_time = now
                 action = "checkout"
@@ -121,7 +157,9 @@ class AttendanceService:
                 action = "debounced"
         elif attendance.out_time:
             # Check if we need to update the checkout time
-            time_diff = now - attendance.out_time
+            # Make sure both datetimes are timezone-aware for comparison
+            out_time_aware = AttendanceService.make_timezone_aware(attendance.out_time)
+            time_diff = now - out_time_aware
             if time_diff.total_seconds() > debounce_seconds:
                 attendance.out_time = now
                 action = "checkout_update"
@@ -133,10 +171,13 @@ class AttendanceService:
     
     @staticmethod
     def get_today_attendance():
-        """Get all attendance records for today"""
-        today = date.today()
+        """Get all attendance records for today, ensuring all students are listed with absent as default"""
+        today = AttendanceService.get_ist_today()
         
-        # Join with students to get names
+        # Get all students first
+        all_students = Student.query.all()
+        
+        # Get existing attendance records for today
         attendance_records = db.session.query(
             Attendance, Student.name
         ).join(
@@ -145,16 +186,46 @@ class AttendanceService:
             Attendance.date == today
         ).all()
         
-        result = []
-        for record, name in attendance_records:
-            result.append({
-                "student_id": record.student_id,
-                "name": name,
-                "in_time": record.in_time.isoformat() if record.in_time else None,
-                "out_time": record.out_time.isoformat() if record.out_time else None,
-                "status": record.status
-            })
+        # Create a lookup for existing attendance records
+        attendance_lookup = {record.student_id: record for record, _ in attendance_records}
         
+        result = []
+        for student in all_students:
+            attendance = attendance_lookup.get(student.student_id)
+            
+            if attendance:
+                # Use existing record
+                result.append({
+                    "id": attendance.id,
+                    "student_id": attendance.student_id,
+                    "name": student.name,
+                    "in_time": AttendanceService.format_datetime_ist(attendance.in_time),
+                    "out_time": AttendanceService.format_datetime_ist(attendance.out_time),
+                    "status": attendance.status,
+                    "date": attendance.date.isoformat()
+                })
+            else:
+                # Create new absent record for student
+                new_attendance = Attendance(
+                    student_id=student.student_id,
+                    group_id=student.group_id,
+                    date=today,
+                    status='absent'
+                )
+                db.session.add(new_attendance)
+                db.session.flush()  # Get the ID without committing
+                
+                result.append({
+                    "id": new_attendance.id,
+                    "student_id": new_attendance.student_id,
+                    "name": student.name,
+                    "in_time": None,
+                    "out_time": None,
+                    "status": 'absent',
+                    "date": today.isoformat()
+                })
+        
+        db.session.commit()
         return {
             "date": today.isoformat(),
             "attendance": result
@@ -162,7 +233,7 @@ class AttendanceService:
     
     @staticmethod
     def get_attendance_by_date(target_date):
-        """Get all attendance records for a specific date"""
+        """Get all attendance records for a specific date, ensuring all students are listed with absent as default"""
         # Parse the date if it's a string
         if isinstance(target_date, str):
             try:
@@ -170,7 +241,11 @@ class AttendanceService:
             except ValueError:
                 raise ValueError("Date must be in ISO format (YYYY-MM-DD)")
         
-        # Join with students to get names
+        # Get all students who were registered on or before the target date
+        target_datetime = datetime.combine(target_date, datetime.min.time())
+        all_students = Student.query.filter(Student.created_at <= target_datetime).all()
+        
+        # Get existing attendance records for the target date
         attendance_records = db.session.query(
             Attendance, Student.name
         ).join(
@@ -179,18 +254,46 @@ class AttendanceService:
             Attendance.date == target_date
         ).all()
         
-        result = []
-        for record, name in attendance_records:
-            result.append({
-                "id": record.id,
-                "student_id": record.student_id,
-                "name": name,
-                "in_time": record.in_time.isoformat() if record.in_time else None,
-                "out_time": record.out_time.isoformat() if record.out_time else None,
-                "date": record.date.isoformat(),
-                "status": record.status
-            })
+        # Create a lookup for existing attendance records
+        attendance_lookup = {record.student_id: record for record, _ in attendance_records}
         
+        result = []
+        for student in all_students:
+            attendance = attendance_lookup.get(student.student_id)
+            
+            if attendance:
+                # Use existing record
+                result.append({
+                    "id": attendance.id,
+                    "student_id": attendance.student_id,
+                    "name": student.name,
+                    "in_time": AttendanceService.format_datetime_ist(attendance.in_time),
+                    "out_time": AttendanceService.format_datetime_ist(attendance.out_time),
+                    "date": attendance.date.isoformat(),
+                    "status": attendance.status
+                })
+            else:
+                # Create new absent record for student
+                new_attendance = Attendance(
+                    student_id=student.student_id,
+                    group_id=student.group_id,
+                    date=target_date,
+                    status='absent'
+                )
+                db.session.add(new_attendance)
+                db.session.flush()  # Get the ID without committing
+                
+                result.append({
+                    "id": new_attendance.id,
+                    "student_id": new_attendance.student_id,
+                    "name": student.name,
+                    "in_time": None,
+                    "out_time": None,
+                    "date": target_date.isoformat(),
+                    "status": 'absent'
+                })
+        
+        db.session.commit()
         return {
             "date": target_date.isoformat(),
             "attendance": result
@@ -213,8 +316,8 @@ class AttendanceService:
         for record in attendance_records:
             history.append({
                 "date": record.date.isoformat(),
-                "in_time": record.in_time.isoformat() if record.in_time else None,
-                "out_time": record.out_time.isoformat() if record.out_time else None,
+                "in_time": AttendanceService.format_datetime_ist(record.in_time),
+                "out_time": AttendanceService.format_datetime_ist(record.out_time),
                 "status": record.status
             })
         
@@ -227,7 +330,7 @@ class AttendanceService:
     @staticmethod
     def get_all_students_status():
         """Get all students with their current attendance status for today"""
-        today = date.today()
+        today = AttendanceService.get_ist_today()
         
         # First get all students
         all_students = Student.query.all()
@@ -245,13 +348,15 @@ class AttendanceService:
                 # Create a new record
                 attendance = Attendance(
                     student_id=student.student_id,
+                    group_id=student.group_id,
                     date=today,
                     status='absent'
                 )
                 db.session.add(attendance)
-                db.session.commit()
+                db.session.flush()  # Get the ID without committing
                 
                 result.append({
+                    "id": attendance.id,
                     "student_id": student.student_id,
                     "name": student.name,
                     "in_time": None,
@@ -261,15 +366,159 @@ class AttendanceService:
                 })
             else:
                 result.append({
+                    "id": attendance.id,
                     "student_id": student.student_id,
                     "name": student.name,
-                    "in_time": attendance.in_time.isoformat() if attendance.in_time else None,
-                    "out_time": attendance.out_time.isoformat() if attendance.out_time else None,
+                    "in_time": AttendanceService.format_datetime_ist(attendance.in_time),
+                    "out_time": AttendanceService.format_datetime_ist(attendance.out_time),
                     "status": attendance.status,
                     "date": attendance.date.isoformat()
                 })
         
+        db.session.commit()
         return {
             "date": today.isoformat(),
             "students": result
+        }
+    
+    @staticmethod
+    def get_attendance_logs_for_date(target_date):
+        """Get attendance logs for a specific date, ensuring all students are listed with absent as default"""
+        # Parse the date if it's a string
+        if isinstance(target_date, str):
+            try:
+                target_date = date.fromisoformat(target_date)
+            except ValueError:
+                raise ValueError("Date must be in ISO format (YYYY-MM-DD)")
+        
+        # Get all students (remove date filtering to show all students)
+        # The date filtering was causing issues where students registered after the target date
+        # were not showing up in attendance logs
+        all_students = Student.query.all()
+        
+        # Get existing attendance records for the target date
+        attendance_records = db.session.query(
+            Attendance, Student.name
+        ).join(
+            Student, Attendance.student_id == Student.student_id
+        ).filter(
+            Attendance.date == target_date
+        ).all()
+        
+        # Create a lookup for existing attendance records
+        attendance_lookup = {record.student_id: record for record, _ in attendance_records}
+        
+        result = []
+        for student in all_students:
+            attendance = attendance_lookup.get(student.student_id)
+            
+            if attendance:
+                # Use existing record
+                result.append({
+                    "id": attendance.id,
+                    "student_id": attendance.student_id,
+                    "name": student.name,
+                    "in_time": AttendanceService.format_datetime_ist(attendance.in_time),
+                    "out_time": AttendanceService.format_datetime_ist(attendance.out_time),
+                    "date": attendance.date.isoformat(),
+                    "status": attendance.status
+                })
+            else:
+                # Create new absent record for student
+                new_attendance = Attendance(
+                    student_id=student.student_id,
+                    group_id=student.group_id,
+                    date=target_date,
+                    status='absent'
+                )
+                db.session.add(new_attendance)
+                db.session.flush()  # Get the ID without committing
+                
+                result.append({
+                    "id": new_attendance.id,
+                    "student_id": new_attendance.student_id,
+                    "name": student.name,
+                    "in_time": None,
+                    "out_time": None,
+                    "date": target_date.isoformat(),
+                    "status": 'absent'
+                })
+        
+        db.session.commit()
+        return {
+            "date": target_date.isoformat(),
+            "attendance": result
+        }
+    
+    @staticmethod
+    def get_group_attendance_logs_for_date(group_id, target_date):
+        """Get attendance logs for a specific group and date, ensuring all students in the group are listed with absent as default"""
+        # Parse the date if it's a string
+        if isinstance(target_date, str):
+            try:
+                target_date = date.fromisoformat(target_date)
+            except ValueError:
+                raise ValueError("Date must be in ISO format (YYYY-MM-DD)")
+        
+        # Get all students in the group (remove date filtering to show all students)
+        # The date filtering was causing issues where students registered after the target date
+        # were not showing up in attendance logs
+        all_students = Student.query.filter(
+            Student.group_id == group_id
+        ).all()
+        
+        # Get existing attendance records for the target date and group
+        attendance_records = db.session.query(
+            Attendance, Student.name
+        ).join(
+            Student, Attendance.student_id == Student.student_id
+        ).filter(
+            Attendance.group_id == group_id,
+            Attendance.date == target_date
+        ).all()
+        
+        # Create a lookup for existing attendance records
+        attendance_lookup = {record.student_id: record for record, _ in attendance_records}
+        
+        result = []
+        for student in all_students:
+            attendance = attendance_lookup.get(student.student_id)
+            
+            if attendance:
+                # Use existing record
+                result.append({
+                    "id": attendance.id,
+                    "student_id": attendance.student_id,
+                    "name": student.name,
+                    "in_time": AttendanceService.format_datetime_ist(attendance.in_time),
+                    "out_time": AttendanceService.format_datetime_ist(attendance.out_time),
+                    "date": attendance.date.isoformat(),
+                    "status": attendance.status
+                })
+            else:
+                # Create new absent record for student
+                new_attendance = Attendance(
+                    student_id=student.student_id,
+                    group_id=student.group_id,
+                    date=target_date,
+                    status='absent'
+                )
+                db.session.add(new_attendance)
+                db.session.flush()  # Get the ID without committing
+                
+                result.append({
+                    "id": new_attendance.id,
+                    "student_id": new_attendance.student_id,
+                    "name": student.name,
+                    "in_time": None,
+                    "out_time": None,
+                    "date": target_date.isoformat(),
+                    "status": 'absent'
+                })
+        
+        db.session.commit()
+        return {
+            "group_id": group_id,
+            "date": target_date.isoformat(),
+            "attendance": result
         }

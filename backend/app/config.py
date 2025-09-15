@@ -1,5 +1,6 @@
 import os
 from datetime import timedelta
+import pytz
 
 class Config:
     """Base configuration class. Contains default settings."""
@@ -17,14 +18,17 @@ class Config:
     FACE_MATCH_THRESHOLD = float(os.getenv('MATCH_THRESHOLD', 0.60))
     FACE_DETECTOR_BACKEND = os.getenv('FACE_DETECTOR_BACKEND', 'retinaface')
     FACE_MODEL_PATH = os.getenv('INSIGHTFACE_MODEL_ROOT', 'models')
-    MAX_IMAGE_SIZE = int(os.getenv('MAX_IMAGE_SIZE', 800))
+    MAX_IMAGE_SIZE = int(os.getenv('MAX_IMAGE_SIZE', 1024))  # Increased from 800 to 1024
     
     # Attendance settings
     DEBOUNCE_SECONDS = int(os.getenv('DEBOUNCE_SECONDS', 30))
     
+    # Timezone settings
+    TIMEZONE = pytz.timezone('Asia/Kolkata')  # Indian Standard Time
+    
     # Upload settings
     UPLOAD_FOLDER = os.getenv('UPLOAD_FOLDER', 'uploads')
-    MAX_CONTENT_LENGTH = 16 * 1024 * 1024  # 16MB max upload
+    MAX_CONTENT_LENGTH = 32 * 1024 * 1024  # Increased from 16MB to 32MB max upload
     
     # CORS settings
     ALLOWED_ORIGINS = os.getenv('ALLOWED_ORIGINS', 'http://localhost:8080,http://127.0.0.1:8080,http://localhost:3000,http://127.0.0.1:3000,http://localhost:5173,http://127.0.0.1:5173')
@@ -42,7 +46,7 @@ class DevelopmentConfig(Config):
     # Use a specific environment variable for the development database
     SQLALCHEMY_DATABASE_URI = os.getenv(
         'DEV_DATABASE_URL', 
-        'mysql+pymysql://root:Rahul@1606@localhost/face_logbook'
+        'mysql+pymysql://root:Rahul%401606@localhost/face-logbook'
     )
 
 class TestingConfig(Config):

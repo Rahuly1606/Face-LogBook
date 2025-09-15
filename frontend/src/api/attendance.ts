@@ -74,8 +74,8 @@ export interface EmbeddingDebugInfo {
   norm?: number;
 }
 
-// Live attendance capture (legacy method - keep for backward compatibility)
-export const submitLiveAttendance = async (imageBlob: Blob): Promise<LiveAttendanceResponse> => {
+// Live attendance capture with improved error handling and timeout
+export const submitLiveAttendance = async (imageBlob: Blob, retryCount = 0): Promise<LiveAttendanceResponse> => {
   try {
     const formData = new FormData();
     formData.append('image', imageBlob, 'capture.jpg');
@@ -85,10 +85,34 @@ export const submitLiveAttendance = async (imageBlob: Blob): Promise<LiveAttenda
         // Let the browser set the Content-Type with proper boundary
         'Content-Type': undefined
       },
+      // Increase timeout for images with multiple faces
+      timeout: 30000 // 30 seconds
     });
     return response.data;
-  } catch (error) {
+  } catch (error: any) {
     console.error('Error submitting live attendance:', error);
+    
+    // Handle timeout errors specifically
+    if (error.isTimeout) {
+      console.warn('Processing timeout detected - likely due to many faces');
+      return {
+        recognized: [],
+        unrecognized_count: 0,
+        unrecognized_faces: [],
+        processing_time_ms: 0,
+        error: true,
+        errorMessage: 'Processing timeout - too many faces or complex image'
+      } as LiveAttendanceResponse;
+    }
+    
+    // Implement automatic retry for network errors (max 1 retry)
+    if (error.isNetworkError && retryCount < 1) {
+      console.log(`Retrying live attendance (attempt ${retryCount + 1})...`);
+      // Wait 1 second before retry
+      await new Promise(resolve => setTimeout(resolve, 1000));
+      return submitLiveAttendance(imageBlob, retryCount + 1);
+    }
+    
     // Return a fallback response to prevent UI errors
     return {
       recognized: [],
@@ -111,6 +135,8 @@ export const uploadGroupAttendance = async (image: File): Promise<UploadAttendan
       // Let the browser set the Content-Type with proper boundary
       'Content-Type': undefined
     },
+    // Extended timeout for face processing (90 seconds)
+    timeout: 90000
   });
   return response.data;
 };
@@ -139,6 +165,18 @@ export const getAttendanceByGroup = async (groupId: number): Promise<{ attendanc
   }
 };
 
+// Get attendance by group and specific date
+export const getGroupAttendanceByDate = async (groupId: number, date: string): Promise<{ attendance: AttendanceRecord[] }> => {
+  try {
+    const response = await api.get(`/attendance/logs/${groupId}/date?date=${date}`);
+    return response.data;
+  } catch (error) {
+    console.error(`Error fetching attendance for group ${groupId} on date ${date}:`, error);
+    // Return a fallback response to prevent UI errors
+    return { attendance: [] };
+  }
+};
+
 // Get embedding debug info for a student
 export const getEmbeddingDebugInfo = async (studentId: string): Promise<EmbeddingDebugInfo> => {
   try {
@@ -155,7 +193,7 @@ export const getEmbeddingDebugInfo = async (studentId: string): Promise<Embeddin
 // Get attendance by specific date
 export const getAttendanceByDate = async (date: string): Promise<{ attendance: AttendanceRecord[] }> => {
   try {
-    const response = await apiClient.get(`/attendance/date/${date}`);
+    const response = await api.get(`/attendance/logs?date=${date}`);
     return response.data;
   } catch (error) {
     console.error(`Error fetching attendance for date ${date}:`, error);

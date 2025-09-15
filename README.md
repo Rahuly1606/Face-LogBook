@@ -12,9 +12,11 @@ A comprehensive, full-stack web application for managing student attendance usin
 - **Student Management**: Register, view, edit, and manage student profiles
 - **Group Organization**: Create and manage logical student groups
 - **Attendance Records**: View, filter, and export attendance logs by date and group
+- **Indian Standard Time (IST)**: All attendance times displayed in IST timezone
 - **Google Drive Integration**: Import student photos directly from Google Drive links
 - **CSV Bulk Import**: Add multiple students at once using CSV files
 - **Secure Authentication**: JWT-based authentication for API endpoints
+- **Simple Database Setup**: One-command database schema creation
 
 ## 🛠️ Technology Stack
 
@@ -25,6 +27,7 @@ A comprehensive, full-stack web application for managing student attendance usin
 - **Flask-JWT-Extended**: Authentication with JSON Web Tokens
 - **SQLite/MySQL**: Database options for storing data
 - **Google Drive API**: Integration for importing photos
+- **PyTZ**: Timezone handling for IST support
 
 ### Frontend
 - **React**: Frontend library for building user interfaces
@@ -115,7 +118,15 @@ JWT_ACCESS_TOKEN_EXPIRES=86400  # 24 hours
 DEV_DATABASE_URL=sqlite:///attendance.db
 
 # MySQL (recommended for production):
-# DEV_DATABASE_URL=mysql+pymysql://username:password@localhost/face_logbook
+# DEV_DATABASE_URL=mysql+pymysql://username:password@localhost/face-logbook
+# Note: If password contains '@', encode it as '%40' in the URL
+
+# MySQL Credentials (for database creation script):
+MYSQL_HOST=localhost
+MYSQL_PORT=3306
+MYSQL_USER=root
+MYSQL_PASSWORD=your_password_here
+# Note: Passwords with '@' characters work fine with pymysql
 
 # Face Recognition Settings
 FACE_MATCH_THRESHOLD=0.60
@@ -129,17 +140,11 @@ FACE_MODEL_PATH=models
 #### Setup Database
 
 ```bash
-# Create database directories
-mkdir -p migrations/versions
-
-# Initialize database
-flask db init
-flask db migrate -m "Initial database setup"
-flask db upgrade
-
-# Create initial admin user
-python scripts/create_user.py
+# Create database schema (simple one-command setup)
+python create_database.py
 ```
+
+**Note**: The database creation script will create all required tables, indexes, and relationships automatically. Make sure your `.env` file contains the MySQL credentials (`MYSQL_HOST`, `MYSQL_PORT`, `MYSQL_USER`, `MYSQL_PASSWORD`).
 
 #### Create Upload Directory
 
@@ -205,9 +210,10 @@ The frontend will be available at http://localhost:5173
 
 ### Initial Setup
 
-1. **Login**: Access the system using default credentials (username: `admin`, password: `admin123`)
-2. **Create Groups**: Set up logical groups (classes, departments, etc.)
-3. **Register Students**: Add students individually or through bulk import
+1. **Create Database**: Run `python create_database.py` to set up the database schema
+2. **Login**: Access the system using default credentials (username: `admin`, password: `admin123`)
+3. **Create Groups**: Set up logical groups (classes, departments, etc.)
+4. **Register Students**: Add students individually or through bulk import
 
 ### Managing Students
 
@@ -238,6 +244,7 @@ The frontend will be available at http://localhost:5173
 - Access the "Attendance Logs" section
 - Filter by date, group, and student
 - View attendance details and statistics
+- All times are displayed in Indian Standard Time (IST)
 
 ## ⚙️ Configuration Options
 
@@ -248,7 +255,8 @@ Key configurations in `.env`:
 - `FACE_MATCH_THRESHOLD`: Recognition confidence threshold (default: 0.60)
 - `FACE_DETECTOR_BACKEND`: Face detection model (default: retinaface)
 - `DEBOUNCE_SECONDS`: Minimum seconds between attendance records (default: 30)
-- `MAX_IMAGE_SIZE`: Maximum image dimension for processing (default: 800px)
+- `MAX_IMAGE_SIZE`: Maximum image dimension for processing (default: 1024px)
+- `TIMEZONE`: System timezone (default: Asia/Kolkata for IST)
 
 ### Database Options
 
@@ -256,7 +264,8 @@ Key configurations in `.env`:
   - `DEV_DATABASE_URL=sqlite:///attendance.db`
 
 - **MySQL**: Better for production use
-  - `DEV_DATABASE_URL=mysql+pymysql://username:password@localhost/face_logbook`
+  - `DEV_DATABASE_URL=mysql+pymysql://username:password@localhost/face-logbook`
+  - Note: If password contains '@', encode it as '%40' in the URL
 
 ## 🔍 Troubleshooting
 
@@ -275,7 +284,7 @@ Key configurations in `.env`:
 3. **Database Connection Errors**:
    - Verify database credentials
    - Ensure the database exists and is accessible
-   - Check for proper migrations
+   - Run `python create_database.py` to create the schema
 
 4. **Performance Issues**:
    - Reduce image size for faster processing
@@ -289,6 +298,22 @@ The frontend is responsive and works on mobile devices, but the following featur
 - **Photo Upload**: Fully functional on mobile devices
 - **Student Management**: Fully responsive for on-the-go administration
 
+## 🆕 Recent Improvements
+
+### Version Updates
+- **IST Timezone Support**: All attendance times now display in Indian Standard Time
+- **Simplified Database Setup**: One-command database schema creation with `create_database.py`
+- **Enhanced Performance**: Improved image processing with larger default image size (1024px)
+- **Better Error Handling**: Fixed timezone-related errors in attendance processing
+- **Cleaner Codebase**: Removed unnecessary debug files and backup files
+
+### Database Schema
+The system now includes:
+- Automatic timezone-aware datetime handling
+- Performance-optimized indexes
+- Proper foreign key relationships
+- Clean schema creation without sample data
+
 ## 🔄 Updating the System
 
 To update to the latest version:
@@ -300,7 +325,7 @@ git pull
 # Update backend
 cd backend
 pip install -r requirements.txt
-flask db upgrade
+python create_database.py  # Recreate schema if needed
 
 # Update frontend
 cd ../frontend
@@ -334,6 +359,7 @@ python tests/integration_test.py
 - JWT tokens expire after 24 hours (configurable)
 - Student photos and face embeddings are stored securely
 - API endpoints are protected with JWT authentication
+- All attendance times are stored and displayed in IST timezone
 
 ## 📄 License
 

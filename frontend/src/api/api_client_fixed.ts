@@ -1,4 +1,5 @@
 import axios from 'axios';
+import { getAdminToken } from '../utils/authToken';
 
 // Base API configuration
 const API_ROOT = import.meta.env.VITE_API_ROOT || 'http://127.0.0.1:5000/api/v1';
@@ -6,7 +7,7 @@ const API_ROOT = import.meta.env.VITE_API_ROOT || 'http://127.0.0.1:5000/api/v1'
 // Create axios instance
 const apiClient = axios.create({
   baseURL: API_ROOT,
-  timeout: 20000,
+  timeout: 60000, // Increased to 60 seconds for face processing
   withCredentials: true, // This is important for CORS with credentials
 });
 
@@ -27,9 +28,12 @@ apiClient.interceptors.request.use(
     }
     
     // Add admin token for all routes that need authentication
-    const adminToken = localStorage.getItem('adminToken');
+    const adminToken = getAdminToken();
     if (adminToken) {
       config.headers['X-ADMIN-TOKEN'] = adminToken;
+      console.log('Added admin token to request:', adminToken.substring(0, 5) + '...');
+    } else {
+      console.warn('No admin token found in localStorage');
     }
     
     // Log request info (in development only)
@@ -87,6 +91,19 @@ apiClient.interceptors.response.use(
     } else if (error.request) {
       // The request was made but no response was received
       console.error('Network Error:', error.request);
+      
+      // Check if this is a timeout error
+      if (error.code === 'ECONNABORTED' && error.message.includes('timeout')) {
+        console.error('Request timeout:', error.config?.url);
+        
+        const timeoutError = new Error(
+          'Request timed out - server may be processing too many faces'
+        );
+        (timeoutError as any).isNetworkError = true;
+        (timeoutError as any).isTimeout = true;
+        
+        return Promise.reject(timeoutError);
+      }
       
       // Create network error with helpful message
       const networkError = new Error(

@@ -4,6 +4,7 @@ from flask_sqlalchemy import SQLAlchemy
 from flask_migrate import Migrate
 from flask_jwt_extended import JWTManager
 import os
+import time
 from .config import config_by_name
 
 db = SQLAlchemy()
@@ -13,6 +14,9 @@ jwt = JWTManager()
 def create_app(config_name='dev'):
     app = Flask(__name__)
     app.config.from_object(config_by_name[config_name])
+    
+    # Set application start time for uptime tracking
+    app.start_time = time.time()
     
     # Set open attendance endpoints in development
     if config_name == 'dev':

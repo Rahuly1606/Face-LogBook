@@ -10,6 +10,7 @@ from app.models.group import Group
 from app.models.attendance import Attendance
 from app.models.student import Student
 from app import db
+import pytz
 
 attendance_bp = Blueprint('attendance', __name__)
 face_service = FaceService()
@@ -75,14 +76,14 @@ def process_group_photo():
 @attendance_bp.route('/today', methods=['GET'])
 @admin_required()
 def get_today_attendance():
-    """Get all attendance records for today"""
+    """Get all attendance records for today, ensuring all students are listed with absent as default"""
     result = AttendanceService.get_today_attendance()
     return jsonify(result), 200
 
 @attendance_bp.route('/date/<date_str>', methods=['GET'])
 @admin_required()
 def get_attendance_by_date(date_str):
-    """Get all attendance records for a specific date"""
+    """Get all attendance records for a specific date, ensuring all students are listed with absent as default"""
     try:
         result = AttendanceService.get_attendance_by_date(date_str)
         return jsonify(result), 200
@@ -103,6 +104,23 @@ def get_all_students_status():
     result = AttendanceService.get_all_students_status()
     return jsonify(result), 200
 
+@attendance_bp.route('/logs', methods=['GET'])
+@admin_required()
+def get_attendance_logs():
+    """Get attendance logs for a specific date, ensuring all students are listed with absent as default"""
+    date_str = request.args.get('date')
+    
+    if not date_str:
+        # Default to today if no date provided
+        from datetime import date
+        date_str = date.today().isoformat()
+    
+    try:
+        result = AttendanceService.get_attendance_logs_for_date(date_str)
+        return jsonify(result), 200
+    except ValueError as e:
+        return jsonify({"success": False, "message": str(e)}), 400
+
 @attendance_bp.route('/reset/daily', methods=['POST'])
 @admin_required()
 def reset_daily_attendance():
@@ -121,9 +139,10 @@ def get_attendance_logs_by_group(group_id):
     # Check if group exists
     group = Group.query.get_or_404(group_id)
     
-    # Get query parameters
-    date_from = request.args.get('date_from', str(date.today()))
-    date_to = request.args.get('date_to', str(date.today()))
+    # Get query parameters - use IST for default dates
+    ist_today = datetime.now(pytz.timezone('Asia/Kolkata')).date()
+    date_from = request.args.get('date_from', str(ist_today))
+    date_to = request.args.get('date_to', str(ist_today))
     student_id = request.args.get('student_id')
     
     try:
@@ -160,8 +179,8 @@ def get_attendance_logs_by_group(group_id):
                 "student_id": record.student_id,
                 "name": name,
                 "date": record.date.isoformat(),
-                "in_time": record.in_time.isoformat() if record.in_time else None,
-                "out_time": record.out_time.isoformat() if record.out_time else None,
+                "in_time": AttendanceService.format_datetime_ist(record.in_time),
+                "out_time": AttendanceService.format_datetime_ist(record.out_time),
                 "status": record.status
             })
         
@@ -175,6 +194,27 @@ def get_attendance_logs_by_group(group_id):
         
     except ValueError as e:
         return jsonify({"success": False, "message": f"Invalid date format: {str(e)}"}), 400
+
+@attendance_bp.route('/logs/<int:group_id>/date', methods=['GET'])
+@admin_required()
+def get_group_attendance_logs_by_date(group_id):
+    """Get attendance logs for a specific group and date, ensuring all students in the group are listed with absent as default"""
+    # Check if group exists
+    group = Group.query.get_or_404(group_id)
+    
+    date_str = request.args.get('date')
+    
+    if not date_str:
+        # Default to today if no date provided
+        from datetime import date
+        date_str = date.today().isoformat()
+    
+    try:
+        result = AttendanceService.get_group_attendance_logs_for_date(group_id, date_str)
+        result['group_name'] = group.name
+        return jsonify(result), 200
+    except ValueError as e:
+        return jsonify({"success": False, "message": str(e)}), 400
 
 @attendance_bp.route('/debug/embeddings/<student_id>', methods=['GET'])
 @admin_required()
@@ -199,3 +239,54 @@ def debug_student_embedding(student_id):
         "shape": embedding.shape,
         "dtype": str(embedding.dtype)
     }), 200
+
+@attendance_bp.route('/debug/group/<int:group_id>', methods=['GET'])
+@admin_required()
+def debug_group_students(group_id):
+    """Debug endpoint to check all students in a group and their attendance records"""
+    from datetime import date
+    
+    # Check if group exists
+    group = Group.query.get_or_404(group_id)
+    
+    # Get all students in the group
+    all_students = Student.query.filter(Student.group_id == group_id).all()
+    
+    # Get today's date for testing
+    today = date.today()
+    
+    # Get attendance records for today
+    attendance_records = db.session.query(
+        Attendance, Student.name
+    ).join(
+        Student, Attendance.student_id == Student.student_id
+    ).filter(
+        Attendance.group_id == group_id,
+        Attendance.date == today
+    ).all()
+    
+    # Create lookup for attendance records
+    attendance_lookup = {record.student_id: record for record, _ in attendance_records}
+    
+    # Prepare debug data
+    debug_data = {
+        "group_id": group_id,
+        "group_name": group.name,
+        "date": today.isoformat(),
+        "total_students_in_group": len(all_students),
+        "students": []
+    }
+    
+    for student in all_students:
+        attendance = attendance_lookup.get(student.student_id)
+        student_data = {
+            "student_id": student.student_id,
+            "name": student.name,
+            "group_id": student.group_id,
+            "created_at": student.created_at.isoformat() if student.created_at else None,
+            "has_attendance_record": attendance is not None,
+            "attendance_status": attendance.status if attendance else "no_record"
+        }
+        debug_data["students"].append(student_data)
+    
+    return jsonify(debug_data), 200

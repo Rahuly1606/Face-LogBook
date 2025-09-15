@@ -1,13 +1,12 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { getAttendanceByGroup, AttendanceRecord } from '@/api/attendance';
-import { RefreshCw, Download, Calendar, Search } from 'lucide-react';
+import { getGroupAttendanceByDate, AttendanceRecord } from '@/api/attendance';
+import { Download, RotateCcw } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
+import { DatePicker } from '@/components/ui/date-picker';
+import { format } from 'date-fns';
 
 interface GroupAttendanceTableProps {
   groupId: number;
@@ -15,37 +14,72 @@ interface GroupAttendanceTableProps {
 
 const GroupAttendanceTable: React.FC<GroupAttendanceTableProps> = ({ groupId }) => {
   const [records, setRecords] = useState<AttendanceRecord[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
-  const [dateFrom, setDateFrom] = useState<string>(new Date().toISOString().split('T')[0]);
-  const [dateTo, setDateTo] = useState<string>(new Date().toISOString().split('T')[0]);
-  const [studentFilter, setStudentFilter] = useState<string>('');
+  const [loading, setLoading] = useState(true);
+  const [selectedDate, setSelectedDate] = useState<Date | undefined>(new Date());
   const { toast } = useToast();
-
-  const fetchAttendance = useCallback(async () => {
-    if (!groupId) return;
-    
-    setIsLoading(true);
-    try {
-      // Call the API with filters
-      console.log(`Fetching attendance records for group ${groupId}`);
-      const response = await getAttendanceByGroup(groupId);
-      console.log('Attendance response:', response);
-      setRecords(response.attendance || []);
-    } catch (error) {
-      console.error('Error fetching attendance records:', error);
-      toast({
-        title: 'Error',
-        description: 'Failed to load attendance records. Please try again.',
-        variant: 'destructive',
-      });
-    } finally {
-      setIsLoading(false);
-    }
-  }, [groupId, dateFrom, dateTo, studentFilter, toast]);
 
   useEffect(() => {
     fetchAttendance();
-  }, [fetchAttendance]);
+  }, [selectedDate, groupId]);
+
+  const fetchAttendance = async () => {
+    if (!groupId) return;
+    
+    setLoading(true);
+    try {
+      let data;
+      if (!selectedDate) {
+        // Default to today if no date selected
+        const today = new Date();
+        const dateStr = format(today, 'yyyy-MM-dd');
+        data = await getGroupAttendanceByDate(groupId, dateStr);
+      } else {
+        const dateStr = format(selectedDate, 'yyyy-MM-dd');
+        data = await getGroupAttendanceByDate(groupId, dateStr);
+      }
+      
+      if (data && data.attendance) {
+        setRecords(data.attendance.map(record => ({
+          ...record,
+          // Ensure name is available by using either name or student_name field
+          name: record.name || record.student_name,
+          // Ensure date is available
+          date: record.date || new Date().toISOString().split('T')[0]
+        })));
+      } else {
+        // Handle empty data
+        setRecords([]);
+        toast({
+          title: "Information",
+          description: "No attendance records found for the selected date",
+        });
+      }
+    } catch (error) {
+      console.error("Error fetching attendance:", error);
+      toast({
+        title: "Error",
+        description: "Failed to fetch attendance records. Server might be unreachable.",
+        variant: "destructive",
+      });
+      // Set empty array to prevent UI errors
+      setRecords([]);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const resetToToday = () => {
+    setSelectedDate(new Date());
+  };
+
+  const getAttendanceStats = () => {
+    const total = records.length;
+    const present = records.filter(r => r.status === 'present').length;
+    const absent = records.filter(r => r.status === 'absent').length;
+    const late = records.filter(r => r.status === 'late').length;
+    
+    return { total, present, absent, late };
+  };
 
   const getStatusBadge = (status: string) => {
     const variants: any = {
@@ -54,6 +88,20 @@ const GroupAttendanceTable: React.FC<GroupAttendanceTableProps> = ({ groupId }) 
       absent: 'destructive',
     };
     return <Badge variant={variants[status] || 'default'}>{status}</Badge>;
+  };
+
+  const formatTime = (timeString: string | null) => {
+    if (!timeString) return '-';
+    try {
+      const date = new Date(timeString);
+      return date.toLocaleTimeString('en-US', { 
+        hour: '2-digit', 
+        minute: '2-digit',
+        hour12: true 
+      });
+    } catch {
+      return '-';
+    }
   };
 
   const handleExportCsv = () => {
@@ -75,128 +123,109 @@ const GroupAttendanceTable: React.FC<GroupAttendanceTableProps> = ({ groupId }) 
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
+    const dateStr = selectedDate ? format(selectedDate, 'yyyy-MM-dd') : format(new Date(), 'yyyy-MM-dd');
     link.setAttribute('href', url);
-    link.setAttribute('download', `attendance_group_${groupId}_${dateFrom}_to_${dateTo}.csv`);
+    link.setAttribute('download', `attendance_group_${groupId}_${dateStr}.csv`);
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
+    
+    toast({
+      title: "Success",
+      description: "CSV file downloaded successfully",
+    });
   };
 
-  const handleSearch = () => {
-    fetchAttendance();
-  };
-
-  const filteredRecords = records.filter(record => {
-    if (studentFilter && !record.student_id.includes(studentFilter) && 
-        !(record.name || record.student_name || '').toLowerCase().includes(studentFilter.toLowerCase())) {
-      return false;
-    }
-    return true;
-  });
+  const stats = getAttendanceStats();
 
   return (
     <div className="space-y-6">
-      <div>
-        <h2 className="text-xl font-bold mb-4">Attendance Logs</h2>
-      </div>
-      
-      <div className="flex flex-col sm:flex-row gap-4">
-        <div className="space-y-2 flex-1">
-          <Label htmlFor="dateFrom">From Date</Label>
-          <Input
-            id="dateFrom"
-            type="date"
-            value={dateFrom}
-            onChange={(e) => setDateFrom(e.target.value)}
-          />
-        </div>
-        
-        <div className="space-y-2 flex-1">
-          <Label htmlFor="dateTo">To Date</Label>
-          <Input
-            id="dateTo"
-            type="date"
-            value={dateTo}
-            onChange={(e) => setDateTo(e.target.value)}
-          />
-        </div>
-        
-        <div className="space-y-2 flex-1">
-          <Label htmlFor="studentFilter">Student Filter</Label>
-          <div className="flex gap-2">
-            <Input
-              id="studentFilter"
-              placeholder="ID or Name"
-              value={studentFilter}
-              onChange={(e) => setStudentFilter(e.target.value)}
-            />
-            <Button onClick={handleSearch} className="shrink-0">
-              <Search className="h-4 w-4" />
-            </Button>
-          </div>
-        </div>
-      </div>
-      
       <div className="flex justify-between items-center">
-        <div>
-          <span className="text-sm text-muted-foreground">
-            {filteredRecords.length} record{filteredRecords.length !== 1 ? 's' : ''} found
-          </span>
-        </div>
-        <Button onClick={handleExportCsv} variant="outline" className="gap-2">
-          <Download className="h-4 w-4" />
+        <h2 className="text-xl font-bold">Attendance Logs</h2>
+        <Button onClick={handleExportCsv} variant="outline">
+          <Download className="h-4 w-4 mr-2" />
           Export CSV
         </Button>
       </div>
-      
-      <div className="rounded-lg border bg-card shadow-sm">
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead>Student ID</TableHead>
-              <TableHead>Name</TableHead>
-              <TableHead>Date</TableHead>
-              <TableHead>Check In</TableHead>
-              <TableHead>Check Out</TableHead>
-              <TableHead>Status</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {isLoading ? (
-              <TableRow>
-                <TableCell colSpan={6} className="text-center py-8">
-                  <RefreshCw className="h-5 w-5 animate-spin mx-auto" />
-                </TableCell>
-              </TableRow>
-            ) : filteredRecords.length === 0 ? (
-              <TableRow>
-                <TableCell colSpan={6} className="text-center py-8 text-muted-foreground">
-                  No attendance records found. Take attendance using the webcam or upload a group photo.
-                </TableCell>
-              </TableRow>
-            ) : (
-              filteredRecords.map((record, index) => (
-                <TableRow key={record.id || index}>
-                  <TableCell className="font-medium">{record.student_id}</TableCell>
-                  <TableCell>{record.name || record.student_name || '-'}</TableCell>
-                  <TableCell>{record.date ? new Date(record.date).toLocaleDateString() : '-'}</TableCell>
-                  <TableCell>
-                    {record.in_time 
-                      ? new Date(record.in_time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) 
-                      : '-'}
-                  </TableCell>
-                  <TableCell>
-                    {record.out_time 
-                      ? new Date(record.out_time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) 
-                      : '-'}
-                  </TableCell>
-                  <TableCell>{getStatusBadge(record.status)}</TableCell>
-                </TableRow>
-              ))
-            )}
-          </TableBody>
-        </Table>
+
+      <div className="flex flex-col sm:flex-row gap-4">
+        <div className="flex-1 max-w-xs">
+          <DatePicker
+            date={selectedDate}
+            setDate={setSelectedDate}
+            placeholder="Filter by date"
+          />
+        </div>
+        <Button 
+          variant="outline" 
+          size="icon"
+          onClick={resetToToday}
+          title="Reset to today"
+        >
+          <RotateCcw className="h-4 w-4" />
+        </Button>
       </div>
+
+      {/* Attendance Statistics */}
+      {!loading && records.length > 0 && (
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+          <div className="bg-card border rounded-lg p-4">
+            <div className="text-2xl font-bold text-blue-600">{stats.total}</div>
+            <div className="text-sm text-muted-foreground">Total Students</div>
+          </div>
+          <div className="bg-card border rounded-lg p-4">
+            <div className="text-2xl font-bold text-green-600">{stats.present}</div>
+            <div className="text-sm text-muted-foreground">Present</div>
+          </div>
+          <div className="bg-card border rounded-lg p-4">
+            <div className="text-2xl font-bold text-red-600">{stats.absent}</div>
+            <div className="text-sm text-muted-foreground">Absent</div>
+          </div>
+          <div className="bg-card border rounded-lg p-4">
+            <div className="text-2xl font-bold text-yellow-600">{stats.late}</div>
+            <div className="text-sm text-muted-foreground">Late</div>
+          </div>
+        </div>
+      )}
+
+      {loading ? (
+        <div className="text-center py-8">Loading...</div>
+      ) : (
+        <div className="rounded-lg border bg-card shadow-sm">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Student ID</TableHead>
+                <TableHead>Name</TableHead>
+                <TableHead>Date</TableHead>
+                <TableHead>Check In</TableHead>
+                <TableHead>Check Out</TableHead>
+                <TableHead>Status</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {records.length === 0 ? (
+                <TableRow>
+                  <TableCell colSpan={6} className="text-center py-8 text-muted-foreground">
+                    No attendance records found
+                  </TableCell>
+                </TableRow>
+              ) : (
+                records.map((record) => (
+                  <TableRow key={record.id}>
+                    <TableCell className="font-medium">{record.student_id}</TableCell>
+                    <TableCell>{record.name || record.student_name}</TableCell>
+                    <TableCell>{record.date ? new Date(record.date).toLocaleDateString() : '-'}</TableCell>
+                    <TableCell>{formatTime(record.in_time)}</TableCell>
+                    <TableCell>{formatTime(record.out_time)}</TableCell>
+                    <TableCell>{getStatusBadge(record.status)}</TableCell>
+                  </TableRow>
+                ))
+              )}
+            </TableBody>
+          </Table>
+        </div>
+      )}
     </div>
   );
 };

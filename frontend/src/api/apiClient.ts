@@ -1,4 +1,5 @@
 import axios from 'axios';
+import { getAdminToken } from '../utils/authToken';
 
 // Base API configuration
 const API_ROOT = import.meta.env.VITE_API_ROOT || 'http://127.0.0.1:5000/api/v1';
@@ -16,9 +17,12 @@ const apiClient = axios.create({
 apiClient.interceptors.request.use(
   (config) => {
     // Add admin token for all routes that need authentication
-    const adminToken = localStorage.getItem('adminToken');
+    const adminToken = getAdminToken();
     if (adminToken) {
       config.headers['X-ADMIN-TOKEN'] = adminToken;
+      console.log('Added admin token to request:', adminToken.substring(0, 5) + '...');
+    } else {
+      console.warn('No admin token found in localStorage');
     }
     
     // Only add Content-Type: application/json for non-FormData payloads

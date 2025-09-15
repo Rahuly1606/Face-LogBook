@@ -2,7 +2,7 @@ import React, { useRef, useCallback, useState, useEffect } from 'react';
 import Webcam from 'react-webcam';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
-import { Camera, CameraOff, Play, Pause, RefreshCw } from 'lucide-react';
+import { Camera, CameraOff, Play, Pause, RefreshCw, Users, Clock } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { submitLiveAttendance, RecognizedStudent, UnrecognizedFace } from '@/api/attendance';
 import { useAppContext } from '@/context/AppContext';
@@ -15,19 +15,46 @@ interface WebcamCaptureProps {
   onFaceRecognized?: () => void;
 }
 
+interface TrackedStudent {
+  student_id: string;
+  name: string;
+  lastSeen: number;
+  isPresent: boolean;
+  bbox?: number[];
+  confidence: number;
+}
+
+interface GreetingMessage {
+  id: string;
+  name: string;
+  action: 'welcome' | 'goodbye';
+  timestamp: number;
+}
+
 const WebcamCapture: React.FC<WebcamCaptureProps> = ({ onFaceRecognized }) => {
   const webcamRef = useRef<Webcam>(null);
   const intervalRef = useRef<NodeJS.Timeout | null>(null);
+  const isProcessing = useRef<boolean>(false);
+  const trackedStudents = useRef<Map<string, TrackedStudent>>(new Map());
+  const lastProcessedFrame = useRef<string | null>(null);
+  
   const [isCapturing, setIsCapturing] = useState(false);
   const [lastCapture, setLastCapture] = useState<string | null>(null);
-  const [greetingData, setGreetingData] = useState<{ name: string; action: string } | null>(null);
+  const [greetingMessages, setGreetingMessages] = useState<GreetingMessage[]>([]);
   const [processingTime, setProcessingTime] = useState<number | null>(null);
   const [recognizedStudents, setRecognizedStudents] = useState<RecognizedStudent[]>([]);
   const [unrecognizedCount, setUnrecognizedCount] = useState(0);
   const [unrecognizedFaces, setUnrecognizedFaces] = useState<UnrecognizedFace[]>([]);
   const [totalFaces, setTotalFaces] = useState(0);
+  const [currentFacesInView, setCurrentFacesInView] = useState(0);
+  const [fps, setFps] = useState(0);
+  
   const { captureInterval } = useAppContext();
   const { toast } = useToast();
+
+  // Performance tracking
+  const frameCount = useRef(0);
+  const lastFpsTime = useRef(Date.now());
 
   const videoConstraints = {
     width: 1280,
@@ -40,14 +67,123 @@ const WebcamCapture: React.FC<WebcamCaptureProps> = ({ onFaceRecognized }) => {
     setUnrecognizedCount(0);
     setUnrecognizedFaces([]);
     setTotalFaces(0);
+    trackedStudents.current.clear();
   }, []);
+
+  const addGreetingMessage = useCallback((name: string, action: 'welcome' | 'goodbye') => {
+    const message: GreetingMessage = {
+      id: `${name}-${action}-${Date.now()}`,
+      name,
+      action,
+      timestamp: Date.now()
+    };
+    
+    setGreetingMessages(prev => [...prev, message]);
+    
+    // Auto-remove message after 3 seconds
+    setTimeout(() => {
+      setGreetingMessages(prev => prev.filter(msg => msg.id !== message.id));
+    }, 3000);
+  }, []);
+
+  const updateTrackedStudents = useCallback((recognizedStudents: RecognizedStudent[]) => {
+    const currentTime = Date.now();
+    const currentStudents = new Set<string>();
+    
+    // Update existing tracked students and mark new ones
+    recognizedStudents.forEach(student => {
+      const studentId = student.student_id;
+      currentStudents.add(studentId);
+      
+      const existing = trackedStudents.current.get(studentId);
+      
+      if (existing) {
+        // Update existing student
+        existing.lastSeen = currentTime;
+        existing.bbox = student.bbox;
+        existing.confidence = student.score;
+        
+        // Check if student was absent and now present
+        if (!existing.isPresent) {
+          existing.isPresent = true;
+          addGreetingMessage(student.name, 'welcome');
+        }
+      } else {
+        // New student detected
+        const newTrackedStudent: TrackedStudent = {
+          student_id: studentId,
+          name: student.name,
+          lastSeen: currentTime,
+          isPresent: true,
+          bbox: student.bbox,
+          confidence: student.score
+        };
+        
+        trackedStudents.current.set(studentId, newTrackedStudent);
+        addGreetingMessage(student.name, 'welcome');
+      }
+    });
+    
+    // Check for students who left the view
+    trackedStudents.current.forEach((student, studentId) => {
+      if (!currentStudents.has(studentId) && student.isPresent) {
+        // Student left the view
+        student.isPresent = false;
+        addGreetingMessage(student.name, 'goodbye');
+      }
+    });
+    
+    // Clean up old tracked students (not seen for more than 10 seconds)
+    const cleanupTime = currentTime - 10000;
+    trackedStudents.current.forEach((student, studentId) => {
+      if (student.lastSeen < cleanupTime) {
+        trackedStudents.current.delete(studentId);
+      }
+    });
+    
+    setCurrentFacesInView(currentStudents.size);
+  }, [addGreetingMessage]);
 
   const captureAndProcess = useCallback(async () => {
     if (!webcamRef.current) return;
 
+    // Skip if already processing
+    if (isProcessing.current) {
+      return;
+    }
+
+    // Performance optimization: Skip frames if processing is taking too long
+    const currentTime = Date.now();
+    if (lastProcessedFrame.current && currentTime - parseInt(lastProcessedFrame.current) < 100) {
+      return;
+    }
+
+    isProcessing.current = true;
+    lastProcessedFrame.current = currentTime.toString();
+
+    // Update FPS counter
+    frameCount.current++;
+    if (currentTime - lastFpsTime.current >= 1000) {
+      setFps(frameCount.current);
+      frameCount.current = 0;
+      lastFpsTime.current = currentTime;
+    }
+
+    // Safety timeout
+    const safetyTimeout = setTimeout(() => {
+      if (isProcessing.current) {
+        console.warn('Processing timeout - resetting flag');
+        isProcessing.current = false;
+      }
+    }, 30000);
+
     try {
       const imageSrc = webcamRef.current.getScreenshot();
-      if (!imageSrc) return;
+      if (!imageSrc) {
+        isProcessing.current = false;
+        clearTimeout(safetyTimeout);
+        return;
+      }
 
       setLastCapture(imageSrc);
 
@@ -61,11 +197,24 @@ const WebcamCapture: React.FC<WebcamCaptureProps> = ({ onFaceRecognized }) => {
       // Check if there was an error
       if (response.error) {
         console.error('API error:', response.errorMessage);
-        toast({
-          title: "Connection Error",
-          description: "Could not connect to the backend server. Retrying...",
-          variant: "destructive",
-        });
+        
+        // Check if this is a timeout error
+        if (response.errorMessage?.includes('timeout') || response.errorMessage?.includes('too many faces')) {
+          toast({
+            title: "Processing Timeout",
+            description: "Too many faces detected - try with fewer people in frame",
+            variant: "destructive",
+          });
+        } else {
+          toast({
+            title: "Connection Error",
+            description: "Could not connect to the backend server. Retrying...",
+            variant: "destructive",
+          });
+        }
+        
+        isProcessing.current = false;
+        clearTimeout(safetyTimeout);
         return;
       }
       
@@ -80,32 +229,32 @@ const WebcamCapture: React.FC<WebcamCaptureProps> = ({ onFaceRecognized }) => {
         setUnrecognizedFaces(response.unrecognized_faces);
       }
 
-      // Handle recognized students
+      // Handle recognized students with tracking
       if (response.recognized && response.recognized.length > 0) {
+        // Update tracked students
+        updateTrackedStudents(response.recognized);
+        
         // Add timestamp to each student
         const studentsWithTimestamp = response.recognized.map(student => ({
           ...student,
           timestamp: new Date().toISOString()
         }));
         
-        // Update the recognized students list
-        setRecognizedStudents(prev => [...prev, ...studentsWithTimestamp]);
-
-        // Show greeting toast for each newly recognized student
-        response.recognized.forEach((student) => {
-          if (student.action) {
-            setGreetingData({
-              name: student.name,
-              action: student.action
-            });
-          }
+        // Update the recognized students list (avoid duplicates)
+        setRecognizedStudents(prev => {
+          const existingIds = new Set(prev.map(s => s.student_id));
+          const newStudents = studentsWithTimestamp.filter(s => !existingIds.has(s.student_id));
+          return [...prev, ...newStudents];
         });
         
-        // Call the onFaceRecognized callback if provided
         if (onFaceRecognized) {
           onFaceRecognized();
         }
       }
+
+      // Reset the processing flag and clear safety timeout
+      isProcessing.current = false;
+      clearTimeout(safetyTimeout);
     } catch (error: any) {
       console.error('Capture error:', error);
       toast({
@@ -113,18 +262,25 @@ const WebcamCapture: React.FC<WebcamCaptureProps> = ({ onFaceRecognized }) => {
         description: error.message || "Failed to process image",
         variant: "destructive",
       });
+      
+      // Make sure to reset the processing flag on error and clear safety timeout
+      isProcessing.current = false;
+      clearTimeout(safetyTimeout);
     }
   }, [toast]);
 
   const startAutoCapture = useCallback(() => {
     setIsCapturing(true);
+    frameCount.current = 0;
+    lastFpsTime.current = Date.now();
+    
     // Initial capture
     captureAndProcess();
     
-    // Set up interval
+    // Set up interval with optimized timing
     intervalRef.current = setInterval(() => {
       captureAndProcess();
-    }, captureInterval);
+    }, Math.max(captureInterval, 500)); // Minimum 500ms interval for performance
   }, [captureInterval, captureAndProcess]);
 
   const stopAutoCapture = useCallback(() => {
@@ -182,6 +338,7 @@ const WebcamCapture: React.FC<WebcamCaptureProps> = ({ onFaceRecognized }) => {
                 onClick={captureAndProcess}
                 variant="outline"
                 className="gap-2"
+                disabled={isProcessing.current}
               >
                 <Camera className="h-4 w-4" />
                 Manual Capture
@@ -202,6 +359,25 @@ const WebcamCapture: React.FC<WebcamCaptureProps> = ({ onFaceRecognized }) => {
                 Recording
               </div>
             )}
+            
+            {/* Performance indicators */}
+            <div className="absolute bottom-4 left-4 bg-black/70 text-white px-3 py-2 rounded-lg text-sm">
+              <div className="flex items-center gap-4">
+                <div className="flex items-center gap-1">
+                  <Users className="h-4 w-4" />
+                  <span>{currentFacesInView} in view</span>
+                </div>
+                <div className="flex items-center gap-1">
+                  <Clock className="h-4 w-4" />
+                  <span>{fps} FPS</span>
+                </div>
+                {processingTime && (
+                  <div className="flex items-center gap-1">
+                    <span>{processingTime}ms</span>
+                  </div>
+                )}
+              </div>
+            </div>
           </div>
         </Card>
 
@@ -252,13 +428,19 @@ const WebcamCapture: React.FC<WebcamCaptureProps> = ({ onFaceRecognized }) => {
         clearList={clearStudentList}
       />
 
-      {greetingData && (
-        <GreetingToast
-          name={greetingData.name}
-          action={greetingData.action}
-          onClose={() => setGreetingData(null)}
-        />
-      )}
+      {/* Multiple greeting messages */}
+      <div className="fixed top-4 right-4 z-50 space-y-2">
+        {greetingMessages.map((message) => (
+          <GreetingToast
+            key={message.id}
+            name={message.name}
+            action={message.action === 'welcome' ? 'checkin' : 'checkout'}
+            onClose={() => {
+              setGreetingMessages(prev => prev.filter(msg => msg.id !== message.id));
+            }}
+          />
+        ))}
+      </div>
     </>
   );
 };

@@ -16,7 +16,9 @@ import Login from "./pages/Login";
 import NotFound from "./pages/NotFound";
 import GroupsPage from "./pages/GroupsPage";
 import GroupWorkspace from "./pages/GroupWorkspace";
+import Diagnostics from "./pages/Diagnostics";
 import AuthCheck from "./components/AuthCheck";
+import AdminTokenSetter from "./components/AdminTokenSetter";
 
 const queryClient = new QueryClient();
 
@@ -82,6 +84,7 @@ const App = () => (
       <TooltipProvider>
         <Toaster />
         <Sonner />
+        <AdminTokenSetter />
         <BrowserRouter>
           <AppRoutes />
         </BrowserRouter>

@@ -138,17 +138,126 @@ class FaceService:
         """Process an image for attendance checking"""
         start_time = time.time()
         
-        # Ensure model is initialized
-        if not self.initialized or self.model is None:
-            if not self.initialize():
-                raise RuntimeError("Face recognition model could not be initialized")
-                
-        # Convert bytes to image
-        if isinstance(image_data, bytes):
-            np_arr = np.frombuffer(image_data, np.uint8)
-            img = cv2.imdecode(np_arr, cv2.IMREAD_COLOR)
-        else:
-            img = image_data
+        try:
+            # Ensure model is initialized
+            if not self.initialized or self.model is None:
+                if not self.initialize():
+                    current_app.logger.error("Face recognition model could not be initialized")
+                    return {
+                        "recognized": [],
+                        "unrecognized_count": 0,
+                        "unrecognized_faces": [],
+                        "processing_time_ms": 0,
+                        "error": True,
+                        "error_message": "Face recognition model could not be initialized"
+                    }
+                    
+            # Convert bytes to image
+            if isinstance(image_data, bytes):
+                try:
+                    np_arr = np.frombuffer(image_data, np.uint8)
+                    img = cv2.imdecode(np_arr, cv2.IMREAD_COLOR)
+                    if img is None:
+                        current_app.logger.error("Failed to decode image data")
+                        return {
+                            "recognized": [],
+                            "unrecognized_count": 0,
+                            "unrecognized_faces": [],
+                            "processing_time_ms": 0,
+                            "error": True,
+                            "error_message": "Failed to decode image data"
+                        }
+                except Exception as e:
+                    current_app.logger.error(f"Error decoding image: {str(e)}")
+                    return {
+                        "recognized": [],
+                        "unrecognized_count": 0,
+                        "unrecognized_faces": [],
+                        "processing_time_ms": 0,
+                        "error": True,
+                        "error_message": f"Error decoding image: {str(e)}"
+                    }
+            else:
+                img = image_data
+            
+            # Resize image if needed
+            max_size = current_app.config.get('MAX_IMAGE_SIZE', 800)
+            h, w = img.shape[:2]
+            if max(h, w) > max_size:
+                scale = max_size / max(h, w)
+                img = cv2.resize(img, (int(w * scale), int(h * scale)))
+            
+            # BGR to RGB for insightface
+            img_rgb = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+            
+            # Detect all faces
+            try:
+                faces = self.model.get(img_rgb)
+            except Exception as e:
+                current_app.logger.error(f"Face detection failed: {str(e)}")
+                return {
+                    "recognized": [],
+                    "unrecognized_count": 0,
+                    "unrecognized_faces": [],
+                    "processing_time_ms": int((time.time() - start_time) * 1000),
+                    "error": True,
+                    "error_message": f"Face detection failed: {str(e)}"
+                }
+            
+            if not faces:
+                processing_time = int((time.time() - start_time) * 1000)  # ms
+                return {"recognized": [], "unrecognized_count": 0, "unrecognized_faces": [], "processing_time_ms": processing_time}
+            
+            recognized = []
+            unrecognized = 0
+            unrecognized_faces = []
+            threshold = current_app.config.get('FACE_MATCH_THRESHOLD', 0.60)
+            
+            for i, face in enumerate(faces):
+                try:
+                    embedding = face.embedding
+                    bbox = face.bbox.astype(int)  # Get bounding box for each face
+                    student, score = self.match_face(embedding, threshold)
+                    
+                    if student:
+                        recognized.append({
+                            "student_id": student.student_id,
+                            "name": student.name,
+                            "score": float(score),
+                            "bbox": bbox.tolist()  # Add bounding box information
+                        })
+                    else:
+                        unrecognized += 1
+                        # Add information about unrecognized face
+                        unrecognized_faces.append({
+                            "id": f"unknown_{i}",
+                            "bbox": bbox.tolist(),
+                            "score": float(score) if score else 0.0
+                        })
+                except Exception as e:
+                    current_app.logger.error(f"Error processing face {i}: {str(e)}")
+                    unrecognized += 1
+            
+            processing_time = int((time.time() - start_time) * 1000)  # ms
+            
+            return {
+                "recognized": recognized,
+                "unrecognized_count": unrecognized,
+                "unrecognized_faces": unrecognized_faces,
+                "processing_time_ms": processing_time,
+                "total_faces": len(faces)
+            }
+        
+        except Exception as e:
+            current_app.logger.error(f"Unexpected error in face processing: {str(e)}")
+            return {
+                "recognized": [],
+                "unrecognized_count": 0,
+                "unrecognized_faces": [],
+                "processing_time_ms": int((time.time() - start_time) * 1000),
+                "error": True,
+                "error_message": f"Unexpected error: {str(e)}"
+            }
         
         # Resize image if needed
         max_size = current_app.config.get('MAX_IMAGE_SIZE', 800)

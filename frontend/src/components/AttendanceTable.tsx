@@ -17,6 +17,20 @@ const AttendanceTable: React.FC<AttendanceTableProps> = ({ records }) => {
     return <Badge variant={variants[status] || 'default'}>{status}</Badge>;
   };
 
+  const formatTime = (timeString: string | null) => {
+    if (!timeString) return '-';
+    try {
+      const date = new Date(timeString);
+      return date.toLocaleTimeString('en-US', { 
+        hour: '2-digit', 
+        minute: '2-digit',
+        hour12: true 
+      });
+    } catch {
+      return '-';
+    }
+  };
+
   return (
     <div className="rounded-lg border bg-card shadow-sm">
       <Table>
@@ -43,8 +57,8 @@ const AttendanceTable: React.FC<AttendanceTableProps> = ({ records }) => {
                 <TableCell className="font-medium">{record.student_id}</TableCell>
                 <TableCell>{record.name || record.student_name}</TableCell>
                 <TableCell>{record.date ? new Date(record.date).toLocaleDateString() : '-'}</TableCell>
-                <TableCell>{record.in_time || '-'}</TableCell>
-                <TableCell>{record.out_time || '-'}</TableCell>
+                <TableCell>{formatTime(record.in_time)}</TableCell>
+                <TableCell>{formatTime(record.out_time)}</TableCell>
                 <TableCell>{getStatusBadge(record.status)}</TableCell>
               </TableRow>
             ))

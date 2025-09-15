@@ -115,11 +115,22 @@ const GroupUploadPhoto: React.FC<UploadPhotoProps> = ({ groupId }) => {
         title: "Attendance Processed",
         description: `${response.recognized?.length || 0} students recognized out of ${response.total_faces || 0} faces.`,
       });
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error uploading attendance:', error);
+      
+      let errorMessage = "Failed to process attendance. Please try again.";
+      
+      if (error.isTimeout) {
+        errorMessage = "Processing is taking longer than expected. The image may have many faces. Please try with a smaller group or wait a bit longer.";
+      } else if (error.isNetworkError) {
+        errorMessage = "Network error. Please check your connection and try again.";
+      } else if (error.message) {
+        errorMessage = error.message;
+      }
+      
       toast({
         title: "Upload Error",
-        description: "Failed to process attendance. Please try again.",
+        description: errorMessage,
         variant: "destructive",
       });
     } finally {
@@ -197,7 +208,7 @@ const GroupUploadPhoto: React.FC<UploadPhotoProps> = ({ groupId }) => {
             {isUploading ? (
               <>
                 <RefreshCw className="h-4 w-4 animate-spin" />
-                Processing...
+                Processing faces... (This may take up to 90 seconds)
               </>
             ) : (
               <>

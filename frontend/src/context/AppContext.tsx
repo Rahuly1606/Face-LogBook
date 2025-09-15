@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useState, ReactNode, useEffect } from 'react';
 import { login as apiLogin } from '../api/auth'; // Fixed path
+import { getAdminToken, clearAdminToken } from '../utils/authToken';
 
 interface AppContextType {
   isAuthenticated: boolean;
@@ -38,9 +39,15 @@ export const AppProvider: React.FC<AppProviderProps> = ({ children }) => {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   
   // Check if user has an admin token on initial load
+  // If no token exists, set the default development token
   useEffect(() => {
-    const hasToken = !!localStorage.getItem('adminToken');
-    setIsAuthenticated(hasToken);
+    // This will get the token or set a default one if missing
+    const token = getAdminToken();
+    
+    if (token) {
+      console.log('Using admin token:', token.substring(0, 5) + '...');
+      setIsAuthenticated(true);
+    }
   }, []);
 
   // Login function
@@ -52,7 +59,7 @@ export const AppProvider: React.FC<AppProviderProps> = ({ children }) => {
 
   // Logout function
   const logout = () => {
-    localStorage.removeItem('adminToken');
+    clearAdminToken();
     setIsAuthenticated(false);
   };
 

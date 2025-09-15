@@ -10,6 +10,8 @@ def require_admin(f):
         admin_token = current_app.config.get('ADMIN_TOKEN')
         token = request.headers.get('X-ADMIN-TOKEN')
         
+        print(f"[DEBUG] Expected token: {admin_token}, Received token: {token}")
+        
         if not token or token != admin_token:
             return jsonify({"success": False, "message": "Unauthorized"}), 401
         
@@ -43,9 +45,16 @@ def admin_required():
             admin_token = current_app.config.get('ADMIN_TOKEN')
             token = request.headers.get('X-ADMIN-TOKEN')
             
+            print(f"[DEBUG] admin_required: Expected token: {admin_token}, Received token: {token}")
+            
             if not token or token != admin_token:
                 return jsonify({"success": False, "message": "Unauthorized"}), 401
             
             return fn(*args, **kwargs)
         return decorator
     return wrapper
+
+def verify_admin_token(token):
+    """Verify if the provided admin token is valid"""
+    admin_token = current_app.config.get('ADMIN_TOKEN', 'admin_secret_token')
+    return token == admin_token

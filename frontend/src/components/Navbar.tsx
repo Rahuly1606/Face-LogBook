@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Link, useLocation } from 'react-router-dom';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Sheet, SheetContent, SheetTrigger } from '@/components/ui/sheet';
 import { 
@@ -12,14 +12,19 @@ import {
   UserPlus, 
   Home,
   Fingerprint,
-  Group
+  Group,
+  LogIn,
+  LogOut
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { useApp } from '@/context/AppContext';
 
 const Navbar: React.FC = () => {
   const [isOpen, setIsOpen] = useState(false);
   const [isScrolled, setIsScrolled] = useState(false);
   const location = useLocation();
+  const navigate = useNavigate();
+  const { isAuthenticated, logout } = useApp();
 
   useEffect(() => {
     const handleScroll = () => {
@@ -80,9 +85,35 @@ const Navbar: React.FC = () => {
 
           {/* Admin Badge */}
           <div className="hidden md:flex items-center gap-3">
-            <div className="px-3 py-1 rounded-full bg-success/10 text-success text-sm font-medium">
-              Admin Mode
-            </div>
+            {isAuthenticated ? (
+              <>
+                <div className="px-3 py-1 rounded-full bg-success/10 text-success text-sm font-medium">
+                  Admin Mode
+                </div>
+                <Button 
+                  variant="outline" 
+                  size="sm" 
+                  onClick={() => {
+                    logout();
+                    navigate('/login');
+                  }}
+                  className="flex items-center gap-2"
+                >
+                  <LogOut className="h-4 w-4" />
+                  <span>Logout</span>
+                </Button>
+              </>
+            ) : (
+              <Button 
+                variant="default" 
+                size="sm" 
+                onClick={() => navigate('/login')}
+                className="flex items-center gap-2"
+              >
+                <LogIn className="h-4 w-4" />
+                <span>Login</span>
+              </Button>
+            )}
           </div>
 
           {/* Mobile Menu Button */}
@@ -154,9 +185,37 @@ const Navbar: React.FC = () => {
 
                 {/* Mobile Footer */}
                 <div className="pt-6 border-t">
-                  <div className="px-4 py-2 rounded-lg bg-success/10 text-success text-sm font-medium text-center">
-                    Admin Mode Active
-                  </div>
+                  {isAuthenticated ? (
+                    <>
+                      <div className="px-4 py-2 rounded-lg bg-success/10 text-success text-sm font-medium text-center mb-3">
+                        Admin Mode Active
+                      </div>
+                      <Button 
+                        variant="outline" 
+                        className="w-full flex items-center justify-center gap-2"
+                        onClick={() => {
+                          logout();
+                          setIsOpen(false);
+                          navigate('/login');
+                        }}
+                      >
+                        <LogOut className="h-4 w-4" />
+                        <span>Logout</span>
+                      </Button>
+                    </>
+                  ) : (
+                    <Button 
+                      variant="default" 
+                      className="w-full flex items-center justify-center gap-2"
+                      onClick={() => {
+                        setIsOpen(false);
+                        navigate('/login');
+                      }}
+                    >
+                      <LogIn className="h-4 w-4" />
+                      <span>Login</span>
+                    </Button>
+                  )}
                 </div>
               </div>
             </SheetContent>
