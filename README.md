@@ -23,6 +23,7 @@ cd backend
 python -m venv venv
 venv\Scripts\activate  # Windows
 # source venv/bin/activate  # macOS/Linux
+python -m pip install --upgrade pip setuptools wheel
 pip install -r requirements.txt
 ```
 

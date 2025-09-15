@@ -10,7 +10,7 @@ gunicorn==20.1.0
 insightface==0.7.3
 onnxruntime==1.17.0
 opencv-python-headless==4.7.0.72
-numpy==1.24.3
+numpy>=1.26,<2.0
 Werkzeug==2.2.3
 google-api-python-client==2.86.0
 google-auth==2.17.3

@@ -46,7 +46,7 @@ class DevelopmentConfig(Config):
     # Use a specific environment variable for the development database
     SQLALCHEMY_DATABASE_URI = os.getenv(
         'DEV_DATABASE_URL', 
-        'mysql+pymysql://root:Rahul%401606@localhost/face-logbook'
+        'mysql+pymysql://root:Rishi%404617@localhost/face-logbook'
     )
 
 class TestingConfig(Config):
@@ -56,7 +56,7 @@ class TestingConfig(Config):
     # Use a specific environment variable for the testing database
     SQLALCHEMY_DATABASE_URI = os.getenv(
         'TEST_DATABASE_URL', 
-        'mysql+pymysql://root:Rahul@1606@localhost/face_logbook_test'
+        'mysql+pymysql://root:Rishi%404617@localhost/face_logbook_test'
     )
     # Use a predictable admin token for tests
     ADMIN_TOKEN = 'test_token'

@@ -6,8 +6,8 @@ import sys
 import argparse
 
 # In-file defaults for implicit run (no args)
-DEFAULT_ADMIN_USERNAME = "rahul"
-DEFAULT_ADMIN_PASSWORD = "admin12"
+DEFAULT_ADMIN_USERNAME = "rishi"
+DEFAULT_ADMIN_PASSWORD = "admin1"
 DEFAULT_IS_ADMIN = True
 
 # Add parent directory to path so we can import app modules
