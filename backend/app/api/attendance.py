@@ -50,6 +50,14 @@ def process_live_attendance():
     for i, person in enumerate(result['recognized']):
         action = AttendanceService.process_attendance(person['student_id'])
         result['recognized'][i]['action'] = action
+        # If already checked in (debounced), show goodbye message
+        if action == "debounced":
+            # Get student name
+            student = Student.query.get(person['student_id'])
+            if student:
+                result['recognized'][i]['goodbye_message'] = f"Goodbye, {student.name}!"
+            else:
+                result['recognized'][i]['goodbye_message'] = "Goodbye!"
     
     return jsonify(result), 200
 

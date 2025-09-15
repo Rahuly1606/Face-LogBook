@@ -4,7 +4,12 @@ import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Camera, CameraOff, Play, Pause, RefreshCw, Users, Clock } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
-import { submitLiveAttendance, RecognizedStudent, UnrecognizedFace } from '@/api/attendance';
+import { submitLiveAttendance, RecognizedStudent as BaseRecognizedStudent, UnrecognizedFace } from '@/api/attendance';
+
+// Extend RecognizedStudent to include optional goodbye_message property (should be string, not boolean)
+export interface RecognizedStudent extends BaseRecognizedStudent {
+  goodbye_message?: string;
+}
 import { useAppContext } from '@/context/AppContext';
 import GreetingToast from './GreetingToast';
 import LiveStudentList from './LiveStudentList';
@@ -22,6 +27,7 @@ interface TrackedStudent {
   isPresent: boolean;
   bbox?: number[];
   confidence: number;
+  hasAttendanceMarked: boolean;
 }
 
 interface GreetingMessage {
@@ -68,6 +74,7 @@ const WebcamCapture: React.FC<WebcamCaptureProps> = ({ onFaceRecognized }) => {
     setUnrecognizedFaces([]);
     setTotalFaces(0);
     trackedStudents.current.clear();
+    setGreetingMessages([]);
   }, []);
 
   const addGreetingMessage = useCallback((name: string, action: 'welcome' | 'goodbye') => {
@@ -103,10 +110,26 @@ const WebcamCapture: React.FC<WebcamCaptureProps> = ({ onFaceRecognized }) => {
         existing.bbox = student.bbox;
         existing.confidence = student.score;
         
+        // Update attendance status based on action
+        if (student.action === 'checkin') {
+          console.log(`Attendance marked for ${student.name}`);
+          existing.hasAttendanceMarked = true;
+        } else if (student.action === 'checkout') {
+          console.log(`Checkout processed for ${student.name}`);
+          existing.hasAttendanceMarked = true; // They had attendance, now checking out
+        }
+        
         // Check if student was absent and now present
         if (!existing.isPresent) {
           existing.isPresent = true;
-          addGreetingMessage(student.name, 'welcome');
+          // Show welcome message for checkin, goodbye message for checkout
+          if (student.action === 'checkin') {
+            console.log(`Showing welcome message for ${student.name}`);
+            addGreetingMessage(student.name, 'welcome');
+          } else if (student.action === 'checkout') {
+            console.log(`Showing goodbye message for ${student.name} (checkout)`);
+            addGreetingMessage(student.name, 'goodbye');
+          }
         }
       } else {
         // New student detected
@@ -116,11 +139,22 @@ const WebcamCapture: React.FC<WebcamCaptureProps> = ({ onFaceRecognized }) => {
           lastSeen: currentTime,
           isPresent: true,
           bbox: student.bbox,
-          confidence: student.score
+          confidence: student.score,
+          hasAttendanceMarked: student.action === 'checkin' || student.action === 'checkout'
         };
         
         trackedStudents.current.set(studentId, newTrackedStudent);
-        addGreetingMessage(student.name, 'welcome');
+        
+        // Show appropriate message based on action
+        if (student.action === 'checkin') {
+          console.log(`New student ${student.name} - attendance marked, showing welcome`);
+          addGreetingMessage(student.name, 'welcome');
+        } else if (student.action === 'checkout') {
+          console.log(`New student ${student.name} - checkout processed, showing goodbye`);
+          addGreetingMessage(student.name, 'goodbye');
+        } else {
+          console.log(`New student ${student.name} detected but no attendance action`);
+        }
       }
     });
     
@@ -128,8 +162,17 @@ const WebcamCapture: React.FC<WebcamCaptureProps> = ({ onFaceRecognized }) => {
     trackedStudents.current.forEach((student, studentId) => {
       if (!currentStudents.has(studentId) && student.isPresent) {
         // Student left the view
+        console.log(`Student ${student.name} left view. Has attendance marked: ${student.hasAttendanceMarked}`);
         student.isPresent = false;
-        addGreetingMessage(student.name, 'goodbye');
+        
+        // Show goodbye message only if student had attendance marked and didn't just checkout
+        // (to avoid duplicate goodbye messages for checkout scenarios)
+        if (student.hasAttendanceMarked) {
+          console.log(`Showing goodbye message for ${student.name} (left view)`);
+          addGreetingMessage(student.name, 'goodbye');
+        } else {
+          console.log(`No goodbye message for ${student.name} - no attendance marked`);
+        }
       }
     });
     
@@ -231,22 +274,34 @@ const WebcamCapture: React.FC<WebcamCaptureProps> = ({ onFaceRecognized }) => {
 
       // Handle recognized students with tracking
       if (response.recognized && response.recognized.length > 0) {
-        // Update tracked students
+        console.log('Received recognized students:', response.recognized);
+        // Show goodbye or attendance message if present in API response
+        response.recognized.forEach(student => {
+          if ((student as any).goodbye_message) {
+            addGreetingMessage(student.name || 'Student', 'goodbye');
+          } else if (student.action === 'checkin') {
+            // Show attendance marked message
+            toast({
+              title: 'Attendance Marked',
+              description: `${student.name}'s attendance has been marked.`,
+              variant: 'default', // changed from 'success' to 'default' to match allowed types
+            });
+            addGreetingMessage(student.name, 'welcome');
+          }
+        });
+        // Update tracked students (handles greeting messages internally)
         updateTrackedStudents(response.recognized);
-        
         // Add timestamp to each student
         const studentsWithTimestamp = response.recognized.map(student => ({
           ...student,
           timestamp: new Date().toISOString()
         }));
-        
         // Update the recognized students list (avoid duplicates)
         setRecognizedStudents(prev => {
           const existingIds = new Set(prev.map(s => s.student_id));
           const newStudents = studentsWithTimestamp.filter(s => !existingIds.has(s.student_id));
           return [...prev, ...newStudents];
         });
-        
         if (onFaceRecognized) {
           onFaceRecognized();
         }
