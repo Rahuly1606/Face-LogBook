@@ -3,7 +3,7 @@ import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route, Navigate, useLocation } from "react-router-dom";
-import { AppProvider, useApp } from "./context/AppContext";
+import { AppProvider } from "./context/AppContext";
 import Layout from "./components/Layout";
 import AdminDashboard from "./pages/AdminDashboard";
 import RegisterStudent from "./pages/RegisterStudent";
@@ -18,61 +18,35 @@ import GroupsPage from "./pages/GroupsPage";
 import GroupWorkspace from "./pages/GroupWorkspace";
 import Diagnostics from "./pages/Diagnostics";
 import AuthCheck from "./components/AuthCheck";
-import AdminTokenSetter from "./components/AdminTokenSetter";
 
 const queryClient = new QueryClient();
 
-// Custom route component that only checks auth for admin routes
+// Application routes
 const AppRoutes = () => {
-  const { isAuthenticated } = useApp();
-  const location = useLocation();
-  
   return (
     <Routes>
-      {/* Public routes */}
+      {/* Public login route */}
       <Route path="/login" element={<Login />} />
-      
-      {/* Layout wrapper */}
-      <Route element={<Layout />}>
-        {/* Public routes inside layout */}
-        <Route path="/" element={<GroupsPage />} />
+
+      {/* Protected application routes inside layout */}
+      <Route element={<AuthCheck><Layout /></AuthCheck>}>
+        {/* Default redirect after login */}
+        <Route path="/" element={<Navigate to="/admin-dashboard" replace />} />
+
+        {/* All app functionality is protected */}
+        <Route path="/admin-dashboard" element={<AdminDashboard />} />
+        <Route path="/admin/register" element={<RegisterStudent />} />
+        <Route path="/admin/students" element={<ManageStudents />} />
+        <Route path="/admin/groups" element={<ManageGroups />} />
         <Route path="/groups" element={<GroupsPage />} />
         <Route path="/groups/:groupId" element={<GroupWorkspace />} />
         <Route path="/attendance/live" element={<LiveAttendance />} />
-        
-        {/* Protected admin routes */}
-        <Route path="/admin-dashboard" element={
-          <AuthCheck>
-            <AdminDashboard />
-          </AuthCheck>
-        } />
-        <Route path="/admin/register" element={
-          <AuthCheck>
-            <RegisterStudent />
-          </AuthCheck>
-        } />
-        <Route path="/admin/students" element={
-          <AuthCheck>
-            <ManageStudents />
-          </AuthCheck>
-        } />
-        <Route path="/admin/groups" element={
-          <AuthCheck>
-            <ManageGroups />
-          </AuthCheck>
-        } />
-        <Route path="/attendance/upload" element={
-          <AuthCheck>
-            <UploadAttendance />
-          </AuthCheck>
-        } />
-        <Route path="/attendance/logs" element={
-          <AuthCheck>
-            <AttendanceLogs />
-          </AuthCheck>
-        } />
+        <Route path="/attendance/upload" element={<UploadAttendance />} />
+        <Route path="/attendance/logs" element={<AttendanceLogs />} />
+        <Route path="/diagnostics" element={<Diagnostics />} />
       </Route>
-      
+
+      {/* Not found */}
       <Route path="*" element={<NotFound />} />
     </Routes>
   );
@@ -84,7 +58,6 @@ const App = () => (
       <TooltipProvider>
         <Toaster />
         <Sonner />
-        <AdminTokenSetter />
         <BrowserRouter>
           <AppRoutes />
         </BrowserRouter>

@@ -38,28 +38,32 @@ export const AppProvider: React.FC<AppProviderProps> = ({ children }) => {
   // State to track authentication
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   
-  // Check if user has an admin token on initial load
-  // If no token exists, set the default development token
+  // Check auth on initial load based on presence of JWT
   useEffect(() => {
-    // This will get the token or set a default one if missing
-    const token = getAdminToken();
-    
-    if (token) {
-      console.log('Using admin token:', token.substring(0, 5) + '...');
-      setIsAuthenticated(true);
-    }
+    const userStr = localStorage.getItem('user');
+    try {
+      if (userStr) {
+        const user = JSON.parse(userStr);
+        if (user?.token) {
+          setIsAuthenticated(true);
+          return;
+        }
+      }
+    } catch {}
+    setIsAuthenticated(false);
   }, []);
 
   // Login function
   const login = async (username: string, password: string) => {
-    // The api login function now handles storing the token
     await apiLogin(username, password);
+    // apiLogin stores user/token on success
     setIsAuthenticated(true);
   };
 
   // Logout function
   const logout = () => {
     clearAdminToken();
+    localStorage.removeItem('user');
     setIsAuthenticated(false);
   };
 

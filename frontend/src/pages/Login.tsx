@@ -6,7 +6,6 @@ import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle }
 import { Input } from '../components/ui/input';
 import { Label } from '../components/ui/label';
 import { useApp } from '../context/AppContext';
-import { setAdminToken, checkAdminToken } from '../utils/authToken';
 
 const Login = () => {
   const [username, setUsername] = useState('');
@@ -43,26 +42,12 @@ const Login = () => {
     
     try {
       await login(username, password);
-      
-      // Set default admin token directly for development 
-      // This makes sure we have a token regardless of login response
-      setAdminToken();
-      
-      // Check if the token is valid
-      const isValid = await checkAdminToken();
-      if (!isValid) {
-        console.warn('Setting fixed admin token after login');
-        // Force the correct token if validation fails
-        setAdminToken('admin_secret_token');
-      }
-      
       toast({
         title: 'Login successful',
         description: 'Welcome to Face-LogBook',
       });
       navigate(from);
     } catch (error) {
-      console.error('Login error:', error);
       toast({
         title: 'Login failed',
         description: 'Invalid username or password',
