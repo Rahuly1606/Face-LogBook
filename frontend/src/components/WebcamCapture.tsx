@@ -2,7 +2,7 @@ import React, { useRef, useCallback, useState, useEffect } from 'react';
 import Webcam from 'react-webcam';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
-import { Camera, CameraOff, Play, Pause, RefreshCw, Users, Clock } from 'lucide-react';
+import { Camera, CameraOff, Play, Pause, RefreshCw, Users, Clock, CheckCircle2, LogOut } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { submitLiveAttendance, RecognizedStudent as BaseRecognizedStudent, UnrecognizedFace } from '@/api/attendance';
 
@@ -11,7 +11,6 @@ export interface RecognizedStudent extends BaseRecognizedStudent {
   goodbye_message?: string;
 }
 import { useAppContext } from '@/context/AppContext';
-import GreetingToast from './GreetingToast';
 import LiveStudentList from './LiveStudentList';
 
 interface WebcamCaptureProps {
@@ -30,11 +29,15 @@ interface TrackedStudent {
   hasAttendanceMarked: boolean;
 }
 
-interface GreetingMessage {
-  id: string;
+// Removed earlier pop message type (GreetingToast)
+
+// Attendance message stream for right-side overlay
+interface AttendanceMessage {
+  id: string; // unique
+  text: string;
+  kind: 'enter' | 'leave';
   name: string;
-  action: 'welcome' | 'goodbye';
-  timestamp: number;
+  at: number;
 }
 
 const WebcamCapture: React.FC<WebcamCaptureProps> = ({ onFaceRecognized }) => {
@@ -46,7 +49,7 @@ const WebcamCapture: React.FC<WebcamCaptureProps> = ({ onFaceRecognized }) => {
   
   const [isCapturing, setIsCapturing] = useState(false);
   const [lastCapture, setLastCapture] = useState<string | null>(null);
-  const [greetingMessages, setGreetingMessages] = useState<GreetingMessage[]>([]);
+  // Removed earlier pop messages (GreetingToast)
   const [processingTime, setProcessingTime] = useState<number | null>(null);
   const [recognizedStudents, setRecognizedStudents] = useState<RecognizedStudent[]>([]);
   const [unrecognizedCount, setUnrecognizedCount] = useState(0);
@@ -54,7 +57,15 @@ const WebcamCapture: React.FC<WebcamCaptureProps> = ({ onFaceRecognized }) => {
   const [totalFaces, setTotalFaces] = useState(0);
   const [currentFacesInView, setCurrentFacesInView] = useState(0);
   const [fps, setFps] = useState(0);
-  
+
+  // Right-side attendance messages overlay state
+  const [messages, setMessages] = useState<AttendanceMessage[]>([]); // newest first
+  const panelRef = useRef<HTMLDivElement | null>(null);
+  const [userAtTop, setUserAtTop] = useState(true);
+  const lastAnnouncementRef = useRef('');
+  // Dedup map: key `${id}-${kind}` -> timestamp
+  const recentEventRef = useRef<Map<string, number>>(new Map());
+
   const { captureInterval } = useAppContext();
   const { toast } = useToast();
 
@@ -74,23 +85,49 @@ const WebcamCapture: React.FC<WebcamCaptureProps> = ({ onFaceRecognized }) => {
     setUnrecognizedFaces([]);
     setTotalFaces(0);
     trackedStudents.current.clear();
-    setGreetingMessages([]);
   }, []);
 
-  const addGreetingMessage = useCallback((name: string, action: 'welcome' | 'goodbye') => {
-    const message: GreetingMessage = {
-      id: `${name}-${action}-${Date.now()}`,
+  // Add message to right panel (newest first) with deduplication window
+  const pushAttendanceMessage = useCallback((name: string, kind: 'enter' | 'leave') => {
+    const now = Date.now();
+    const key = `${name}-${kind}`;
+    const last = recentEventRef.current.get(key) || 0;
+    const DEDUP_MS = 5000; // configurable
+    if (now - last < DEDUP_MS) {
+      return;
+    }
+    recentEventRef.current.set(key, now);
+
+    const text = kind === 'enter' ? `Welcome ${name} — attendance marked` : `Goodbye ${name} — left`;
+    const msg: AttendanceMessage = {
+      id: `${key}-${now}`,
+      text,
+      kind,
       name,
-      action,
-      timestamp: Date.now()
+      at: now,
     };
-    
-    setGreetingMessages(prev => [...prev, message]);
-    
-    // Auto-remove message after 3 seconds
-    setTimeout(() => {
-      setGreetingMessages(prev => prev.filter(msg => msg.id !== message.id));
-    }, 3000);
+
+    setMessages(prev => [msg, ...prev].slice(0, 500)); // cap to avoid unbounded growth
+
+    // Announce for screen readers
+    lastAnnouncementRef.current = text;
+    // Auto-scroll to top only if user is already near top
+    requestAnimationFrame(() => {
+      const el = panelRef.current;
+      if (!el) return;
+      if (userAtTop) {
+        el.scrollTo({ top: 0, behavior: 'smooth' });
+      }
+    });
+  }, [userAtTop]);
+
+  // Track scroll to decide auto-scroll behavior
+  const handlePanelScroll = useCallback(() => {
+    const el = panelRef.current;
+    if (!el) return;
+    // Newest at top: user "at top" means scrollTop <= threshold
+    const threshold = 8;
+    setUserAtTop(el.scrollTop <= threshold);
   }, []);
 
   const updateTrackedStudents = useCallback((recognizedStudents: RecognizedStudent[]) => {
@@ -114,22 +151,17 @@ const WebcamCapture: React.FC<WebcamCaptureProps> = ({ onFaceRecognized }) => {
         if (student.action === 'checkin') {
           console.log(`Attendance marked for ${student.name}`);
           existing.hasAttendanceMarked = true;
+          // Panel message
+          if (student.name) pushAttendanceMessage(student.name, 'enter');
         } else if (student.action === 'checkout') {
           console.log(`Checkout processed for ${student.name}`);
           existing.hasAttendanceMarked = true; // They had attendance, now checking out
+          if (student.name) pushAttendanceMessage(student.name, 'leave');
         }
         
         // Check if student was absent and now present
         if (!existing.isPresent) {
           existing.isPresent = true;
-          // Show welcome message for checkin, goodbye message for checkout
-          if (student.action === 'checkin') {
-            console.log(`Showing welcome message for ${student.name}`);
-            addGreetingMessage(student.name, 'welcome');
-          } else if (student.action === 'checkout') {
-            console.log(`Showing goodbye message for ${student.name} (checkout)`);
-            addGreetingMessage(student.name, 'goodbye');
-          }
         }
       } else {
         // New student detected
@@ -148,10 +180,10 @@ const WebcamCapture: React.FC<WebcamCaptureProps> = ({ onFaceRecognized }) => {
         // Show appropriate message based on action
         if (student.action === 'checkin') {
           console.log(`New student ${student.name} - attendance marked, showing welcome`);
-          addGreetingMessage(student.name, 'welcome');
+          if (student.name) pushAttendanceMessage(student.name, 'enter');
         } else if (student.action === 'checkout') {
           console.log(`New student ${student.name} - checkout processed, showing goodbye`);
-          addGreetingMessage(student.name, 'goodbye');
+          if (student.name) pushAttendanceMessage(student.name, 'leave');
         } else {
           console.log(`New student ${student.name} detected but no attendance action`);
         }
@@ -165,13 +197,9 @@ const WebcamCapture: React.FC<WebcamCaptureProps> = ({ onFaceRecognized }) => {
         console.log(`Student ${student.name} left view. Has attendance marked: ${student.hasAttendanceMarked}`);
         student.isPresent = false;
         
-        // Show goodbye message only if student had attendance marked and didn't just checkout
-        // (to avoid duplicate goodbye messages for checkout scenarios)
-        if (student.hasAttendanceMarked) {
-          console.log(`Showing goodbye message for ${student.name} (left view)`);
-          addGreetingMessage(student.name, 'goodbye');
-        } else {
-          console.log(`No goodbye message for ${student.name} - no attendance marked`);
+        // Goodbye message only if they had attendance
+        if (student.hasAttendanceMarked && student.name) {
+          pushAttendanceMessage(student.name, 'leave');
         }
       }
     });
@@ -185,7 +213,7 @@ const WebcamCapture: React.FC<WebcamCaptureProps> = ({ onFaceRecognized }) => {
     });
     
     setCurrentFacesInView(currentStudents.size);
-  }, [addGreetingMessage]);
+  }, [pushAttendanceMessage]);
 
   const captureAndProcess = useCallback(async () => {
     if (!webcamRef.current) return;
@@ -275,18 +303,12 @@ const WebcamCapture: React.FC<WebcamCaptureProps> = ({ onFaceRecognized }) => {
       // Handle recognized students with tracking
       if (response.recognized && response.recognized.length > 0) {
         console.log('Received recognized students:', response.recognized);
-        // Show goodbye or attendance message if present in API response
+        // Show goodbye or attendance message in panel if present in API response
         response.recognized.forEach(student => {
           if ((student as any).goodbye_message) {
-            addGreetingMessage(student.name || 'Student', 'goodbye');
+            if (student.name) pushAttendanceMessage(student.name, 'leave');
           } else if (student.action === 'checkin') {
-            // Show attendance marked message
-            toast({
-              title: 'Attendance Marked',
-              description: `${student.name}'s attendance has been marked.`,
-              variant: 'default', // changed from 'success' to 'default' to match allowed types
-            });
-            addGreetingMessage(student.name, 'welcome');
+            if (student.name) pushAttendanceMessage(student.name, 'enter');
           }
         });
         // Update tracked students (handles greeting messages internally)
@@ -322,12 +344,14 @@ const WebcamCapture: React.FC<WebcamCaptureProps> = ({ onFaceRecognized }) => {
       isProcessing.current = false;
       clearTimeout(safetyTimeout);
     }
-  }, [toast]);
+  }, [toast, pushAttendanceMessage, onFaceRecognized, updateTrackedStudents]);
 
   const startAutoCapture = useCallback(() => {
     setIsCapturing(true);
     frameCount.current = 0;
     lastFpsTime.current = Date.now();
+    setMessages([]); // clear panel on new session start
+    recentEventRef.current.clear();
     
     // Initial capture
     captureAndProcess();
@@ -344,6 +368,8 @@ const WebcamCapture: React.FC<WebcamCaptureProps> = ({ onFaceRecognized }) => {
       clearInterval(intervalRef.current);
       intervalRef.current = null;
     }
+    // Clear messages immediately; could be replaced with fade-out if desired
+    setMessages([]);
   }, []);
 
   useEffect(() => {
@@ -361,10 +387,42 @@ const WebcamCapture: React.FC<WebcamCaptureProps> = ({ onFaceRecognized }) => {
       stopAutoCapture();
       startAutoCapture();
     }
-  }, [captureInterval, startAutoCapture, stopAutoCapture]);
+  }, [captureInterval, startAutoCapture, stopAutoCapture, isCapturing]);
 
   return (
     <>
+      {/* Offscreen live region for screen readers */}
+      <div aria-live="polite" aria-atomic="true" className="sr-only" role="status">
+        {lastAnnouncementRef.current}
+      </div>
+
+      {/* Right-side attendance messages overlay */}
+      {isCapturing && (
+        <div
+          ref={panelRef}
+          onScroll={handlePanelScroll}
+          className="fixed z-50 overflow-y-auto 
+inset-x-2 bottom-24 top-auto h-56 max-w-none 
+md:right-4 md:top-4 md:bottom-4 md:inset-x-auto md:w-80 md:h-auto 
+bg-white/5 backdrop-blur-md rounded-xl p-3 md:p-4 shadow-lg space-y-2 md:space-y-3"
+        >
+          {/* Newest on top: list already ordered newest-first */}
+          {messages.map(msg => (
+            <div
+              key={msg.id}
+              className="bg-white/5 rounded-md p-2.5 md:p-3 flex items-start gap-2.5 md:gap-3 shadow-sm"
+            >
+              <div className={`mt-0.5 ${msg.kind === 'enter' ? 'text-green-700' : 'text-amber-700'}`}>
+                {msg.kind === 'enter' ? <CheckCircle2 className="h-4 w-4 md:h-5 md:w-5" /> : <LogOut className="h-4 w-4 md:h-5 md:w-5" />}
+              </div>
+              <div className="text-sm md:text-base font-semibold text-gray-900">
+                {msg.text}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <Card className="p-6 shadow-lg">
           <div className="flex justify-between items-center mb-4">
@@ -483,19 +541,7 @@ const WebcamCapture: React.FC<WebcamCaptureProps> = ({ onFaceRecognized }) => {
         clearList={clearStudentList}
       />
 
-      {/* Multiple greeting messages */}
-      <div className="fixed top-4 right-4 z-50 space-y-2">
-        {greetingMessages.map((message) => (
-          <GreetingToast
-            key={message.id}
-            name={message.name}
-            action={message.action === 'welcome' ? 'checkin' : 'checkout'}
-            onClose={() => {
-              setGreetingMessages(prev => prev.filter(msg => msg.id !== message.id));
-            }}
-          />
-        ))}
-      </div>
+      {/* Earlier pop messages removed */}
     </>
   );
 };

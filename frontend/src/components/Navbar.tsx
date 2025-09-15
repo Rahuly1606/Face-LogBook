@@ -11,7 +11,6 @@ import {
   FileText, 
   UserPlus, 
   Home,
-  Fingerprint,
   Group,
   LogIn,
   LogOut
@@ -53,7 +52,7 @@ const Navbar: React.FC = () => {
           {/* Logo */}
           <Link to="/" className="flex items-center space-x-2 group">
             <div className="p-2 rounded-lg bg-gradient-primary group-hover:scale-110 transition-transform">
-              <Fingerprint className="h-6 w-6 text-white" />
+              <Camera className="h-6 w-6 text-white" />
             </div>
             <span className="font-bold text-xl text-foreground hidden sm:block">
               FaceAttend
@@ -146,7 +145,7 @@ const Navbar: React.FC = () => {
                 {/* Mobile Header */}
                 <div className="flex items-center gap-2 pb-6 border-b">
                   <div className="p-2 rounded-lg bg-gradient-primary">
-                    <Fingerprint className="h-6 w-6 text-white" />
+                    <Camera className="h-6 w-6 text-white" />
                   </div>
                   <div>
                     <h2 className="text-lg font-bold">FaceAttend</h2>

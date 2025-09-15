@@ -140,9 +140,9 @@ const GroupAttendanceTable: React.FC<GroupAttendanceTableProps> = ({ groupId }) 
 
   return (
     <div className="space-y-6">
-      <div className="flex justify-between items-center">
+      <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-3">
         <h2 className="text-xl font-bold">Attendance Logs</h2>
-        <Button onClick={handleExportCsv} variant="outline">
+        <Button onClick={handleExportCsv} variant="outline" className="w-full sm:w-auto">
           <Download className="h-4 w-4 mr-2" />
           Export CSV
         </Button>
@@ -161,6 +161,7 @@ const GroupAttendanceTable: React.FC<GroupAttendanceTableProps> = ({ groupId }) 
           size="icon"
           onClick={resetToToday}
           title="Reset to today"
+          className="w-full sm:w-10"
         >
           <RotateCcw className="h-4 w-4" />
         </Button>
@@ -191,39 +192,41 @@ const GroupAttendanceTable: React.FC<GroupAttendanceTableProps> = ({ groupId }) 
       {loading ? (
         <div className="text-center py-8">Loading...</div>
       ) : (
-        <div className="rounded-lg border bg-card shadow-sm">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Student ID</TableHead>
-                <TableHead>Name</TableHead>
-                <TableHead>Date</TableHead>
-                <TableHead>Check In</TableHead>
-                <TableHead>Check Out</TableHead>
-                <TableHead>Status</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {records.length === 0 ? (
+        <div className="rounded-lg border bg-card shadow-sm overflow-x-auto">
+          <div className="min-w-[720px]">
+            <Table>
+              <TableHeader>
                 <TableRow>
-                  <TableCell colSpan={6} className="text-center py-8 text-muted-foreground">
-                    No attendance records found
-                  </TableCell>
+                  <TableHead>Student ID</TableHead>
+                  <TableHead>Name</TableHead>
+                  <TableHead>Date</TableHead>
+                  <TableHead>Check In</TableHead>
+                  <TableHead>Check Out</TableHead>
+                  <TableHead>Status</TableHead>
                 </TableRow>
-              ) : (
-                records.map((record) => (
-                  <TableRow key={record.id}>
-                    <TableCell className="font-medium">{record.student_id}</TableCell>
-                    <TableCell>{record.name || record.student_name}</TableCell>
-                    <TableCell>{record.date ? new Date(record.date).toLocaleDateString() : '-'}</TableCell>
-                    <TableCell>{formatTime(record.in_time)}</TableCell>
-                    <TableCell>{formatTime(record.out_time)}</TableCell>
-                    <TableCell>{getStatusBadge(record.status)}</TableCell>
+              </TableHeader>
+              <TableBody>
+                {records.length === 0 ? (
+                  <TableRow>
+                    <TableCell colSpan={6} className="text-center py-8 text-muted-foreground">
+                      No attendance records found
+                    </TableCell>
                   </TableRow>
-                ))
-              )}
-            </TableBody>
-          </Table>
+                ) : (
+                  records.map((record) => (
+                    <TableRow key={record.id}>
+                      <TableCell className="font-medium whitespace-nowrap">{record.student_id}</TableCell>
+                      <TableCell className="whitespace-nowrap">{record.name || record.student_name}</TableCell>
+                      <TableCell className="whitespace-nowrap">{record.date ? new Date(record.date).toLocaleDateString() : '-'}</TableCell>
+                      <TableCell className="whitespace-nowrap">{formatTime(record.in_time)}</TableCell>
+                      <TableCell className="whitespace-nowrap">{formatTime(record.out_time)}</TableCell>
+                      <TableCell className="whitespace-nowrap">{getStatusBadge(record.status)}</TableCell>
+                    </TableRow>
+                  ))
+                )}
+              </TableBody>
+            </Table>
+          </div>
         </div>
       )}
     </div>

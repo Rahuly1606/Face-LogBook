@@ -82,26 +82,26 @@ const GroupWorkspace: React.FC = () => {
 
   return (
     <div className="container mx-auto py-6 space-y-6">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
         <div>
-          <div className="flex items-center space-x-2">
-            <Button variant="ghost" onClick={() => navigate('/groups')}>
+          <div className="flex items-center flex-wrap gap-2">
+            <Button variant="ghost" onClick={() => navigate('/groups')} className="px-2 py-1 h-8">
               Groups
             </Button>
             <span>/</span>
-            <h1 className="text-2xl font-bold">{groupName}</h1>
+            <h1 className="text-xl sm:text-2xl font-bold break-words max-w-full">{groupName}</h1>
           </div>
-          <p className="text-sm text-muted-foreground">Group ID: {groupId}</p>
+          <p className="text-xs sm:text-sm text-muted-foreground">Group ID: {groupId}</p>
         </div>
       </div>
 
       <Tabs defaultValue="register" value={activeTab} onValueChange={setActiveTab}>
-        <TabsList className="grid grid-cols-5 w-full">
-          <TabsTrigger value="register">Register Student</TabsTrigger>
-          <TabsTrigger value="manage">Manage Students</TabsTrigger>
-          <TabsTrigger value="live">Live Attendance</TabsTrigger>
-          <TabsTrigger value="upload">Upload Attendance</TabsTrigger>
-          <TabsTrigger value="logs">Attendance Logs</TabsTrigger>
+        <TabsList className="w-full overflow-x-auto flex sm:grid sm:grid-cols-5">
+          <TabsTrigger value="register" className="flex-1 whitespace-nowrap">Register Student</TabsTrigger>
+          <TabsTrigger value="manage" className="flex-1 whitespace-nowrap">Manage Students</TabsTrigger>
+          <TabsTrigger value="live" className="flex-1 whitespace-nowrap">Live Attendance</TabsTrigger>
+          <TabsTrigger value="upload" className="flex-1 whitespace-nowrap">Upload Attendance</TabsTrigger>
+          <TabsTrigger value="logs" className="flex-1 whitespace-nowrap">Attendance Logs</TabsTrigger>
         </TabsList>
         
         <TabsContent value="register" className="mt-6">
