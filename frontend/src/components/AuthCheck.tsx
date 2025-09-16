@@ -13,17 +13,19 @@ const AuthCheck: React.FC<AuthCheckProps> = ({ children }) => {
 
   useEffect(() => {
     if (!isAuthenticated) {
-      // Redirect to login page with the intended destination
-      navigate('/login', { state: { from: location } });
+      // Redirect to login page, preserving the intended destination.
+      // This allows users to be redirected back after a successful login.
+      navigate('/login', { state: { from: location }, replace: true });
     }
   }, [isAuthenticated, navigate, location]);
 
-  // If authenticated, render the children
+  // If authenticated, render the children components.
   if (isAuthenticated) {
     return <>{children}</>;
   }
 
-  // Return null while the redirect happens
+  // Render nothing while the redirect is in effect.
+  // This prevents a flash of the protected content.
   return null;
 };
 

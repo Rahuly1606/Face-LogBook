@@ -3,32 +3,54 @@ import GroupForm from '../components/GroupForm';
 import GroupTable from '../components/GroupTable';
 import { useApp } from '../context/AppContext';
 import { Navigate } from 'react-router-dom';
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '../components/ui/card';
 
 const ManageGroups = () => {
   const { isAuthenticated } = useApp();
   const [refreshTrigger, setRefreshTrigger] = useState(0);
 
-  // Redirect to login if not authenticated
   if (!isAuthenticated) {
-    return <Navigate to="/login" replace />;
+    return <Navigate to="/login" replace state={{ from: { pathname: '/admin/groups' } }} />;
   }
 
-  const handleGroupCreated = () => {
-    // Trigger a refresh of the group table
+  const handleGroupActionSuccess = () => {
     setRefreshTrigger(prev => prev + 1);
   };
 
   return (
-    <div className="container mx-auto py-6 space-y-8">
-      <h1 className="text-3xl font-bold">Manage Groups</h1>
+    <div className="container mx-auto py-8 px-4 sm:px-6 lg:px-8">
+      <header className="mb-8">
+        <h1 className="text-3xl font-bold">Manage Groups</h1>
+        <p className="text-muted-foreground mt-1">Create new groups or view existing ones.</p>
+      </header>
       
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        <div className="md:col-span-1">
-          <GroupForm onSuccess={handleGroupCreated} />
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+        <div className="lg:col-span-1">
+          <Card>
+            <CardHeader>
+              <CardTitle>Create New Group</CardTitle>
+              <CardDescription>
+                Add a new class group to the system.
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <GroupForm onSuccess={handleGroupActionSuccess} />
+            </CardContent>
+          </Card>
         </div>
         
-        <div className="md:col-span-2">
-          <GroupTable refreshTrigger={refreshTrigger} />
+        <div className="lg:col-span-2">
+            <Card>
+                <CardHeader>
+                    <CardTitle>Existing Groups</CardTitle>
+                </CardHeader>
+                <CardContent>
+                    <GroupTable 
+                        refreshTrigger={refreshTrigger} 
+                        onDelete={handleGroupActionSuccess} 
+                    />
+                </CardContent>
+            </Card>
         </div>
       </div>
     </div>

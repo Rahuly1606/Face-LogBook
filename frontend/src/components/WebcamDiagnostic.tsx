@@ -1,8 +1,9 @@
-import React, { useRef, useState } from 'react';
+import React, { useRef, useState, useCallback } from 'react';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import Webcam from 'react-webcam';
-import { Camera, XCircle } from 'lucide-react';
+import { Camera, CameraOff, XCircle, RefreshCw, AlertTriangle } from 'lucide-react';
+import { cn } from '@/lib/utils';
 
 interface WebcamDiagnosticProps {
   onCapture?: (imageSrc: string) => void;
@@ -14,109 +15,89 @@ const WebcamDiagnostic: React.FC<WebcamDiagnosticProps> = ({ onCapture }) => {
   const [capturedImage, setCapturedImage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  const videoConstraints = {
-    width: 640,
-    height: 480,
-    facingMode: "user"
-  };
+  const videoConstraints = { width: 1280, height: 720, facingMode: "user" };
 
-  const handleCapture = () => {
+  const handleCapture = useCallback(() => {
     if (!webcamRef.current) return;
-    
     try {
       const imageSrc = webcamRef.current.getScreenshot();
       if (imageSrc) {
         setCapturedImage(imageSrc);
-        if (onCapture) onCapture(imageSrc);
+        onCapture?.(imageSrc);
       } else {
-        setError('Failed to capture image');
+        setError('Failed to capture an image from the webcam.');
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Unknown error capturing image');
-      console.error('Webcam capture error:', err);
+      setError(err instanceof Error ? err.message : 'An unknown error occurred during capture.');
     }
-  };
+  }, [onCapture]);
 
-  const handleUserMedia = () => {
-    setHasCamera(true);
-    setError(null);
-  };
-
-  const handleUserMediaError = (err: string | DOMException) => {
-    setHasCamera(false);
-    const errorMessage = err instanceof DOMException ? err.message : String(err);
-    setError(`Webcam access error: ${errorMessage}`);
-    console.error('Webcam error:', err);
-  };
-
-  const resetCapture = () => {
+  const resetCapture = useCallback(() => {
     setCapturedImage(null);
-  };
+    setError(null);
+  }, []);
 
   return (
-    <div>
-      {hasCamera === false && (
-        <div className="bg-red-50 border border-red-200 rounded p-4 mb-4">
-          <h3 className="text-red-700 font-medium mb-2">Camera not available</h3>
-          <p className="text-red-600 text-sm">{error || 'Could not access webcam. Please check permissions and try again.'}</p>
-        </div>
-      )}
-
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <div className="relative rounded-lg overflow-hidden bg-secondary">
-          {!capturedImage ? (
+    <Card className="shadow-lg rounded-xl">
+      <CardHeader>
+        <CardTitle>Webcam Diagnostic Tool</CardTitle>
+        <CardDescription>Use this tool to test your camera and ensure it's working correctly for facial recognition.</CardDescription>
+      </CardHeader>
+      <CardContent className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        <div className="relative aspect-video w-full rounded-lg overflow-hidden bg-secondary shadow-inner ring-1 ring-border flex items-center justify-center">
+          {hasCamera === false ? (
+            <div className="text-center text-destructive p-4">
+              <CameraOff className="h-12 w-12 mx-auto mb-3" />
+              <p className="font-bold">Camera Not Available</p>
+              <p className="text-sm">{error || "Check browser permissions."}</p>
+            </div>
+          ) : capturedImage ? (
+            <img src={capturedImage} alt="Captured" className="w-full h-full object-cover" />
+          ) : (
             <Webcam
               audio={false}
               ref={webcamRef}
               screenshotFormat="image/jpeg"
               videoConstraints={videoConstraints}
-              onUserMedia={handleUserMedia}
-              onUserMediaError={handleUserMediaError}
-              className="w-full h-auto"
+              onUserMedia={() => { setHasCamera(true); setError(null); }}
+              onUserMediaError={(err) => { setHasCamera(false); setError(err instanceof DOMException ? err.message : String(err)); }}
+              className="w-full h-full object-cover"
             />
-          ) : (
-            <div className="relative">
-              <img src={capturedImage} alt="Captured" className="w-full h-auto" />
-              <Button 
-                className="absolute top-2 right-2" 
-                size="icon" 
-                variant="secondary"
-                onClick={resetCapture}
-              >
-                <XCircle className="h-4 w-4" />
-              </Button>
-            </div>
           )}
         </div>
 
-        <div className="flex flex-col space-y-4">
-          <Button 
-            onClick={handleCapture} 
-            disabled={hasCamera === false || capturedImage !== null}
-            className="gap-2"
-          >
-            <Camera className="h-4 w-4" />
-            Capture Image
-          </Button>
+        <div className="space-y-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <Button onClick={handleCapture} disabled={hasCamera === false || !!capturedImage} className="gap-2">
+              <Camera className="h-4 w-4" /> Capture Test Image
+            </Button>
+            <Button onClick={resetCapture} variant="outline" disabled={!capturedImage} className="gap-2">
+              <RefreshCw className="h-4 w-4" /> New Test
+            </Button>
+          </div>
           
-          {error && (
-            <div className="bg-red-50 border border-red-200 rounded p-3 text-red-600 text-sm">
-              {error}
+          {error && hasCamera && (
+            <div className="p-3 bg-destructive/10 text-destructive text-sm rounded-lg flex items-start gap-3">
+              <AlertTriangle className="h-5 w-5 flex-shrink-0" />
+              <div>
+                  <h4 className="font-semibold">An error occurred:</h4>
+                  <p>{error}</p>
+              </div>
             </div>
           )}
-          
-          <div className="text-sm text-muted-foreground">
-            <h4 className="font-medium mb-1">Camera diagnostic instructions:</h4>
+
+          <div className="p-4 bg-muted/50 rounded-lg text-sm text-muted-foreground">
+            <h4 className="font-semibold text-foreground mb-2">Instructions</h4>
             <ol className="list-decimal list-inside space-y-1">
-              <li>Ensure your browser has camera permissions</li>
-              <li>Click "Capture Image" to test the camera</li>
-              <li>Check if your face is correctly detected</li>
-              <li>If there are issues, try refreshing or using a different browser</li>
+              <li>Ensure your browser has permission to access the camera.</li>
+              <li>Position your face clearly in the center of the frame.</li>
+              <li>Click <strong>"Capture Test Image"</strong> to take a picture.</li>
+              <li>Review the captured image to ensure it is clear and well-lit.</li>
             </ol>
           </div>
         </div>
-      </div>
-    </div>
+      </CardContent>
+    </Card>
   );
 };
 

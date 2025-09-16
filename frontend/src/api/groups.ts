@@ -2,10 +2,11 @@ import apiClient from './apiClient';
 
 export interface Group {
   id: number;
-  name: string;
-  code: string;
+  name?: string; // backend returns `name`
+  code?: string; // optional; not always present
   created_at?: string;
   updated_at?: string;
+  student_count?: number;
 }
 
 // Get all groups
@@ -14,10 +15,11 @@ export const getGroups = async (): Promise<Group[]> => {
     const response = await apiClient.get('/groups');
     // Check if the response is an array or an object with a groups property
     if (Array.isArray(response.data)) {
-      return response.data;
+      return response.data as Group[];
     } else if (response.data && typeof response.data === 'object') {
       // Handle case where API returns {groups: [...]} instead of just array
-      return response.data.groups || [];
+      const groups = (response.data.groups || []) as Group[];
+      return Array.isArray(groups) ? groups : [];
     }
     return [];
   } catch (error) {

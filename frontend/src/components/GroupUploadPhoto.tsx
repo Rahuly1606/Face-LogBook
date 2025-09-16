@@ -1,292 +1,177 @@
 import React, { useState, useCallback } from 'react';
-import { Card, CardContent } from '@/components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Upload, X, Image as ImageIcon, RefreshCw } from 'lucide-react';
+import { Upload, X, Image as ImageIcon, RefreshCw, Users, UserCheck, UserX } from 'lucide-react';
 import { validateImageFile, resizeImage } from '@/utils/imageHelpers';
 import { useToast } from '@/hooks/use-toast';
 import { uploadGroupAttendance, RecognizedStudent } from '@/api/attendance';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { cn } from '@/lib/utils';
+import { Progress } from '@/components/ui/progress';
 
-interface UploadPhotoProps {
+interface GroupUploadPhotoProps {
   groupId: number;
 }
 
-const GroupUploadPhoto: React.FC<UploadPhotoProps> = ({ groupId }) => {
+const GroupUploadPhoto: React.FC<GroupUploadPhotoProps> = ({ groupId }) => {
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [preview, setPreview] = useState<string | null>(null);
   const [isDragging, setIsDragging] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
-  const [recognizedStudents, setRecognizedStudents] = useState<RecognizedStudent[]>([]);
-  const [unrecognizedCount, setUnrecognizedCount] = useState(0);
-  const [processingComplete, setProcessingComplete] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState(0);
+  const [results, setResults] = useState<{ recognized: RecognizedStudent[], unrecognized: number, total: number } | null>(null);
   const { toast } = useToast();
 
+  const resetState = useCallback(() => {
+    setSelectedFile(null);
+    setPreview(null);
+    setIsUploading(false);
+    setResults(null);
+    setUploadProgress(0);
+  }, []);
+
   const handleFileSelect = useCallback(async (file: File) => {
+    resetState();
     const validation = validateImageFile(file);
     if (!validation.valid) {
-      toast({
-        title: "Invalid File",
-        description: validation.error,
-        variant: "destructive",
-      });
+      toast({ title: "Invalid File", description: validation.error, variant: "destructive" });
       return;
     }
-
     try {
-      // Resize image before upload
       const resizedBlob = await resizeImage(file, 2048);
       const resizedFile = new File([resizedBlob], file.name, { type: 'image/jpeg' });
       
-      // Create preview
       const reader = new FileReader();
-      reader.onloadend = () => {
-        setPreview(reader.result as string);
-      };
+      reader.onloadend = () => setPreview(reader.result as string);
       reader.readAsDataURL(resizedFile);
-      
       setSelectedFile(resizedFile);
-      // Reset previous results
-      setRecognizedStudents([]);
-      setUnrecognizedCount(0);
-      setProcessingComplete(false);
     } catch (error) {
-      toast({
-        title: "Error",
-        description: "Failed to process image",
-        variant: "destructive",
-      });
+      toast({ title: "Error Processing Image", description: "Failed to process image.", variant: "destructive" });
     }
-  }, [toast]);
-
-  const handleDrop = useCallback((e: React.DragEvent) => {
-    e.preventDefault();
-    setIsDragging(false);
-    
-    const file = e.dataTransfer.files[0];
-    if (file) {
-      handleFileSelect(file);
-    }
-  }, [handleFileSelect]);
-
-  const handleDragOver = useCallback((e: React.DragEvent) => {
-    e.preventDefault();
-    setIsDragging(true);
-  }, []);
-
-  const handleDragLeave = useCallback((e: React.DragEvent) => {
-    e.preventDefault();
-    setIsDragging(false);
-  }, []);
-
-  const handleFileInput = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) {
-      handleFileSelect(file);
-    }
-  }, [handleFileSelect]);
-
-  const clearImage = useCallback(() => {
-    setPreview(null);
-    setSelectedFile(null);
-    setRecognizedStudents([]);
-    setUnrecognizedCount(0);
-    setProcessingComplete(false);
-  }, []);
+  }, [toast, resetState]);
 
   const handleUpload = useCallback(async () => {
-    if (!selectedFile) {
-      toast({
-        title: "No file selected",
-        description: "Please select a group photo to upload.",
-        variant: "destructive",
-      });
-      return;
-    }
+    if (!selectedFile) return;
 
     setIsUploading(true);
+    // Simulate progress
+    const timer = setInterval(() => setUploadProgress(prev => Math.min(prev + 1, 95)), 300);
+
     try {
       const response = await uploadGroupAttendance(selectedFile);
+      clearInterval(timer);
+      setUploadProgress(100);
       
-      setRecognizedStudents(response.recognized || []);
-      setUnrecognizedCount(response.unrecognized_count || 0);
-      setProcessingComplete(true);
+      setResults({
+          recognized: response.recognized || [],
+          unrecognized: response.unrecognized_count || 0,
+          total: response.total_faces || 0,
+      });
       
       toast({
-        title: "Attendance Processed",
-        description: `${response.recognized?.length || 0} students recognized out of ${response.total_faces || 0} faces.`,
+        title: "Processing Complete",
+        description: `${response.recognized?.length || 0} of ${response.total_faces || 0} faces were recognized.`,
       });
     } catch (error: any) {
-      console.error('Error uploading attendance:', error);
-      
-      let errorMessage = "Failed to process attendance. Please try again.";
-      
-      if (error.isTimeout) {
-        errorMessage = "Processing is taking longer than expected. The image may have many faces. Please try with a smaller group or wait a bit longer.";
-      } else if (error.isNetworkError) {
-        errorMessage = "Network error. Please check your connection and try again.";
-      } else if (error.message) {
-        errorMessage = error.message;
-      }
-      
-      toast({
-        title: "Upload Error",
-        description: errorMessage,
-        variant: "destructive",
-      });
+        clearInterval(timer);
+        setUploadProgress(0);
+        toast({ title: "Upload Error", description: error.message || "An unknown error occurred.", variant: "destructive" });
     } finally {
-      setIsUploading(false);
+      setTimeout(() => setIsUploading(false), 500); // give time for progress bar to finish
     }
   }, [selectedFile, toast]);
 
   return (
-    <div className="space-y-6">
-      <div>
-        <h2 className="text-xl font-bold mb-4">Upload Group Photo for Attendance</h2>
-        <p className="text-muted-foreground mb-4">
-          Upload a group photo to automatically mark attendance for recognized students.
-        </p>
-      </div>
-      
-      <Card
-        className={`relative border-2 border-dashed p-6 transition-colors ${
-          isDragging ? 'border-primary bg-primary/5' : 'border-border'
-        }`}
-        onDrop={handleDrop}
-        onDragOver={handleDragOver}
-        onDragLeave={handleDragLeave}
-      >
-        {preview ? (
-          <div className="relative">
-            <img
-              src={preview}
-              alt="Preview"
-              className="rounded-md w-full max-h-96 object-contain mx-auto"
-            />
-            <Button
-              variant="outline"
-              size="icon"
-              className="absolute top-2 right-2 rounded-full bg-background"
-              onClick={clearImage}
+    <Card className="shadow-lg rounded-xl">
+        <CardHeader>
+            <CardTitle className="text-2xl">Group Photo Attendance</CardTitle>
+            <CardDescription>Upload a single photo of a group to mark attendance for multiple students.</CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-6">
+            <div
+                className={cn(
+                    "relative border-2 border-dashed rounded-xl p-6 text-center transition-all",
+                    isDragging ? 'border-primary bg-primary/10' : 'border-border hover:border-primary/50'
+                )}
+                onDragOver={(e) => { e.preventDefault(); setIsDragging(true); }}
+                onDragLeave={() => setIsDragging(false)}
+                onDrop={(e) => { e.preventDefault(); setIsDragging(false); handleFileSelect(e.dataTransfer.files[0]); }}
             >
-              <X className="h-4 w-4" />
-            </Button>
-          </div>
-        ) : (
-          <div className="flex flex-col items-center justify-center py-8">
-            <ImageIcon className="h-12 w-12 text-muted-foreground mb-4" />
-            <p className="text-sm text-muted-foreground mb-2">
-              Drag and drop a group photo, or click to browse
-            </p>
-            <div className="mt-4">
-              <input
-                type="file"
-                id="file-upload"
-                accept="image/*"
-                className="hidden"
-                onChange={handleFileInput}
-              />
-              <label htmlFor="file-upload">
-                <Button variant="outline" className="gap-2" asChild>
-                  <span>
-                    <Upload className="h-4 w-4" />
-                    Select Photo
-                  </span>
-                </Button>
-              </label>
+                {preview ? (
+                    <div className="relative group">
+                        <img src={preview} alt="Group" className="rounded-md w-full max-h-96 object-contain mx-auto" />
+                        <div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                            <Button variant="destructive" size="icon" className="rounded-full h-9 w-9" onClick={resetState}><X className="h-5 w-5" /></Button>
+                        </div>
+                    </div>
+                ) : (
+                    <div className="flex flex-col items-center justify-center py-8">
+                        <ImageIcon className="h-16 w-16 text-muted-foreground mb-4" />
+                        <p className="font-semibold text-lg">Drag & Drop Group Photo</p>
+                        <p className="text-muted-foreground">or</p>
+                        <Button variant="outline" className="mt-2" onClick={() => document.getElementById('group-photo-upload')?.click()}>Browse Files</Button>
+                        <input type="file" id="group-photo-upload" accept="image/*" className="hidden" onChange={(e) => handleFileSelect(e.target.files?.[0])} />
+                    </div>
+                )}
             </div>
-          </div>
-        )}
-      </Card>
 
-      {selectedFile && (
-        <div className="flex justify-end">
-          <Button 
-            onClick={handleUpload} 
-            disabled={isUploading}
-            className="gap-2"
-          >
-            {isUploading ? (
-              <>
-                <RefreshCw className="h-4 w-4 animate-spin" />
-                Processing faces... (This may take up to 90 seconds)
-              </>
-            ) : (
-              <>
-                <Upload className="h-4 w-4" />
-                Process Attendance
-              </>
+            {selectedFile && !results && (
+                <div className="flex flex-col items-center gap-4">
+                    {isUploading && <Progress value={uploadProgress} className="w-full" />}
+                    <Button size="lg" onClick={handleUpload} disabled={isUploading} className="gap-2 w-full sm:w-auto">
+                        {isUploading ? <RefreshCw className="h-5 w-5 animate-spin" /> : <Upload className="h-5 w-5" />}
+                        {isUploading ? `Processing... (${uploadProgress}%)` : 'Process Attendance'}
+                    </Button>
+                    {isUploading && <p className="text-sm text-muted-foreground">This may take up to 90 seconds depending on the image size.</p>}
+                </div>
             )}
-          </Button>
-        </div>
-      )}
 
-      {processingComplete && (
-        <div className="mt-8 space-y-4">
-          <h3 className="text-lg font-semibold">Recognition Results:</h3>
-          
-          <div className="grid grid-cols-2 gap-4 mb-4">
-            <Card>
-              <CardContent className="pt-6">
-                <div className="text-center">
-                  <p className="text-5xl font-bold text-primary">
-                    {recognizedStudents.length}
-                  </p>
-                  <p className="text-sm text-muted-foreground">Students Recognized</p>
+            {results && (
+                <div className="animate-in fade-in-50 space-y-6">
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                        <StatCard icon={Users} value={results.total} label="Total Faces Detected" color="bg-blue-100 text-blue-600" />
+                        <StatCard icon={UserCheck} value={results.recognized.length} label="Students Recognized" color="bg-green-100 text-green-600" />
+                        <StatCard icon={UserX} value={results.unrecognized} label="Unrecognized Faces" color="bg-red-100 text-red-600" />
+                    </div>
+                    
+                    {results.recognized.length > 0 && (
+                        <div>
+                            <h4 className="font-semibold text-lg mb-2">Attendance Marked For:</h4>
+                            <div className="border rounded-lg overflow-hidden">
+                                <Table>
+                                    <TableHeader><TableRow><TableHead>Student ID</TableHead><TableHead>Name</TableHead><TableHead>Action</TableHead><TableHead className="text-right">Confidence</TableHead></TableRow></TableHeader>
+                                    <TableBody>{results.recognized.map(s => (
+                                        <TableRow key={s.student_id}>
+                                            <TableCell className="font-mono text-muted-foreground">{s.student_id}</TableCell>
+                                            <TableCell className="font-medium">{s.name}</TableCell>
+                                            <TableCell><span className={cn("font-semibold", s.action === 'checkin' ? 'text-green-600' : 'text-orange-600')}>{s.action}</span></TableCell>
+                                            <TableCell className="text-right font-medium">{Math.round(s.score * 100)}%</TableCell>
+                                        </TableRow>
+                                    ))}</TableBody>
+                                </Table>
+                            </div>
+                        </div>
+                    )}
+                    <div className="text-center">
+                        <Button variant="outline" onClick={resetState}>Upload Another Photo</Button>
+                    </div>
                 </div>
-              </CardContent>
-            </Card>
-            <Card>
-              <CardContent className="pt-6">
-                <div className="text-center">
-                  <p className="text-5xl font-bold text-destructive">
-                    {unrecognizedCount}
-                  </p>
-                  <p className="text-sm text-muted-foreground">Unrecognized Faces</p>
-                </div>
-              </CardContent>
-            </Card>
-          </div>
-          
-          {recognizedStudents.length > 0 && (
-            <div>
-              <h4 className="font-medium mb-2">Attendance Marked:</h4>
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Student ID</TableHead>
-                    <TableHead>Name</TableHead>
-                    <TableHead>Action</TableHead>
-                    <TableHead>Confidence</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {recognizedStudents.map((student) => (
-                    <TableRow key={student.student_id}>
-                      <TableCell>{student.student_id}</TableCell>
-                      <TableCell>{student.name}</TableCell>
-                      <TableCell>
-                        <span className={student.action === 'checkin' ? 'text-green-600' : 'text-orange-600'}>
-                          {student.action === 'checkin' ? 'Check In' : 'Check Out'}
-                        </span>
-                      </TableCell>
-                      <TableCell>{Math.round(student.score * 100)}%</TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </div>
-          )}
-          
-          {unrecognizedCount > 0 && (
-            <p className="text-sm text-muted-foreground mt-4">
-              {unrecognizedCount} faces were detected but could not be recognized.
-              Make sure all students are registered with clear photos.
-            </p>
-          )}
-        </div>
-      )}
-    </div>
+            )}
+        </CardContent>
+    </Card>
   );
 };
+
+const StatCard: React.FC<{ icon: React.ElementType, value: number, label: string, color: string }> = ({ icon: Icon, value, label, color }) => (
+    <Card>
+        <CardContent className="flex items-center gap-4 p-4">
+            <div className={cn("p-3 rounded-full", color)}><Icon className="h-6 w-6" /></div>
+            <div>
+                <p className="text-3xl font-bold">{value}</p>
+                <p className="text-sm text-muted-foreground">{label}</p>
+            </div>
+        </CardContent>
+    </Card>
+);
 
 export default GroupUploadPhoto;

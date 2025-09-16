@@ -28,16 +28,15 @@ const CSVBulkImport: React.FC<BulkImportProps> = ({ groupId: propGroupId, onSucc
   const fileInputRef = useRef<HTMLInputElement>(null);
   const { toast } = useToast();
 
-  // Fetch groups on component mount
+  // Fetch groups on component mount (only once)
   useEffect(() => {
     const fetchGroups = async () => {
       setIsLoadingGroups(true);
       try {
         const fetchedGroups = await getGroups();
         setGroups(fetchedGroups);
-        
         // If no group is selected and we have groups, select the first one
-        if (!selectedGroupId && fetchedGroups.length > 0) {
+        if (!propGroupId && fetchedGroups.length > 0) {
           setSelectedGroupId(fetchedGroups[0].id);
         }
       } catch (error) {
@@ -51,9 +50,9 @@ const CSVBulkImport: React.FC<BulkImportProps> = ({ groupId: propGroupId, onSucc
         setIsLoadingGroups(false);
       }
     };
-
     fetchGroups();
-  }, [toast, selectedGroupId]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [toast]);
 
   const resetForm = () => {
     setSelectedFile(null);
@@ -378,11 +377,13 @@ const CSVBulkImport: React.FC<BulkImportProps> = ({ groupId: propGroupId, onSucc
                 <SelectValue placeholder="Select a group" />
               </SelectTrigger>
               <SelectContent>
-                {Array.isArray(groups) ? groups.map((group) => (
-                  <SelectItem key={group.id} value={group.id.toString()}>
-                    {group.name}
-                  </SelectItem>
-                )) : (
+                {Array.isArray(groups) && groups.length > 0 ? (
+                  groups.map((group) => (
+                    <SelectItem key={group.id} value={group.id.toString()}>
+                      {group.name || `Group ${group.id}`}
+                    </SelectItem>
+                  ))
+                ) : (
                   <SelectItem value="0">No groups available</SelectItem>
                 )}
               </SelectContent>

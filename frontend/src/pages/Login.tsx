@@ -6,6 +6,7 @@ import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle }
 import { Input } from '../components/ui/input';
 import { Label } from '../components/ui/label';
 import { useApp } from '../context/AppContext';
+import { Camera, Loader2 } from 'lucide-react';
 
 const Login = () => {
   const [username, setUsername] = useState('');
@@ -16,41 +17,37 @@ const Login = () => {
   const navigate = useNavigate();
   const location = useLocation();
   
-  // Get the previous page from state or default to home
   const from = location.state?.from?.pathname || '/';
 
-  // Redirect if already authenticated
   useEffect(() => {
     if (isAuthenticated) {
-      navigate(from);
+      navigate(from, { replace: true });
     }
   }, [isAuthenticated, navigate, from]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    
     if (!username || !password) {
       toast({
-        title: 'Invalid input',
-        description: 'Please enter both username and password',
+        title: 'Invalid Input',
+        description: 'Please enter both username and password.',
         variant: 'destructive',
       });
       return;
     }
     
     setIsLoading(true);
-    
     try {
       await login(username, password);
       toast({
-        title: 'Login successful',
-        description: 'Welcome to Face-LogBook',
+        title: 'Login Successful',
+        description: 'Welcome back to FaceAttend!',
       });
-      navigate(from);
+      navigate(from, { replace: true });
     } catch (error) {
       toast({
-        title: 'Login failed',
-        description: 'Invalid username or password',
+        title: 'Login Failed',
+        description: 'Invalid username or password. Please try again.',
         variant: 'destructive',
       });
     } finally {
@@ -59,14 +56,17 @@ const Login = () => {
   };
 
   return (
-    <div className="flex items-center justify-center min-h-screen bg-gray-100">
-      <Card className="w-full max-w-md">
-        <CardHeader className="space-y-1">
-          <CardTitle className="text-2xl font-bold text-center">Face-LogBook</CardTitle>
-          <CardDescription className="text-center">
+    <div className="flex items-center justify-center min-h-screen bg-gradient-to-br from-slate-50 to-slate-200 dark:from-slate-900 dark:to-slate-800 p-4">
+      <Card className="w-full max-w-md shadow-2xl">
+        <CardHeader className="space-y-2 text-center">
+            <div className="mx-auto p-3 rounded-lg bg-primary text-primary-foreground w-fit">
+                <Camera className="h-8 w-8"/>
+            </div>
+          <CardTitle className="text-3xl font-bold">FaceAttend</CardTitle>
+          <CardDescription>
             {from !== '/' 
-              ? 'Login required to access that page' 
-              : 'Enter your credentials to access the admin dashboard'}
+              ? 'Please log in to continue.'
+              : 'Enter your credentials to access the admin dashboard.'}
           </CardDescription>
         </CardHeader>
         <form onSubmit={handleSubmit}>
@@ -80,6 +80,7 @@ const Login = () => {
                 value={username}
                 onChange={(e) => setUsername(e.target.value)}
                 disabled={isLoading}
+                autoComplete="username"
               />
             </div>
             <div className="space-y-2">
@@ -91,6 +92,7 @@ const Login = () => {
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 disabled={isLoading}
+                autoComplete="current-password"
               />
             </div>
           </CardContent>
@@ -100,6 +102,7 @@ const Login = () => {
               className="w-full" 
               disabled={isLoading}
             >
+              {isLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
               {isLoading ? 'Logging in...' : 'Login'}
             </Button>
           </CardFooter>

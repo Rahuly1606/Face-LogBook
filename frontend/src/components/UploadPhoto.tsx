@@ -1,12 +1,12 @@
-import React, { useState, useCallback } from 'react';
-import { Card } from '@/components/ui/card';
+import React, { useState, useCallback, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
-import { Upload, X, Image as ImageIcon } from 'lucide-react';
+import { Upload, X, Image as ImageIcon, CheckCircle } from 'lucide-react';
 import { validateImageFile, resizeImage } from '@/utils/imageHelpers';
 import { useToast } from '@/hooks/use-toast';
+import { cn } from '@/lib/utils';
 
 interface UploadPhotoProps {
-  onImageSelect: (file: File) => void;
+  onImageSelect: (file: File | null) => void;
   currentImage?: string | null;
   label?: string;
 }
@@ -16,125 +16,94 @@ const UploadPhoto: React.FC<UploadPhotoProps> = ({
   currentImage, 
   label = "Upload Photo" 
 }) => {
-  const [preview, setPreview] = useState<string | null>(currentImage || null);
+  const [preview, setPreview] = useState<string | null>(null);
+  const [fileName, setFileName] = useState<string | null>(null);
   const [isDragging, setIsDragging] = useState(false);
   const { toast } = useToast();
+
+  useEffect(() => {
+    setPreview(currentImage || null);
+    if (currentImage) setFileName("Current image");
+  }, [currentImage]);
 
   const handleFileSelect = useCallback(async (file: File) => {
     const validation = validateImageFile(file);
     if (!validation.valid) {
-      toast({
-        title: "Invalid File",
-        description: validation.error,
-        variant: "destructive",
-      });
+      toast({ title: "Invalid File", description: validation.error, variant: "destructive" });
       return;
     }
-
     try {
-      // Resize image before upload
       const resizedBlob = await resizeImage(file, 1024);
       const resizedFile = new File([resizedBlob], file.name, { type: 'image/jpeg' });
       
-      // Create preview
       const reader = new FileReader();
-      reader.onloadend = () => {
-        setPreview(reader.result as string);
-      };
+      reader.onloadend = () => setPreview(reader.result as string);
       reader.readAsDataURL(resizedFile);
       
+      setFileName(resizedFile.name);
       onImageSelect(resizedFile);
     } catch (error) {
-      toast({
-        title: "Error",
-        description: "Failed to process image",
-        variant: "destructive",
-      });
+      toast({ title: "Error Processing Image", description: "Failed to process the image.", variant: "destructive" });
     }
   }, [onImageSelect, toast]);
 
   const handleDrop = useCallback((e: React.DragEvent) => {
     e.preventDefault();
     setIsDragging(false);
-    
-    const file = e.dataTransfer.files[0];
-    if (file) {
-      handleFileSelect(file);
-    }
+    if (e.dataTransfer.files?.[0]) handleFileSelect(e.dataTransfer.files[0]);
   }, [handleFileSelect]);
 
-  const handleDragOver = useCallback((e: React.DragEvent) => {
-    e.preventDefault();
-    setIsDragging(true);
-  }, []);
-
-  const handleDragLeave = useCallback((e: React.DragEvent) => {
-    e.preventDefault();
-    setIsDragging(false);
-  }, []);
-
   const handleFileInput = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) {
-      handleFileSelect(file);
-    }
+    if (e.target.files?.[0]) handleFileSelect(e.target.files[0]);
   }, [handleFileSelect]);
 
   const clearImage = useCallback(() => {
     setPreview(null);
-  }, []);
+    setFileName(null);
+    onImageSelect(null);
+  }, [onImageSelect]);
+
+  const triggerFileInput = () => document.getElementById('photo-upload')?.click();
 
   return (
     <div>
-      <label className="block text-sm font-medium mb-2 text-foreground">{label}</label>
-      <Card
-        className={`relative border-2 border-dashed p-6 transition-colors ${
-          isDragging ? 'border-primary bg-primary/5' : 'border-border'
-        }`}
+      <label className="block text-sm font-medium mb-2">{label}</label>
+      <div
+        className={cn(
+          "relative border-2 border-dashed rounded-xl p-4 transition-all duration-300 ease-in-out text-center cursor-pointer group",
+          isDragging ? 'border-primary bg-primary/10 scale-105' : 'border-border hover:border-primary/50',
+          preview ? 'border-solid border-green-500 bg-green-500/5' : ''
+        )}
         onDrop={handleDrop}
-        onDragOver={handleDragOver}
-        onDragLeave={handleDragLeave}
+        onDragOver={(e) => { e.preventDefault(); setIsDragging(true); }}
+        onDragLeave={(e) => setIsDragging(false)}
+        onClick={!preview ? triggerFileInput : undefined}
       >
+        <input type="file" accept="image/jpeg, image/png, image/webp" onChange={handleFileInput} className="hidden" id="photo-upload" />
+        
         {preview ? (
-          <div className="relative">
-            <img
-              src={preview}
-              alt="Preview"
-              className="w-full h-48 object-cover rounded-lg"
-            />
-            <Button
-              variant="destructive"
-              size="sm"
-              className="absolute top-2 right-2"
-              onClick={clearImage}
-            >
-              <X className="h-4 w-4" />
-            </Button>
+          <div className="relative aspect-video w-full">
+            <img src={preview} alt="Preview" className="w-full h-full object-contain rounded-md" />
+            <div className="absolute inset-0 bg-black/50 flex flex-col items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity rounded-md">
+                <Button variant="destructive" size="sm" onClick={clearImage} className="gap-2">
+                    <X className="h-4 w-4" /> Change Image
+                </Button>
+            </div>
+            <div className="absolute bottom-2 left-2 right-2 bg-background/80 backdrop-blur-sm text-xs p-2 rounded-md flex items-center gap-2 text-green-700 font-semibold">
+                <CheckCircle className="h-4 w-4 flex-shrink-0" />
+                <span className="truncate" title={fileName || ""}>{fileName}</span>
+            </div>
           </div>
         ) : (
-          <div className="text-center">
-            <ImageIcon className="mx-auto h-12 w-12 text-muted-foreground mb-4" />
-            <p className="text-sm text-muted-foreground mb-2">
-              Drag and drop an image here, or click to select
-            </p>
-            <input
-              type="file"
-              accept="image/*"
-              onChange={handleFileInput}
-              className="hidden"
-              id="photo-upload"
-            />
-            <label htmlFor="photo-upload">
-              <Button variant="outline" className="cursor-pointer" asChild>
-                <span>
-                  <Upload className="h-4 w-4 mr-2" />
-                  Select Image
-                </span>
-              </Button>
-            </label>
+          <div className="flex flex-col items-center justify-center py-6">
+            <div className="mb-4 rounded-full bg-secondary p-4">
+                <ImageIcon className="h-10 w-10 text-muted-foreground" />
+            </div>
+            <p className="font-semibold text-foreground">Drag & drop or click to upload</p>
+            <p className="text-sm text-muted-foreground mt-1">PNG, JPG, or WEBP (max 5MB)</p>
           </div>
         )}
-      </Card>
+      </div>
     </div>
   );
 };

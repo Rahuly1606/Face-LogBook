@@ -13,10 +13,24 @@ const apiClient = axios.create({
   withCredentials: true, // Important for CORS with credentials
 });
 
-// Request interceptor to add admin token
+// Request interceptor to add auth headers
 apiClient.interceptors.request.use(
   (config) => {
-    // Add admin token for all routes that need authentication
+    // Add JWT Authorization header if available (from login flow)
+    try {
+      const userStr = localStorage.getItem('user');
+      if (userStr) {
+        const user = JSON.parse(userStr);
+        const bearerToken = user?.token || user?.access_token;
+        if (bearerToken) {
+          config.headers['Authorization'] = `Bearer ${bearerToken}`;
+        }
+      }
+    } catch (e) {
+      // ignore parse errors
+    }
+
+    // Add legacy admin token header for compatibility
     const adminToken = getAdminToken();
     if (adminToken) {
       config.headers['X-ADMIN-TOKEN'] = adminToken;

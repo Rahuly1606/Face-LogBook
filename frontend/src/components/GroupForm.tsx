@@ -2,9 +2,10 @@ import { useState } from 'react';
 import { Button } from './ui/button';
 import { Input } from './ui/input';
 import { Label } from './ui/label';
-import { AlertCircle, School } from 'lucide-react';
+import { School, Loader2, PlusCircle } from 'lucide-react';
 import { useToast } from '../hooks/use-toast';
 import { createGroup } from '../api/auth';
+import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from './ui/card';
 
 interface GroupFormProps {
   onSuccess?: (groupId: number, groupName: string) => void;
@@ -17,84 +18,66 @@ const GroupForm = ({ onSuccess }: GroupFormProps) => {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    
     if (!groupName.trim()) {
-      toast({
-        title: 'Invalid input',
-        description: 'Please enter a group name',
-        variant: 'destructive',
-      });
+      toast({ title: 'Invalid Name', description: 'Group name cannot be empty.', variant: 'destructive' });
       return;
     }
     
     setIsLoading(true);
-    
     try {
       const response = await createGroup(groupName);
-      toast({
-        title: 'Group created',
-        description: `Group "${groupName}" has been created successfully`,
-      });
-      
-      // Reset form
+      toast({ title: 'Success!', description: `Group "${groupName}" created successfully.` });
       setGroupName('');
-      
-      // Call success callback if provided
-      if (onSuccess) {
-        onSuccess(response.id, response.name);
-      }
+      onSuccess?.(response.id, response.name);
     } catch (error) {
-      console.error('Error creating group:', error);
-      toast({
-        title: 'Error',
-        description: 'Failed to create group. Please try again.',
-        variant: 'destructive',
-      });
+      toast({ title: 'Error', description: 'Failed to create group. Please try again.', variant: 'destructive' });
     } finally {
       setIsLoading(false);
     }
   };
 
   return (
-    <div className="space-y-4">
-      <div className="flex items-center gap-2 mb-2">
-        <School className="h-5 w-5 text-primary" />
-        <p className="text-sm text-muted-foreground">
-          Create a new class group to organize students and track attendance
-        </p>
-      </div>
-
-      <form onSubmit={handleSubmit}>
-        <div className="space-y-4">
-          <div className="space-y-2">
-            <Label htmlFor="groupName">Group Name</Label>
-            <Input
-              id="groupName"
-              placeholder="Enter group name (e.g., Class 10A, Marketing Team)"
-              value={groupName}
-              onChange={(e) => setGroupName(e.target.value)}
-              disabled={isLoading}
-              className="transition-all duration-200 focus:ring-2 focus:ring-primary/30"
-            />
-          </div>
-          
-          <div className="flex justify-end gap-2 pt-2">
-            <Button variant="outline" type="button" onClick={() => setGroupName('')} disabled={isLoading || !groupName}>
-              Clear
-            </Button>
-            <Button type="submit" disabled={isLoading || !groupName.trim()}>
-              {isLoading ? 
-                <span className="flex items-center">
-                  <span className="animate-spin mr-2 h-4 w-4 border-2 border-white border-t-transparent rounded-full"></span>
-                  Creating...
-                </span> : 
-                'Create Group'
-              }
-            </Button>
-          </div>
-        </div>
-      </form>
-    </div>
+    <Card className="w-full max-w-lg mx-auto shadow-lg rounded-xl">
+        <form onSubmit={handleSubmit}>
+            <CardHeader>
+                <CardTitle className="flex items-center gap-2 text-xl">
+                    <School className="h-6 w-6 text-primary" />
+                    Create New Group
+                </CardTitle>
+                <CardDescription>
+                    Organize students into groups like classes or teams for easier management.
+                </CardDescription>
+            </CardHeader>
+            <CardContent>
+                <div className="space-y-2">
+                    <Label htmlFor="groupName" className="font-semibold">Group Name</Label>
+                    <Input
+                    id="groupName"
+                    placeholder="e.g., Computer Science - Section A"
+                    value={groupName}
+                    onChange={(e) => setGroupName(e.target.value)}
+                    disabled={isLoading}
+                    className="transition-colors focus:ring-2 focus:ring-primary/50"
+                    />
+                </div>
+            </CardContent>
+            <CardFooter className="flex justify-end bg-muted/30 p-4 border-t rounded-b-xl">
+                <Button type="submit" disabled={isLoading || !groupName.trim()} className="gap-2">
+                    {isLoading ? (
+                        <>
+                            <Loader2 className="h-4 w-4 animate-spin" />
+                            Creating...
+                        </>
+                    ) : (
+                        <>
+                            <PlusCircle className="h-4 w-4" />
+                            Create Group
+                        </>
+                    )}
+                </Button>
+            </CardFooter>
+        </form>
+    </Card>
   );
 };
 

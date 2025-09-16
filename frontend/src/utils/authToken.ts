@@ -1,13 +1,30 @@
 // Simple utility to set admin token in localStorage
 export const setAdminToken = (token: string) => {
   if (!token) return;
+  // Write both variants for compatibility with older code paths
   localStorage.setItem('adminToken', token);
+  localStorage.setItem('admin_token', token);
   return token;
 };
 
 // Get admin token from localStorage (no defaulting)
 export const getAdminToken = (): string => {
-  return localStorage.getItem('adminToken') || '';
+  // Support multiple localStorage keys used across the codebase
+  const token = localStorage.getItem('adminToken') || localStorage.getItem('admin_token');
+  if (token) return token;
+
+  // Fallback: check if a user object with JWT was stored (login flow)
+  try {
+    const userStr = localStorage.getItem('user');
+    if (userStr) {
+      const user = JSON.parse(userStr);
+      return user?.token || user?.access_token || '';
+    }
+  } catch (e) {
+    // ignore parse errors
+  }
+
+  return '';
 };
 
 // Check if the admin token is valid by making a request to the debug endpoint
@@ -37,4 +54,5 @@ export const checkAdminToken = async (): Promise<boolean> => {
 // Clear admin token from localStorage
 export const clearAdminToken = () => {
   localStorage.removeItem('adminToken');
+  localStorage.removeItem('admin_token');
 };

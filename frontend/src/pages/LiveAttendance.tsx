@@ -1,18 +1,13 @@
-import React, { useState, useRef, useCallback } from 'react';
+import React, { useState, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
-import { ArrowLeft, RefreshCw } from 'lucide-react';
+import { ArrowLeft } from 'lucide-react';
 import WebcamCapture from '@/components/WebcamCapture';
 import AllStudentsList from '@/components/AllStudentsList';
 import { useAppContext } from '@/context/AppContext';
-
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Label } from "@/components/ui/label";
 
 const LiveAttendance: React.FC = () => {
   const navigate = useNavigate();
@@ -23,27 +18,26 @@ const LiveAttendance: React.FC = () => {
     setCaptureInterval(parseInt(value));
   };
 
-  // Function to refresh the student list, will be called when face is recognized
   const refreshStudentList = useCallback(() => {
     setRefreshTrigger(prev => prev + 1);
   }, []);
 
   return (
-    <div className="max-w-7xl mx-auto p-8">
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between mb-6 gap-4">
+    <div className="container mx-auto py-8 px-4 sm:px-6 lg:px-8 space-y-8">
+      <header className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-3xl font-bold mb-2">Live Attendance Capture</h1>
-          <p className="text-muted-foreground">Use webcam to capture attendance in real-time</p>
+          <h1 className="text-3xl font-bold">Live Attendance Capture</h1>
+          <p className="text-muted-foreground mt-1">Point the camera at students to mark attendance in real-time.</p>
         </div>
         
-        <div className="flex flex-col sm:flex-row gap-4 items-center">
+        <div className="flex flex-col sm:flex-row gap-4 items-stretch sm:items-center">
           <div className="flex items-center gap-2">
-            <span className="text-sm text-muted-foreground whitespace-nowrap">Capture interval:</span>
+            <Label htmlFor="capture-interval" className="text-sm text-muted-foreground whitespace-nowrap">Interval:</Label>
             <Select 
               value={captureInterval.toString()} 
               onValueChange={handleIntervalChange}
             >
-              <SelectTrigger className="w-[140px]">
+              <SelectTrigger id="capture-interval" className="w-full sm:w-[140px]">
                 <SelectValue placeholder="Select interval" />
               </SelectTrigger>
               <SelectContent>
@@ -56,20 +50,30 @@ const LiveAttendance: React.FC = () => {
             </Select>
           </div>
           
-          <Button 
-            variant="outline" 
-            onClick={() => navigate(-1)}
-            className="gap-2"
-          >
+          <Button variant="outline" onClick={() => navigate(-1)} className="gap-2">
             <ArrowLeft className="h-4 w-4" />
             Back
           </Button>
         </div>
-      </div>
+      </header>
       
-      <WebcamCapture />
-      
-      <AllStudentsList onRefresh={refreshStudentList} key={refreshTrigger} />
+      <main className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+        <div className="lg:col-span-2">
+          <WebcamCapture groupId={0} onFaceRecognized={refreshStudentList} />
+        </div>
+        
+        <div className="lg:col-span-1">
+           <Card>
+             <CardHeader>
+               <CardTitle>Attendance Status</CardTitle>
+               <CardDescription>Live status of all registered students.</CardDescription>
+             </CardHeader>
+             <CardContent>
+                <AllStudentsList key={refreshTrigger} />
+             </CardContent>
+           </Card>
+        </div>
+      </main>
     </div>
   );
 };
