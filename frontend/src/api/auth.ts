@@ -2,7 +2,7 @@ import axios from 'axios';
 import apiClient from './api_client_fixed';
 import { setAdminToken } from '../utils/authToken';
 
-const API_URL = import.meta.env.VITE_API_ROOT || 'http://127.0.0.1:5000/api/v1';
+const API_URL = "/api/v1";
 
 // Authentication endpoints
 export const login = async (username: string, password: string) => {

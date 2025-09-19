@@ -55,11 +55,11 @@ export const registerStudent = async (data: RegisterStudentData) => {
   const formData = new FormData();
   formData.append('student_id', data.student_id);
   formData.append('name', data.name);
-  
+
   if (data.image) {
     formData.append('image', data.image);
   }
-  
+
   // Log formData contents for debugging (in development only)
   if (import.meta.env.DEV) {
     console.log('Registering student with form data:', {
@@ -80,12 +80,12 @@ export const registerStudent = async (data: RegisterStudentData) => {
     return response.data;
   } catch (error: any) {
     console.error('Error in registerStudent:', error);
-    
+
     // If the error has a response with data, return that to preserve the error messages
     if (error.response && error.response.data) {
       throw new Error(error.response.data.error || error.response.data.message || 'Registration failed');
     }
-    
+
     // Otherwise throw a generic error
     throw new Error('Student registration failed. Please try again.');
   }
@@ -109,13 +109,13 @@ export const getStudentsByGroup = async (groupId: number): Promise<{ students: S
     console.log(`Fetching students for group ${groupId} from ${apiClient.defaults.baseURL}/groups/${groupId}/students`);
     const response = await apiClient.get(`/groups/${groupId}/students`);
     console.log('Response data:', response.data);
-    
+
     // Ensure we always return the expected structure
     if (!response.data) {
       console.warn('No data in API response');
       return { students: [] };
     }
-    
+
     // Check if the response has the expected structure
     if (response.data.students) {
       // This is the expected format, use it directly
@@ -150,15 +150,15 @@ export const addStudentToGroup = async (groupId: number, data: RegisterStudentDa
   const formData = new FormData();
   formData.append('student_id', data.student_id);
   formData.append('name', data.name);
-  
+
   if (data.image) {
     formData.append('image', data.image);
   }
-  
+
   if (data.drive_link) {
     formData.append('drive_link', data.drive_link);
   }
-  
+
   try {
     const response = await apiClient.post(`/groups/${groupId}/students`, formData, {
       headers: {
@@ -169,14 +169,41 @@ export const addStudentToGroup = async (groupId: number, data: RegisterStudentDa
     return response.data;
   } catch (error: any) {
     console.error(`Error adding student to group ${groupId}:`, error);
-    
+
     // If the error has a response with data, return that to preserve the error messages
     if (error.response && error.response.data) {
       throw new Error(error.response.data.error || error.response.data.message || 'Registration failed');
     }
-    
+
     // Otherwise throw a generic error
     throw new Error('Failed to add student to group. Please try again.');
+  }
+};
+
+// Bulk import students to a group with dry run option
+export const validateStudentImport = async (groupId: number, file: File): Promise<BulkImportResult> => {
+  if (!groupId) {
+    throw new Error('Invalid group ID. Please select a group before validating students.');
+  }
+
+  console.log(`Validating student import for group ${groupId}`);
+
+  const formData = new FormData();
+  formData.append('file', file);
+  formData.append('dry_run', 'true');
+
+  try {
+    // The correct endpoint is under the groups blueprint
+    const response = await apiClient.post(`/groups/${groupId}/students/bulk`, formData, {
+      headers: {
+        // Let the browser set the Content-Type with the proper boundary for FormData
+        'Content-Type': undefined
+      },
+    });
+    return response.data;
+  } catch (error) {
+    console.error('Validation error:', error);
+    throw error;
   }
 };
 
@@ -185,12 +212,12 @@ export const bulkImportStudents = async (groupId: number, file: File): Promise<B
   if (!groupId) {
     throw new Error('Invalid group ID. Please select a group before importing students.');
   }
-  
+
   console.log(`Bulk importing students to group ${groupId}`);
-  
+
   const formData = new FormData();
   formData.append('file', file);
-  
+
   try {
     // The correct endpoint is under the groups blueprint
     const response = await apiClient.post(`/groups/${groupId}/students/bulk`, formData, {
@@ -209,7 +236,7 @@ export const bulkImportStudents = async (groupId: number, file: File): Promise<B
 // Update a student
 export const updateStudent = async (id: string, data: UpdateStudentData) => {
   const formData = new FormData();
-  
+
   if (data.student_id) formData.append('student_id', data.student_id);
   if (data.name) formData.append('name', data.name);
   if (data.image) formData.append('image', data.image);
@@ -228,4 +255,25 @@ export const updateStudent = async (id: string, data: UpdateStudentData) => {
 export const deleteStudent = async (id: string) => {
   const response = await apiClient.delete(`/students/${id}`);
   return response.data;
+};
+
+// Bulk delete students
+export const bulkDeleteStudents = async (ids: string[]): Promise<{
+  deleted: string[];
+  failed: { id: string; reason: string }[]
+}> => {
+  try {
+    const response = await apiClient.post('/students/bulk-delete', { ids });
+    return response.data;
+  } catch (error: any) {
+    console.error('Error in bulkDeleteStudents:', error);
+
+    // If the error has a response with data, return that to preserve the error messages
+    if (error.response && error.response.data) {
+      throw new Error(error.response.data.error || error.response.data.message || 'Bulk deletion failed');
+    }
+
+    // Otherwise throw a generic error
+    throw new Error('Failed to delete students. Please try again.');
+  }
 };

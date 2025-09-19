@@ -6,12 +6,44 @@ import sys
 import argparse
 
 # In-file defaults for implicit run (no args)
-DEFAULT_ADMIN_USERNAME = "rishi"
-DEFAULT_ADMIN_PASSWORD = "admin1"
+DEFAULT_ADMIN_USERNAME = "admin"
+DEFAULT_ADMIN_PASSWORD = "admin123"
 DEFAULT_IS_ADMIN = True
 
 # Add parent directory to path so we can import app modules
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+
+# Import needed for creating database
+import pymysql
+
+# First make sure the database exists
+def ensure_database_exists():
+    host = os.getenv('MYSQL_HOST', 'localhost')
+    port = int(os.getenv('MYSQL_PORT', '3306'))
+    user = os.getenv('MYSQL_USER', 'root')
+    password = os.getenv('MYSQL_PASSWORD', 'Rahul@1606')
+    db_name = 'face-logbook'
+    
+    try:
+        # Connect to MySQL server without specifying a database
+        connection = pymysql.connect(
+            host=host,
+            port=port,
+            user=user,
+            password=password,
+            charset='utf8mb4'
+        )
+        
+        with connection.cursor() as cursor:
+            # Create the database if it doesn't exist
+            cursor.execute(f"CREATE DATABASE IF NOT EXISTS `{db_name}` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci")
+            print(f"Database '{db_name}' created or verified")
+        
+        connection.close()
+        return True
+    except Exception as e:
+        print(f"Error creating database: {str(e)}")
+        return False
 
 from app import create_app, db
 from app.models.user import User
@@ -63,4 +95,10 @@ if __name__ == "__main__":
         is_admin = args.admin if (args.username or args.password or args.admin) else DEFAULT_IS_ADMIN
     
     print(f"Creating/updating user: {username} (admin={is_admin})")
+    
+    # First ensure the database exists
+    if not ensure_database_exists():
+        print("Failed to create or verify database. Cannot continue.")
+        sys.exit(1)
+    
     create_user(username, password, is_admin)

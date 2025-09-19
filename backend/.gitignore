@@ -14,6 +14,7 @@ dist-ssr
 .env
 # models/models/retinaface/
 credentials
+uploads/
 
 # Editor directories and files
 .vscode/*

@@ -2,7 +2,7 @@ import axios from 'axios';
 import { getAdminToken } from '../utils/authToken';
 
 // Base API configuration
-const API_ROOT = import.meta.env.VITE_API_ROOT || 'http://127.0.0.1:5000/api/v1';
+const API_ROOT = "/api/v1";
 
 console.log('API Root configured as:', API_ROOT);
 
@@ -38,12 +38,12 @@ apiClient.interceptors.request.use(
     } else {
       console.warn('No admin token found in localStorage');
     }
-    
+
     // Only add Content-Type: application/json for non-FormData payloads
     if (config.data && !(config.data instanceof FormData) && !config.headers['Content-Type']) {
       config.headers['Content-Type'] = 'application/json';
     }
-    
+
     // Log request info (in development only)
     if (import.meta.env.DEV) {
       console.log(`Request: ${config.method?.toUpperCase()} ${config.url}`, {
@@ -52,7 +52,7 @@ apiClient.interceptors.request.use(
         data: config.data
       });
     }
-    
+
     return config;
   },
   (error) => {
@@ -82,29 +82,29 @@ apiClient.interceptors.response.use(
         headers: error.response.headers,
         config: error.config
       });
-      
+
       // Extract error message from response
-      const message = error.response.data?.message || 
-                      error.response.data?.detail || 
-                      error.response.data?.error || 
-                      'An error occurred';
-      
+      const message = error.response.data?.message ||
+        error.response.data?.detail ||
+        error.response.data?.error ||
+        'An error occurred';
+
       // Enhance error with more details
       const apiError = new Error(message);
       (apiError as any).status = error.response.status;
       (apiError as any).data = error.response.data;
-      
+
       return Promise.reject(apiError);
     } else if (error.request) {
       // The request was made but no response was received
       console.error('Network Error:', error.request);
-      
+
       // Create network error with helpful message
       const networkError = new Error(
         'Cannot reach backend — check server and CORS. See console for details.'
       );
       (networkError as any).isNetworkError = true;
-      
+
       return Promise.reject(networkError);
     } else {
       // Something happened in setting up the request that triggered an Error

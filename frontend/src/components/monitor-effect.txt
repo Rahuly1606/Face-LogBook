@@ -1,0 +1,91 @@
+  // Add IP camera stream monitoring and auto-recovery
+  useEffect(() => {
+    // Only set up monitoring for IP camera
+    if (!useIpCamera) {
+      console.log("IP camera monitoring not needed - not using IP camera");
+      return;
+    }
+    
+    if (!ipCameraStream) {
+      console.log("IP camera monitoring not started - no stream available yet");
+      return;
+    }
+    
+    console.log("Setting up IP camera health monitoring");
+    
+    // Variables to track stream health
+    let lastFrameTime = Date.now();
+    let consecutiveFailures = 0;
+    
+    const healthCheckInterval = setInterval(() => {
+      if (!webcamRef.current) {
+        console.warn("Cannot monitor IP camera - webcamRef is null");
+        return;
+      }
+      
+      const video = webcamRef.current as unknown as HTMLVideoElement;
+      const now = Date.now();
+      
+      // Check video element status
+      console.log(`IP camera health check - readyState: ${video.readyState}, paused: ${video.paused}, ` +
+                 `dimensions: ${video.videoWidth}x${video.videoHeight}, ` +
+                 `time since last frame: ${now - lastFrameTime}ms`);
+      
+      // Detect if we're getting new frames
+      const isStalled = video.readyState < 3 || video.paused || !video.videoWidth || !video.videoHeight;
+      
+      if (isStalled) {
+        consecutiveFailures++;
+        console.warn(`IP camera stream appears to be stalled (failure #${consecutiveFailures}), attempting recovery...`);
+        
+        // Try increasingly aggressive recovery based on consecutive failures
+        try {
+          if (video.paused) {
+            console.log("Attempting to play paused video...");
+            video.play().catch(err => console.warn("Recovery play attempt failed:", err));
+          }
+          
+          // If multiple failures, try more aggressive recovery
+          if (consecutiveFailures >= 2) {
+            console.log("Aggressive recovery: Reconnecting stream source...");
+            
+            // Try reconnecting the stream
+            if (ipCameraStream && ipCameraStream.active) {
+              video.srcObject = null; // Clear first
+              setTimeout(() => {
+                if (video && ipCameraStream) {
+                  video.srcObject = ipCameraStream;
+                  video.play().catch(err => console.warn("Post-reconnect play failed:", err));
+                }
+              }, 500);
+            } else {
+              console.warn("IP camera stream is no longer active");
+            }
+          }
+          
+          // If severe issues persist, alert the user
+          if (consecutiveFailures >= 4) {
+            toast({
+              title: "Camera Connection Issues",
+              description: "The IP camera stream appears to be having problems. Try reconnecting.",
+              variant: "destructive",
+            });
+          }
+        } catch (err) {
+          console.error("Error during recovery attempt:", err);
+        }
+      } else {
+        // Reset failure counter if things are working
+        if (consecutiveFailures > 0) {
+          console.log("IP camera stream appears to be healthy again");
+          consecutiveFailures = 0;
+        }
+        lastFrameTime = now; // Update last successful frame time
+      }
+    }, 5000); // Check every 5 seconds
+    
+    return () => {
+      console.log("Cleaning up IP camera health monitoring");
+      clearInterval(healthCheckInterval);
+    };
+  }, [useIpCamera, ipCameraStream, toast]);

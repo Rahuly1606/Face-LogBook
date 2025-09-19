@@ -37,8 +37,9 @@ class Config:
     GOOGLE_SERVICE_ACCOUNT_JSON = os.getenv('GOOGLE_SERVICE_ACCOUNT_JSON', None)
     
     # Bulk import settings
-    BULK_IMPORT_BATCH_SIZE = int(os.getenv('BULK_IMPORT_BATCH_SIZE', 10))
-    BULK_IMPORT_TIMEOUT = int(os.getenv('BULK_IMPORT_TIMEOUT', 300))  # 5 minutes default
+    BULK_IMPORT_BATCH_SIZE = int(os.getenv('BULK_IMPORT_BATCH_SIZE', 50))  # Increased from 20 to 50
+    BULK_IMPORT_TIMEOUT = int(os.getenv('BULK_IMPORT_TIMEOUT', 1200))  # Increased to 20 minutes
+    MAX_IMPORT_ROWS = int(os.getenv('MAX_IMPORT_ROWS', 5000))  # Increased from 1000 to 5000
 
 class DevelopmentConfig(Config):
     """Development configuration."""
@@ -46,7 +47,7 @@ class DevelopmentConfig(Config):
     # Use a specific environment variable for the development database
     SQLALCHEMY_DATABASE_URI = os.getenv(
         'DEV_DATABASE_URL', 
-        'mysql+pymysql://root:Rishi%404617@localhost/face-logbook'
+        'mysql+pymysql://root:Rahul%401606@localhost/face-logbook'
     )
 
 class TestingConfig(Config):

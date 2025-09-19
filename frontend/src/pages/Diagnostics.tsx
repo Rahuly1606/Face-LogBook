@@ -8,10 +8,10 @@ const DiagnosticsPage: React.FC = () => {
   return (
     <div className="container mx-auto p-4">
       <h1 className="text-2xl font-bold mb-6">System Diagnostics</h1>
-      
+
       <div className="grid gap-6">
         <BackendDiagnostic />
-        
+
         <Card>
           <CardHeader>
             <CardTitle>Server Information</CardTitle>
@@ -19,13 +19,13 @@ const DiagnosticsPage: React.FC = () => {
           <CardContent className="space-y-4">
             <div className="grid grid-cols-2 gap-2">
               <div className="font-semibold">Backend URL:</div>
-              <div>{import.meta.env.VITE_API_ROOT || 'http://127.0.0.1:5000/api/v1'}</div>
-              
+              <div>/api/v1</div>
+
               <div className="font-semibold">Environment:</div>
               <div>{import.meta.env.MODE}</div>
             </div>
-            
-            <Button 
+
+            <Button
               variant="outline"
               onClick={() => {
                 localStorage.clear();
@@ -37,7 +37,7 @@ const DiagnosticsPage: React.FC = () => {
             </Button>
           </CardContent>
         </Card>
-        
+
         <Card>
           <CardHeader>
             <CardTitle>Image Upload Test</CardTitle>
@@ -51,7 +51,7 @@ const DiagnosticsPage: React.FC = () => {
             </div>
           </CardContent>
         </Card>
-        
+
         <Card>
           <CardHeader>
             <CardTitle>Webcam Diagnostic</CardTitle>
@@ -78,16 +78,16 @@ const TestImageUpload: React.FC = () => {
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    
+
     setIsUploading(true);
     setError(null);
     setResult(null);
-    
+
     const formData = new FormData();
     formData.append('image', file);
-    
+
     try {
-      const response = await fetch(`${import.meta.env.VITE_API_ROOT || 'http://127.0.0.1:5000/api/v1'}/debug/test-image-processing`, {
+      const response = await fetch(`/api/v1/debug/test-image-processing`, {
         method: 'POST',
         body: formData,
         headers: {
@@ -96,9 +96,9 @@ const TestImageUpload: React.FC = () => {
         },
         credentials: 'include'
       });
-      
+
       const data = await response.json();
-      
+
       if (response.ok) {
         setResult(data);
       } else {
@@ -111,12 +111,12 @@ const TestImageUpload: React.FC = () => {
       setIsUploading(false);
     }
   };
-  
+
   return (
     <div>
-      <input 
-        type="file" 
-        accept="image/*" 
+      <input
+        type="file"
+        accept="image/*"
         onChange={handleFileChange}
         disabled={isUploading}
         className="block w-full text-sm text-gray-500
@@ -126,25 +126,25 @@ const TestImageUpload: React.FC = () => {
                  file:bg-blue-50 file:text-blue-700
                  hover:file:bg-blue-100"
       />
-      
+
       {isUploading && <p className="mt-2 text-blue-600">Uploading...</p>}
-      
+
       {error && (
         <div className="mt-4 p-3 bg-red-50 border border-red-200 rounded text-red-600">
           {error}
         </div>
       )}
-      
+
       {result && (
         <div className="mt-4 p-3 bg-green-50 border border-green-200 rounded">
           <h3 className="font-semibold text-green-700 mb-2">Upload Successful</h3>
           <div className="grid grid-cols-2 gap-1 text-sm">
             <div className="font-medium">Image dimensions:</div>
             <div>{result.image_info.width} x {result.image_info.height} pixels</div>
-            
+
             <div className="font-medium">File size:</div>
             <div>{result.image_info.size_mb} MB ({result.image_info.size_bytes} bytes)</div>
-            
+
             <div className="font-medium">Channels:</div>
             <div>{result.image_info.channels}</div>
           </div>

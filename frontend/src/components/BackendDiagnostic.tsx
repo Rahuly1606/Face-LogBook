@@ -30,7 +30,7 @@ const BackendDiagnostic: React.FC = () => {
 
     try {
       const startTime = performance.now();
-      const response = await fetch(`${import.meta.env.VITE_API_ROOT || 'http://127.0.0.1:5000/api/v1'}/health`, {
+      const response = await fetch(`/api/v1/health`, {
         signal: AbortSignal.timeout(10000), // 10-second timeout
         headers: {
           'Content-Type': 'application/json',
@@ -64,7 +64,7 @@ const BackendDiagnostic: React.FC = () => {
     } catch (error: any) {
       const isTimeout = error.name === 'TimeoutError';
       const errorMessage = isTimeout ? 'Request timed out.' : (error.message || 'Unknown connection error.');
-      
+
       setStatuses({
         backend: { service: 'Backend API', status: 'offline', message: errorMessage },
         faceService: { service: 'Face Recognition', status: 'offline', message: 'Cannot connect via backend' },
@@ -88,9 +88,9 @@ const BackendDiagnostic: React.FC = () => {
     <Card className="shadow-lg rounded-xl">
       <CardHeader className="flex flex-row items-center justify-between pb-4">
         <CardTitle>System Status</CardTitle>
-        <Button 
-          variant="outline" 
-          size="sm" 
+        <Button
+          variant="outline"
+          size="sm"
           onClick={refreshStatus}
           disabled={isRefreshing}
           className="gap-1.5 transition-transform active:scale-95"
@@ -128,10 +128,10 @@ const ServiceStatusDisplay: React.FC<ServiceStatusDisplayProps> = ({ status, ser
     faceService: <Cpu className="h-6 w-6 text-muted-foreground" />,
     database: <Database className="h-6 w-6 text-muted-foreground" />,
   };
-  
+
   const currentStatus = statusConfig[status.status];
   const IconComponent = currentStatus.icon;
-  
+
   return (
     <div className={cn("p-4 rounded-lg border flex flex-col justify-between", currentStatus.bgColor)}>
       <div>
@@ -139,14 +139,14 @@ const ServiceStatusDisplay: React.FC<ServiceStatusDisplayProps> = ({ status, ser
           <h3 className="font-semibold text-lg">{status.service}</h3>
           {serviceIcons[serviceKey]}
         </div>
-        
+
         <div className="flex items-center gap-2 mb-2">
           <IconComponent className={cn("h-5 w-5", currentStatus.color, status.status === 'loading' && 'animate-spin')} />
           <span className={cn("font-bold", currentStatus.color)}>
             {currentStatus.text}
           </span>
         </div>
-        
+
         <p className="text-sm text-muted-foreground min-h-[40px]">
           {status.message || 'Awaiting status from server...'}
         </p>

@@ -2,7 +2,7 @@ import axios from 'axios';
 import { getAdminToken } from '../utils/authToken';
 
 // Base API configuration
-const API_ROOT = import.meta.env.VITE_API_ROOT || 'http://127.0.0.1:5000/api/v1';
+const API_ROOT = "/api/v1";
 
 // Create axios instance
 const apiClient = axios.create({
@@ -26,7 +26,7 @@ apiClient.interceptors.request.use(
         console.error('Error parsing user data from localStorage', error);
       }
     }
-    
+
     // Add admin token for all routes that need authentication
     const adminToken = getAdminToken();
     if (adminToken) {
@@ -35,7 +35,7 @@ apiClient.interceptors.request.use(
     } else {
       console.warn('No admin token found in localStorage');
     }
-    
+
     // Log request info (in development only)
     if (import.meta.env.DEV) {
       console.log(`Request: ${config.method?.toUpperCase()} ${config.url}`, {
@@ -44,7 +44,7 @@ apiClient.interceptors.request.use(
         data: config.data
       });
     }
-    
+
     return config;
   },
   (error) => {
@@ -75,42 +75,42 @@ apiClient.interceptors.response.use(
         headers: error.response.headers,
         config: error.config
       });
-      
+
       // Extract error message from response
-      const message = error.response.data?.message || 
-                      error.response.data?.detail || 
-                      error.response.data?.error || 
-                      'An error occurred';
-      
+      const message = error.response.data?.message ||
+        error.response.data?.detail ||
+        error.response.data?.error ||
+        'An error occurred';
+
       // Enhance error with more details
       const apiError = new Error(message);
       (apiError as any).status = error.response.status;
       (apiError as any).data = error.response.data;
-      
+
       return Promise.reject(apiError);
     } else if (error.request) {
       // The request was made but no response was received
       console.error('Network Error:', error.request);
-      
+
       // Check if this is a timeout error
       if (error.code === 'ECONNABORTED' && error.message.includes('timeout')) {
         console.error('Request timeout:', error.config?.url);
-        
+
         const timeoutError = new Error(
           'Request timed out - server may be processing too many faces'
         );
         (timeoutError as any).isNetworkError = true;
         (timeoutError as any).isTimeout = true;
-        
+
         return Promise.reject(timeoutError);
       }
-      
+
       // Create network error with helpful message
       const networkError = new Error(
         'Cannot reach backend — check server and CORS. See console for details.'
       );
       (networkError as any).isNetworkError = true;
-      
+
       return Promise.reject(networkError);
     } else {
       // Something happened in setting up the request that triggered an Error

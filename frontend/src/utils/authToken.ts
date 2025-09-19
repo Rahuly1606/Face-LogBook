@@ -32,7 +32,7 @@ export const checkAdminToken = async (): Promise<boolean> => {
   try {
     const token = getAdminToken();
     if (!token) return false;
-    const response = await fetch('http://127.0.0.1:5000/api/v1/debug/token-check', {
+    const response = await fetch('/api/v1/debug/token-check', {
       method: 'GET',
       headers: {
         'X-ADMIN-TOKEN': token
