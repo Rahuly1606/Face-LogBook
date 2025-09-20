@@ -1,9 +1,9 @@
 // api/auth/login.js - A specific proxy for the login endpoint
-import { json } from 'stream/consumers';
+// Updated with better error handling and response processing
 
 export const config = {
     api: {
-        bodyParser: true,
+        bodyParser: true, // Enable built-in body parser for JSON requests
     },
 };
 
@@ -26,7 +26,7 @@ export default async function handler(req, res) {
 
     console.log(`Proxying login request to: ${targetUrl}`);
     console.log(`Method: ${req.method}`);
-    console.log(`Body: ${JSON.stringify(req.body)}`);
+    console.log(`Body: ${JSON.stringify(req.body || {})}`);
 
     // Only allow POST requests for login
     if (req.method !== 'POST') {
@@ -39,20 +39,40 @@ export default async function handler(req, res) {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
+                'Accept': 'application/json',
             },
-            body: JSON.stringify(req.body),
+            body: JSON.stringify(req.body || {}),
         });
+
+        // Check if response is ok
+        if (!response.ok) {
+            console.error(`Login request failed with status ${response.status}`);
+
+            // Try to get error message
+            let errorData = {};
+            try {
+                errorData = await response.json();
+            } catch (e) {
+                console.error('Could not parse error response:', e);
+                errorData = { message: 'Unknown error occurred' };
+            }
+
+            return res.status(response.status).json(errorData);
+        }
 
         // Get response data
-        const data = await response.json().catch(e => {
+        let data;
+        try {
+            data = await response.json();
+            console.log(`Login response status: ${response.status}`);
+            console.log(`Login response data: ${JSON.stringify(data)}`);
+        } catch (e) {
             console.error('Failed to parse JSON response:', e);
-            return { error: 'Invalid JSON response', details: e.message };
-        });
-
-        console.log(`Login response status: ${response.status}`);
-        console.log(`Login response data: ${JSON.stringify(data)}`);
-
-        // Set status code
+            return res.status(500).json({
+                error: 'Invalid JSON response',
+                details: e.message
+            });
+        }
         res.status(response.status);
 
         // Send response data

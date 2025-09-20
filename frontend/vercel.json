@@ -6,6 +6,10 @@
             "dest": "/api/auth/login"
         },
         {
+            "src": "/api/auth/checkConnection",
+            "dest": "/api/auth/checkConnection"
+        },
+        {
             "src": "/api/test",
             "dest": "/api/test"
         },
