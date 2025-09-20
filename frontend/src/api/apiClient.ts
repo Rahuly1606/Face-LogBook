@@ -1,24 +1,27 @@
 import axios from 'axios';
 import { getAdminToken } from '../utils/authToken';
 
-// Base API configuration
-// Determine API root based on environment
-const determineApiRoot = () => {
-  // Check if we're running in a production build on Vercel
-  if (import.meta.env.PROD) {
-    // Use the local API proxy in production to avoid CORS issues
-    return "/api";
-  }
+// Default API root (will be properly set in the initialize function)
+let API_ROOT = '/api';
 
-  // For local development
-  return "http://localhost:5000/api/v1";
+// Initialize API client (asynchronous)
+const initializeApiClient = async () => {
+  try {
+    // Import dynamically to avoid circular dependencies
+    const { getApiRoot } = await import('./apiEndpoint');
+    API_ROOT = await getApiRoot() as string;
+    console.log('API Root initialized as:', API_ROOT);
+    apiClient.defaults.baseURL = API_ROOT;
+  } catch (error) {
+    console.error('Failed to initialize API client:', error);
+    // Fallback to default
+    API_ROOT = '/api';
+    apiClient.defaults.baseURL = API_ROOT;
+  }
 };
 
-const API_ROOT = import.meta.env.VITE_API_ROOT || determineApiRoot();
-
-console.log('API Root configured as:', API_ROOT);
-
-// Create axios instance
+// Create axios instance with initial configuration
+// This will be updated after initialization
 const apiClient = axios.create({
   baseURL: API_ROOT,
   timeout: 60000, // Increased to 60 seconds for face processing
@@ -131,4 +134,4 @@ apiClient.interceptors.response.use(
 );
 
 export default apiClient;
-export { API_ROOT };
+export { API_ROOT, initializeApiClient };

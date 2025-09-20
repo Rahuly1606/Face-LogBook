@@ -2,12 +2,20 @@
     "version": 2,
     "routes": [
         {
+            "src": "/api/auth/login",
+            "dest": "/vercel-api/auth-login.js"
+        },
+        {
+            "src": "/api/test",
+            "dest": "/vercel-api/test.js"
+        },
+        {
             "src": "/api/(.*)",
-            "dest": "/api/proxy?path=$1"
+            "dest": "/vercel-api/proxy.js?path=$1"
         }
     ],
     "functions": {
-        "api/**/*.js": {
+        "vercel-api/**/*.js": {
             "memory": 1024,
             "maxDuration": 10
         }
