@@ -22,7 +22,7 @@ console.log('API Root configured as:', API_ROOT);
 // Create axios instance
 const apiClient = axios.create({
   baseURL: API_ROOT,
-  timeout: 20000,
+  timeout: 60000, // Increased to 60 seconds for face processing
   withCredentials: true, // Important for CORS with credentials
   headers: {
     'Content-Type': 'application/json',

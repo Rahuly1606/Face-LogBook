@@ -1,4 +1,4 @@
-import apiClient from './api_client_fixed';
+import apiClient from './apiClient';
 import api from './auth';  // Import the auth-enabled API client
 
 export interface RecognizedStudent {
@@ -91,7 +91,7 @@ export const submitLiveAttendance = async (imageBlob: Blob, retryCount = 0): Pro
     return response.data;
   } catch (error: any) {
     console.error('Error submitting live attendance:', error);
-    
+
     // Handle timeout errors specifically
     if (error.isTimeout) {
       console.warn('Processing timeout detected - likely due to many faces');
@@ -104,7 +104,7 @@ export const submitLiveAttendance = async (imageBlob: Blob, retryCount = 0): Pro
         errorMessage: 'Processing timeout - too many faces or complex image'
       } as LiveAttendanceResponse;
     }
-    
+
     // Implement automatic retry for network errors (max 1 retry)
     if (error.isNetworkError && retryCount < 1) {
       console.log(`Retrying live attendance (attempt ${retryCount + 1})...`);
@@ -112,7 +112,7 @@ export const submitLiveAttendance = async (imageBlob: Blob, retryCount = 0): Pro
       await new Promise(resolve => setTimeout(resolve, 1000));
       return submitLiveAttendance(imageBlob, retryCount + 1);
     }
-    
+
     // Return a fallback response to prevent UI errors
     return {
       recognized: [],

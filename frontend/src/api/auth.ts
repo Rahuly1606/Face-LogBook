@@ -1,13 +1,10 @@
-import axios from 'axios';
-import apiClient from './api_client_fixed';
+import apiClient from './apiClient';
 import { setAdminToken } from '../utils/authToken';
-
-const API_URL = "https://lmcvf9h0-5000.inc1.devtunnels.ms/api/v1";
 
 // Authentication endpoints
 export const login = async (username: string, password: string) => {
   try {
-    const response = await axios.post(`${API_URL}/auth/login`, { username, password });
+    const response = await apiClient.post('/auth/login', { username, password });
 
     if (response.data.success && response.data.access_token) {
       const token: string = response.data.access_token;
