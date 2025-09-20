@@ -1,4 +1,11 @@
 // api/auth/login.js - A specific proxy for the login endpoint
+import { json } from 'stream/consumers';
+
+export const config = {
+    api: {
+        bodyParser: true,
+    },
+};
 
 export default async function handler(req, res) {
     // Enable CORS
@@ -37,7 +44,11 @@ export default async function handler(req, res) {
         });
 
         // Get response data
-        const data = await response.json();
+        const data = await response.json().catch(e => {
+            console.error('Failed to parse JSON response:', e);
+            return { error: 'Invalid JSON response', details: e.message };
+        });
+
         console.log(`Login response status: ${response.status}`);
         console.log(`Login response data: ${JSON.stringify(data)}`);
 

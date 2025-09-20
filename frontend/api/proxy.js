@@ -93,11 +93,17 @@ export default async function handler(req, res) {
                     body = JSON.parse(body);
                 } catch (e) {
                     // Not JSON, use as is
+                    console.error('Error parsing JSON body:', e);
                 }
+            } else if (!body) {
+                // Default to empty object if body is undefined or null
+                body = {};
             }
 
             fetchOptions.body = JSON.stringify(body);
-        } const response = await fetch(url, fetchOptions);
+        }
+
+        const response = await fetch(url, fetchOptions);
 
         // Get response data
         const contentType = response.headers.get('content-type');
