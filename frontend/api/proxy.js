@@ -1,4 +1,11 @@
 // api/proxy.js - A serverless function to proxy requests to your backend API
+import parseMultipartForm from './parseMultipartForm';
+
+export const config = {
+    api: {
+        bodyParser: false, // Disable the built-in bodyParser for file uploads
+    },
+};
 
 export default async function handler(req, res) {
     // Enable CORS
@@ -23,37 +30,74 @@ export default async function handler(req, res) {
     console.log(`Method: ${req.method}`);
     console.log(`Headers: ${JSON.stringify(req.headers)}`);
 
-    if (req.body) {
-        console.log(`Body: ${JSON.stringify(req.body)}`);
-    }
-
-    // Extract headers we want to forward
-    const headers = {};
-    const headersToForward = [
-        'content-type',
-        'authorization',
-        'x-admin-token',
-    ];
-
-    for (const header of headersToForward) {
-        if (req.headers[header]) {
-            headers[header] = req.headers[header];
-        }
-    }
-
     try {
-        // Forward the request to the API
+        // Prepare fetch options
         const fetchOptions = {
             method: req.method,
-            headers: headers,
+            headers: {
+                'Authorization': req.headers.authorization,
+                'X-ADMIN-TOKEN': req.headers['x-admin-token'],
+            },
         };
 
-        // Include body for methods that support it
-        if (['POST', 'PUT', 'PATCH'].includes(req.method)) {
-            fetchOptions.body = JSON.stringify(req.body);
-        }
+        // Check if this is a multipart/form-data request (file upload)
+        const requestContentType = req.headers['content-type'] || '';
+        const isMultipart = requestContentType.includes('multipart/form-data');
 
-        const response = await fetch(url, fetchOptions);
+        if (isMultipart) {
+            console.log('Processing multipart form data');
+
+            try {
+                // Parse the multipart form data
+                const formData = await parseMultipartForm(req);
+
+                if (!formData.files || !formData.files.image) {
+                    return res.status(400).json({
+                        error: 'No image file provided',
+                        message: 'Image file is required for this request'
+                    });
+                }
+
+                // Create form data for fetch
+                const form = new FormData();
+
+                // Add the file
+                const file = formData.files.image;
+                const blob = new Blob([file.data], { type: file.mimetype });
+                form.append('image', blob, file.name);
+
+                // Add any other form fields
+                Object.entries(formData.fields).forEach(([key, value]) => {
+                    form.append(key, value);
+                });
+
+                // Set the form as the body
+                fetchOptions.body = form;
+
+                console.log(`Forwarding file: ${file.name}, size: ${file.size}, type: ${file.mimetype}`);
+            } catch (formError) {
+                console.error('Error parsing form data:', formError);
+                return res.status(400).json({
+                    error: 'Invalid form data',
+                    message: formError.message
+                });
+            }
+        } else if (['POST', 'PUT', 'PATCH'].includes(req.method)) {
+            // For JSON requests
+            fetchOptions.headers['Content-Type'] = 'application/json';
+
+            // Parse body if not already parsed
+            let body = req.body;
+            if (typeof body === 'string') {
+                try {
+                    body = JSON.parse(body);
+                } catch (e) {
+                    // Not JSON, use as is
+                }
+            }
+
+            fetchOptions.body = JSON.stringify(body);
+        } const response = await fetch(url, fetchOptions);
 
         // Get response data
         const contentType = response.headers.get('content-type');
@@ -79,7 +123,11 @@ export default async function handler(req, res) {
         });
 
         // Send response data
-        res.send(data);
+        if (typeof data === 'object') {
+            res.json(data);
+        } else {
+            res.send(data);
+        }
     } catch (error) {
         console.error('Proxy error:', error);
         res.status(500).json({

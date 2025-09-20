@@ -10,6 +10,10 @@
             "dest": "/api/test"
         },
         {
+            "src": "/api/attendance/live",
+            "dest": "/api/attendance/live"
+        },
+        {
             "src": "/api/(.*)",
             "dest": "/api/proxy?path=$1"
         }
@@ -17,7 +21,7 @@
     "functions": {
         "api/**/*.js": {
             "memory": 1024,
-            "maxDuration": 10
+            "maxDuration": 30
         }
     }
 }
