@@ -611,7 +611,7 @@ const WebcamCapture: React.FC<WebcamCaptureProps> = ({ groupId, onFaceRecognized
 
   // JSX
   return (
-    <div className="space-y-6 p-4 sm:p-6 md:p-8" data-groupid={groupId}>
+    <div className="space-y-4 sm:space-y-6 p-2 sm:p-4 md:p-6" data-groupid={groupId}>
       <div aria-live="polite" aria-atomic="true" className="sr-only" role="status">
         {lastAnnouncementRef.current}
       </div>
@@ -620,38 +620,44 @@ const WebcamCapture: React.FC<WebcamCaptureProps> = ({ groupId, onFaceRecognized
         <div
           ref={panelRef}
           onScroll={handlePanelScroll}
-          className="fixed z-50 top-4 inset-x-4 md:inset-x-auto md:right-6 md:top-6 md:bottom-6 md:w-72 max-h-[30vh] md:max-h-none overflow-y-auto bg-background/20 dark:bg-black/20 backdrop-blur-xl rounded-2xl ring-1 ring-border shadow-2xl space-y-3 p-3 md:p-4"
+          className="fixed z-50 bottom-16 sm:bottom-auto sm:top-4 inset-x-2 sm:inset-x-4 md:inset-x-auto md:right-6 md:top-6 md:bottom-auto md:w-72 max-h-[30vh] sm:max-h-[40vh] md:max-h-none overflow-y-auto bg-background/30 dark:bg-black/30 backdrop-blur-xl rounded-xl sm:rounded-2xl ring-1 ring-border shadow-2xl space-y-2 sm:space-y-3 p-2 sm:p-3 md:p-4"
         >
-          {messages.map(msg => (
-            <div
-              key={msg.id}
-              className="bg-background/80 dark:bg-white/10 rounded-lg p-3 flex items-center gap-3 shadow-md transition-transform hover:scale-[1.02]"
-            >
-              <div className={`flex-shrink-0 rounded-full p-1.5 ${msg.kind === 'enter' ? 'bg-green-100 text-green-700 dark:bg-green-900/50 dark:text-green-300' : 'bg-amber-100 text-amber-700 dark:bg-amber-900/50 dark:text-amber-400'}`}>
-                {msg.kind === 'enter' ? <CheckCircle2 className="h-5 w-5" /> : <LogOut className="h-5 w-5" />}
+          {messages.length > 0 ? (
+            messages.map(msg => (
+              <div
+                key={msg.id}
+                className="bg-background/80 dark:bg-white/10 rounded-lg p-2 sm:p-3 flex items-center gap-2 sm:gap-3 shadow-md transition-transform hover:scale-[1.02]"
+              >
+                <div className={`flex-shrink-0 rounded-full p-1 sm:p-1.5 ${msg.kind === 'enter' ? 'bg-green-100 text-green-700 dark:bg-green-900/50 dark:text-green-300' : 'bg-amber-100 text-amber-700 dark:bg-amber-900/50 dark:text-amber-400'}`}>
+                  {msg.kind === 'enter' ? <CheckCircle2 className="h-4 w-4 sm:h-5 sm:w-5" /> : <LogOut className="h-4 w-4 sm:h-5 sm:w-5" />}
+                </div>
+                <div className="text-xs sm:text-sm font-medium text-foreground line-clamp-2">{msg.text}</div>
               </div>
-              <div className="text-sm font-medium text-foreground">{msg.text}</div>
+            ))
+          ) : (
+            <div className="text-xs sm:text-sm text-center text-muted-foreground py-2">
+              No attendance events yet
             </div>
-          ))}
+          )}
         </div>
       )}
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6">
         <Card className="overflow-hidden">
-          <CardHeader className="flex flex-row flex-wrap items-center justify-between gap-4">
-            <CardTitle>Live Camera Feed</CardTitle>
-            <div className="flex flex-grow sm:flex-grow-0 items-center gap-2">
+          <CardHeader className="flex flex-col sm:flex-row items-center justify-between gap-2 sm:gap-4 px-3 py-2 sm:px-4 sm:py-3">
+            <CardTitle className="text-base sm:text-lg">Live Camera Feed</CardTitle>
+            <div className="flex flex-wrap items-center justify-center gap-2 w-full sm:w-auto">
               {!isCapturing ? (
-                <Button onClick={startAutoCapture} className="gap-2 w-full sm:w-auto">
-                  <Play className="h-4 w-4" /> Start
+                <Button onClick={startAutoCapture} className="gap-1.5 h-8 text-xs sm:text-sm px-2.5 sm:px-3 flex-1 sm:flex-none">
+                  <Play className="h-3.5 w-3.5" /> Start
                 </Button>
               ) : (
-                <Button onClick={stopAutoCapture} variant="destructive" className="gap-2 w-full sm:w-auto">
-                  <Pause className="h-4 w-4" /> Stop
+                <Button onClick={stopAutoCapture} variant="destructive" className="gap-1.5 h-8 text-xs sm:text-sm px-2.5 sm:px-3 flex-1 sm:flex-none">
+                  <Pause className="h-3.5 w-3.5" /> Stop
                 </Button>
               )}
-              <Button onClick={captureAndProcess} variant="outline" className="gap-2 w-full sm:w-auto" disabled={isProcessing.current}>
-                <Camera className="h-4 w-4" /> Manual
+              <Button onClick={captureAndProcess} variant="outline" className="gap-1.5 h-8 text-xs sm:text-sm px-2.5 sm:px-3 flex-1 sm:flex-none" disabled={isProcessing.current}>
+                <Camera className="h-3.5 w-3.5" /> Manual
               </Button>
               <Button
                 onClick={() => {
@@ -667,10 +673,10 @@ const WebcamCapture: React.FC<WebcamCaptureProps> = ({ groupId, onFaceRecognized
                   setShowIpCamera(true);
                 }}
                 variant="outline"
-                className="gap-2 w-full sm:w-auto"
+                className="gap-1.5 h-8 text-xs sm:text-sm px-2.5 sm:px-3 flex-1 sm:flex-none"
                 disabled={isProcessing.current}
               >
-                <Smartphone className="h-4 w-4" /> Use IP Camera
+                <Smartphone className="h-3.5 w-3.5" /> Use IP Camera
               </Button>
             </div>
           </CardHeader>
@@ -906,22 +912,22 @@ const WebcamCapture: React.FC<WebcamCaptureProps> = ({ groupId, onFaceRecognized
           </CardContent>
         </Card>
         <Card className="overflow-hidden">
-          <CardHeader className="flex flex-row items-center justify-between">
-            <CardTitle>Last Capture</CardTitle>
-            <Button variant="ghost" size="sm" onClick={clearStudentList} className="gap-1.5">
-              <RefreshCw className="h-4 w-4" />
+          <CardHeader className="flex flex-row items-center justify-between px-3 py-2 sm:px-4 sm:py-3">
+            <CardTitle className="text-base sm:text-lg">Last Capture</CardTitle>
+            <Button variant="ghost" size="sm" onClick={clearStudentList} className="gap-1.5 h-8 text-xs sm:text-sm px-2.5">
+              <RefreshCw className="h-3.5 w-3.5" />
               Reset List
             </Button>
           </CardHeader>
-          <CardContent>
+          <CardContent className="px-3 pb-3 sm:px-4 sm:pb-4">
             <div className="aspect-video w-full rounded-lg overflow-hidden bg-secondary shadow-inner ring-1 ring-border">
               {lastCapture ? (
                 <img src={lastCapture} alt="Last capture" className="w-full h-full object-cover" />
               ) : (
                 <div className="flex h-full items-center justify-center text-muted-foreground">
                   <div className="text-center">
-                    <CameraOff className="h-12 w-12 mx-auto mb-3 text-gray-400" />
-                    <p className="font-medium">No Capture Yet</p>
+                    <CameraOff className="h-10 w-10 sm:h-12 sm:w-12 mx-auto mb-2 sm:mb-3 text-gray-400" />
+                    <p className="font-medium text-sm sm:text-base">No Capture Yet</p>
                     <p className="text-xs text-gray-500">Press 'Start' to begin</p>
                   </div>
                 </div>

@@ -23,21 +23,21 @@ const LiveAttendance: React.FC = () => {
   }, []);
 
   return (
-    <div className="container mx-auto py-8 px-4 sm:px-6 lg:px-8 space-y-8">
-      <header className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div>
-          <h1 className="text-3xl font-bold">Live Attendance Capture</h1>
-          <p className="text-muted-foreground mt-1">Point the camera at students to mark attendance in real-time.</p>
+    <div className="container mx-auto py-4 px-3 sm:py-8 sm:px-6 lg:px-8 space-y-4 sm:space-y-8">
+      <header className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 sm:gap-4">
+        <div className="text-center sm:text-left">
+          <h1 className="text-2xl sm:text-3xl font-bold">Live Attendance Capture</h1>
+          <p className="text-muted-foreground mt-1 text-sm sm:text-base">Point the camera at students to mark attendance in real-time.</p>
         </div>
-        
-        <div className="flex flex-col sm:flex-row gap-4 items-stretch sm:items-center">
-          <div className="flex items-center gap-2">
+
+        <div className="flex flex-row gap-2 sm:gap-4 items-center justify-center sm:justify-end flex-wrap">
+          <div className="flex items-center gap-2 w-full sm:w-auto justify-center">
             <Label htmlFor="capture-interval" className="text-sm text-muted-foreground whitespace-nowrap">Interval:</Label>
-            <Select 
-              value={captureInterval.toString()} 
+            <Select
+              value={captureInterval.toString()}
               onValueChange={handleIntervalChange}
             >
-              <SelectTrigger id="capture-interval" className="w-full sm:w-[140px]">
+              <SelectTrigger id="capture-interval" className="w-[140px] h-9 text-sm">
                 <SelectValue placeholder="Select interval" />
               </SelectTrigger>
               <SelectContent>
@@ -49,29 +49,29 @@ const LiveAttendance: React.FC = () => {
               </SelectContent>
             </Select>
           </div>
-          
-          <Button variant="outline" onClick={() => navigate(-1)} className="gap-2">
+
+          <Button variant="outline" onClick={() => navigate(-1)} className="gap-2 h-9 px-3 text-sm sm:text-base w-full sm:w-auto">
             <ArrowLeft className="h-4 w-4" />
             Back
           </Button>
         </div>
       </header>
-      
-      <main className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-        <div className="lg:col-span-2">
+
+      <main className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6 lg:gap-8">
+        <div className="md:col-span-1 lg:col-span-2 order-1">
           <WebcamCapture groupId={0} onFaceRecognized={refreshStudentList} />
         </div>
-        
-        <div className="lg:col-span-1">
-           <Card>
-             <CardHeader>
-               <CardTitle>Attendance Status</CardTitle>
-               <CardDescription>Live status of all registered students.</CardDescription>
-             </CardHeader>
-             <CardContent>
-                <AllStudentsList key={refreshTrigger} />
-             </CardContent>
-           </Card>
+
+        <div className="md:col-span-1 lg:col-span-1 order-2">
+          <Card className="shadow-sm">
+            <CardHeader className="px-4 py-3 sm:px-6 sm:py-4">
+              <CardTitle className="text-lg sm:text-xl">Attendance Status</CardTitle>
+              <CardDescription className="text-xs sm:text-sm">Live status of all registered students.</CardDescription>
+            </CardHeader>
+            <CardContent className="px-4 pb-4 sm:px-6">
+              <AllStudentsList key={refreshTrigger} />
+            </CardContent>
+          </Card>
         </div>
       </main>
     </div>
