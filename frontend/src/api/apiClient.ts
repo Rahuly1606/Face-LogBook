@@ -2,7 +2,20 @@ import axios from 'axios';
 import { getAdminToken } from '../utils/authToken';
 
 // Base API configuration
-const API_ROOT = "https://lmcvf9h0-5000.inc1.devtunnels.ms/api/v1";
+// Determine API root based on environment
+const determineApiRoot = () => {
+  // Check if we're running in a production build on Vercel
+  if (import.meta.env.PROD) {
+    // If we're deployed on Vercel, return the dev tunnels URL for now
+    // In a real production scenario, you would use your production backend URL
+    return "https://lmcvf9h0-5000.inc1.devtunnels.ms/api/v1";
+  }
+
+  // For local development
+  return "http://localhost:5000/api/v1";
+};
+
+const API_ROOT = import.meta.env.VITE_API_ROOT || determineApiRoot();
 
 console.log('API Root configured as:', API_ROOT);
 

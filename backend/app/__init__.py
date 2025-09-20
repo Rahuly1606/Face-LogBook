@@ -35,8 +35,9 @@ def create_app(config_name='dev'):
     CORS(app, 
          resources={r"/api/*": {"origins": allowed_origins}},
          supports_credentials=True,
-         allow_headers=["Content-Type", "Authorization", "X-ADMIN-TOKEN"],
-         methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"])
+         allow_headers=["Content-Type", "Authorization", "X-ADMIN-TOKEN", "Origin", "Accept"],
+         methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+         expose_headers=["Content-Length", "Content-Type"])
     
     # Add error handler for CORS preflight requests
     @app.after_request
@@ -45,11 +46,12 @@ def create_app(config_name='dev'):
         origin = request.headers.get('Origin')
         if origin and origin in allowed_origins:
             response.headers.set('Access-Control-Allow-Origin', origin)
-            response.headers.set('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-ADMIN-TOKEN')
+            response.headers.set('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-ADMIN-TOKEN, Origin, Accept')
             response.headers.set('Access-Control-Allow-Methods', 'GET, PUT, POST, DELETE, OPTIONS')
             response.headers.set('Access-Control-Allow-Credentials', 'true')
+            response.headers.set('Access-Control-Max-Age', '3600')  # Cache preflight response for 1 hour
             
-            # Prevent redirects for preflight requests
+            # Prevent redirects for preflight requests by returning 200 OK
             if request.method == 'OPTIONS' and response.status_code >= 300 and response.status_code < 400:
                 return make_response('', 200)
         
