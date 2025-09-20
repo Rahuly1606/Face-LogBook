@@ -1,11 +1,31 @@
 // api/proxy.js - A serverless function to proxy requests to your backend API
 
 export default async function handler(req, res) {
+    // Enable CORS
+    res.setHeader('Access-Control-Allow-Credentials', 'true');
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    res.setHeader('Access-Control-Allow-Methods', 'GET,OPTIONS,PATCH,DELETE,POST,PUT');
+    res.setHeader(
+        'Access-Control-Allow-Headers',
+        'X-CSRF-Token, X-Requested-With, Accept, Accept-Version, Content-Length, Content-MD5, Content-Type, Date, X-Api-Version, Authorization, X-ADMIN-TOKEN'
+    );
+
+    // Handle preflight OPTIONS request
+    if (req.method === 'OPTIONS') {
+        return res.status(200).end();
+    }
+
     const targetUrl = 'https://lmcvf9h0-5000.inc1.devtunnels.ms/api/v1';
     const path = req.query.path || '';
     const url = `${targetUrl}/${path}`;
 
     console.log(`Proxying request to: ${url}`);
+    console.log(`Method: ${req.method}`);
+    console.log(`Headers: ${JSON.stringify(req.headers)}`);
+
+    if (req.body) {
+        console.log(`Body: ${JSON.stringify(req.body)}`);
+    }
 
     // Extract headers we want to forward
     const headers = {};
@@ -44,6 +64,11 @@ export default async function handler(req, res) {
         } else {
             data = await response.text();
         }
+
+        // Log response
+        console.log(`Response status: ${response.status}`);
+        console.log(`Response headers: ${JSON.stringify(Object.fromEntries(response.headers))}`);
+        console.log(`Response data: ${typeof data === 'object' ? JSON.stringify(data) : data}`);
 
         // Set status code
         res.status(response.status);
