@@ -2,7 +2,7 @@ import axios from 'axios';
 import apiClient from './api_client_fixed';
 import { setAdminToken } from '../utils/authToken';
 
-const API_URL = "/api/v1";
+const API_URL = "https://lmcvf9h0-5000.inc1.devtunnels.ms/api/v1";
 
 // Authentication endpoints
 export const login = async (username: string, password: string) => {

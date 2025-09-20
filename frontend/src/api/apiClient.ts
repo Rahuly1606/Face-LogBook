@@ -2,7 +2,7 @@ import axios from 'axios';
 import { getAdminToken } from '../utils/authToken';
 
 // Base API configuration
-const API_ROOT = "/api/v1";
+const API_ROOT = "https://lmcvf9h0-5000.inc1.devtunnels.ms/api/v1";
 
 console.log('API Root configured as:', API_ROOT);
 
