@@ -17,7 +17,7 @@ import traceback
 import pymysql
 from pymysql.err import OperationalError
 import urllib.parse
-
+import tempfile
 
 
 # Set up logging
@@ -30,17 +30,53 @@ sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 # Load environment variables from .env file
 load_dotenv()
 
+# Initialize SSL for Aiven if configured
+def setup_aiven_ssl():
+    """Set up SSL for Aiven MySQL connection."""
+    # If AIVEN_CA_PEM is provided, write it to a temporary file
+    if os.getenv('AIVEN_CA_PEM'):
+        logger.info("Using CA certificate from AIVEN_CA_PEM environment variable")
+        try:
+            with tempfile.NamedTemporaryFile(delete=False, suffix='.pem') as ca_file:
+                ca_file.write(os.getenv('AIVEN_CA_PEM').encode())
+                ca_path = ca_file.name
+            
+            # Set AIVEN_CA_PATH environment variable for other components to use
+            os.environ['AIVEN_CA_PATH'] = ca_path
+            logger.info(f"CA certificate written to temporary file: {ca_path}")
+            return ca_path
+        except Exception as e:
+            logger.error(f"Failed to write CA certificate to temporary file: {str(e)}")
+    
+    # Return existing CA path if provided
+    return os.getenv('AIVEN_CA_PATH')
+
 def create_mysql_database():
     """Create the MySQL database if it doesn't exist"""
     try:
-        # Hardcoded credentials from .env file
-        host = os.getenv('MYSQL_HOST', 'localhost')
-        port = int(os.getenv('MYSQL_PORT', '3306'))
-        user = os.getenv('MYSQL_USER', 'root')
-        password = os.getenv('MYSQL_PASSWORD', 'Rahul@1606')
-        db_name = 'face-logbook'
+        # Set up Aiven SSL if configured
+        ca_path = setup_aiven_ssl()
+        ssl_config = {"ca": ca_path} if ca_path else None
         
-        logger.info(f"Connecting to MySQL: {user}@{host}:{port}")
+        # Check if Aiven MySQL is configured
+        if all([os.getenv(var) for var in ['AIVEN_HOST', 'AIVEN_PORT', 'AIVEN_USER', 'AIVEN_PASSWORD', 'AIVEN_DB']]):
+            # Use Aiven MySQL credentials
+            host = os.getenv('AIVEN_HOST')
+            port = int(os.getenv('AIVEN_PORT'))
+            user = os.getenv('AIVEN_USER')
+            password = os.getenv('AIVEN_PASSWORD')
+            db_name = os.getenv('AIVEN_DB')
+            
+            logger.info(f"Using Aiven MySQL: {user}@{host}:{port}")
+        else:
+            # Fallback to local MySQL credentials
+            host = os.getenv('MYSQL_HOST', 'localhost')
+            port = int(os.getenv('MYSQL_PORT', '3306'))
+            user = os.getenv('MYSQL_USER', 'root')
+            password = os.getenv('MYSQL_PASSWORD', 'Rahul@1606')
+            db_name = 'face-logbook'
+            
+            logger.info(f"Using local MySQL: {user}@{host}:{port}")
         
         # Connect to MySQL server without specifying a database
         connection = pymysql.connect(
@@ -48,7 +84,8 @@ def create_mysql_database():
             port=port,
             user=user,
             password=password,
-            charset='utf8mb4'
+            charset='utf8mb4',
+            ssl=ssl_config
         )
         
         with connection.cursor() as cursor:
@@ -114,7 +151,26 @@ if __name__ == "__main__":
 
 def get_database_credentials():
     """Extract database credentials from environment variables"""
-    # First, check for individual environment variables (more reliable)
+    # First, check for Aiven environment variables
+    aiven_host = os.getenv('AIVEN_HOST')
+    aiven_port = os.getenv('AIVEN_PORT')
+    aiven_user = os.getenv('AIVEN_USER')
+    aiven_password = os.getenv('AIVEN_PASSWORD')
+    aiven_db = os.getenv('AIVEN_DB')
+    
+    # If all required Aiven variables are present, use them
+    if aiven_host and aiven_port and aiven_user and aiven_password and aiven_db:
+        logger.info(f"Using Aiven MySQL credentials for user: {aiven_user}")
+        return {
+            'host': aiven_host,
+            'port': int(aiven_port),
+            'user': aiven_user,
+            'password': aiven_password,
+            'db_name': aiven_db,
+            'is_aiven': True
+        }
+    
+    # Then, check for individual environment variables (more reliable)
     mysql_host = os.getenv('MYSQL_HOST')
     mysql_port = os.getenv('MYSQL_PORT')
     mysql_user = os.getenv('MYSQL_USER')
@@ -128,7 +184,8 @@ def get_database_credentials():
             'port': int(mysql_port) if mysql_port else 3306,
             'user': mysql_user,
             'password': mysql_password,
-            'db_name': 'face-logbook'
+            'db_name': 'face-logbook',
+            'is_aiven': False
         }
     
     # Try to extract from connection string as fallback
@@ -178,7 +235,8 @@ def get_database_credentials():
                 'port': port,
                 'user': username,
                 'password': password,
-                'db_name': db_name
+                'db_name': db_name,
+                'is_aiven': False
             }
         except Exception as e:
             logger.warning(f"Failed to parse DEV_DATABASE_URL: {str(e)}")
@@ -191,7 +249,8 @@ def get_database_credentials():
         'port': 3306,
         'user': 'root',
         'password': 'Rahul@1606',  # Using the password from the .env file as fallback
-        'db_name': 'face-logbook'
+        'db_name': 'face-logbook',
+        'is_aiven': False
     }
 
 def create_database_if_not_exists():
@@ -201,13 +260,20 @@ def create_database_if_not_exists():
     try:
         logger.info(f"Connecting to MySQL server: {credentials['user']}@{credentials['host']}:{credentials['port']}")
         
+        # Set up SSL if using Aiven
+        ssl_config = None
+        if credentials.get('is_aiven', False) and os.getenv('AIVEN_CA_PATH'):
+            ssl_config = {"ca": os.getenv('AIVEN_CA_PATH')}
+            logger.info(f"Using SSL with CA certificate: {os.getenv('AIVEN_CA_PATH')}")
+        
         # Connect to MySQL server (without specifying database)
         connection = pymysql.connect(
             host=credentials['host'],
             port=credentials['port'],
             user=credentials['user'],
             password=credentials['password'],
-            charset='utf8mb4'
+            charset='utf8mb4',
+            ssl=ssl_config
         )
         
         with connection.cursor() as cursor:

@@ -57,7 +57,8 @@ class DriveService:
             current_app.logger.error("No Drive URL provided")
             return None
         
-        current_app.logger.info(f"Extracting file ID from URL: {url}")
+        # Don't log the URL - this is too verbose
+        # current_app.logger.info(f"Extracting file ID from URL: {url}")
         
         # Patterns for various Google Drive URL formats
         patterns = [
@@ -76,12 +77,14 @@ class DriveService:
             match = re.search(pattern, url)
             if match:
                 file_id = match.group(1)
-                current_app.logger.info(f"Matched pattern, extracted ID: {file_id}")
+                # Don't log the ID - too verbose
+                # current_app.logger.info(f"Matched pattern, extracted ID: {file_id}")
                 return file_id
         
         # If it's just the ID itself (looks like a file ID)
         if re.match(r'^[a-zA-Z0-9_-]{25,}$', url):
-            current_app.logger.info(f"URL appears to be a raw file ID: {url}")
+            # Don't log the ID - too verbose
+            # current_app.logger.info(f"URL appears to be a raw file ID: {url}")
             return url
         
         current_app.logger.warning(f"Could not extract file ID from URL: {url}")
@@ -165,7 +168,8 @@ class DriveService:
                 
             with Image.open(file_path) as img:
                 img.verify()
-                current_app.logger.info(f"Successfully validated image file: {file_path}")
+                # Don't log successful validations - too verbose
+                # current_app.logger.info(f"Successfully validated image file: {file_path}")
                 return True
         except Exception as e:
             current_app.logger.error(f"Error validating image file {file_path}: {str(e)}")
@@ -206,12 +210,14 @@ class DriveService:
             current_app.logger.error(error_msg)
             raise ValueError(error_msg)
         
-        current_app.logger.info(f"Extracted Drive file ID: {file_id}")
+        # Don't log file IDs - too verbose
+        # current_app.logger.info(f"Extracted Drive file ID: {file_id}")
         
         try:
             # Download the file
             temp_path = self.download_drive_file(file_id)
-            current_app.logger.info(f"Successfully downloaded file to {temp_path}")
+            # Only log the fact that download completed, not the full path
+            current_app.logger.debug("Successfully downloaded file from Google Drive")
             return temp_path
         except Exception as e:
             current_app.logger.error(f"Error downloading file from Drive: {str(e)}")

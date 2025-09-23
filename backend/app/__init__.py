@@ -6,14 +6,22 @@ from flask_jwt_extended import JWTManager
 import os
 import time
 from .config import config_by_name
+from .utils.aiven_ssl import setup_aiven_ssl
+from .utils.logging_config import configure_logging
 
 db = SQLAlchemy()
 migrate = Migrate()
 jwt = JWTManager()
 
 def create_app(config_name='dev'):
+    # Set up Aiven SSL if configured
+    setup_aiven_ssl()
+    
     app = Flask(__name__)
     app.config.from_object(config_by_name[config_name])
+    
+    # Configure logging
+    configure_logging(app)
     
     # Set application start time for uptime tracking
     app.start_time = time.time()
