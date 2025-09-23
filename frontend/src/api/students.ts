@@ -1,4 +1,4 @@
-import apiClient from './api_client_fixed';
+import api from '../services/api';
 
 export interface Student {
   id?: number;
@@ -71,7 +71,7 @@ export const registerStudent = async (data: RegisterStudentData) => {
 
   try {
     // Use the fixed API client that doesn't set Content-Type by default
-    const response = await apiClient.post('/students/register', formData, {
+    const response = await api.post('/students/register', formData, {
       headers: {
         // Let the browser set the Content-Type with the proper boundary for FormData
         'Content-Type': undefined
@@ -94,7 +94,7 @@ export const registerStudent = async (data: RegisterStudentData) => {
 // Get all students
 export const getStudents = async (): Promise<{ students: Student[] }> => {
   try {
-    const response = await apiClient.get('/students');
+    const response = await api.get('/students');
     return response.data;
   } catch (error) {
     console.error('Error fetching students:', error);
@@ -106,8 +106,8 @@ export const getStudents = async (): Promise<{ students: Student[] }> => {
 // Get students by group
 export const getStudentsByGroup = async (groupId: number): Promise<{ students: Student[] }> => {
   try {
-    console.log(`Fetching students for group ${groupId} from ${apiClient.defaults.baseURL}/groups/${groupId}/students`);
-    const response = await apiClient.get(`/groups/${groupId}/students`);
+    console.log(`Fetching students for group ${groupId} from ${api.config.apiUrl}/groups/${groupId}/students`);
+    const response = await api.get(`/groups/${groupId}/students`);
     console.log('Response data:', response.data);
 
     // Ensure we always return the expected structure
@@ -137,7 +137,7 @@ export const getStudentsByGroup = async (groupId: number): Promise<{ students: S
 // Get a single student
 export const getStudent = async (id: string): Promise<{ student: Student } | null> => {
   try {
-    const response = await apiClient.get(`/students/${id}`);
+    const response = await api.get(`/students/${id}`);
     return response.data;
   } catch (error) {
     console.error(`Error fetching student ${id}:`, error);
@@ -160,7 +160,7 @@ export const addStudentToGroup = async (groupId: number, data: RegisterStudentDa
   }
 
   try {
-    const response = await apiClient.post(`/groups/${groupId}/students`, formData, {
+    const response = await api.post(`/groups/${groupId}/students`, formData, {
       headers: {
         // Let the browser set the Content-Type with the proper boundary for FormData
         'Content-Type': undefined
@@ -194,7 +194,7 @@ export const validateStudentImport = async (groupId: number, file: File): Promis
 
   try {
     // The correct endpoint is under the groups blueprint
-    const response = await apiClient.post(`/groups/${groupId}/students/bulk`, formData, {
+    const response = await api.post(`/groups/${groupId}/students/bulk`, formData, {
       headers: {
         // Let the browser set the Content-Type with the proper boundary for FormData
         'Content-Type': undefined
@@ -220,7 +220,7 @@ export const bulkImportStudents = async (groupId: number, file: File): Promise<B
 
   try {
     // The correct endpoint is under the groups blueprint
-    const response = await apiClient.post(`/groups/${groupId}/students/bulk`, formData, {
+    const response = await api.post(`/groups/${groupId}/students/bulk`, formData, {
       headers: {
         // Let the browser set the Content-Type with the proper boundary for FormData
         'Content-Type': undefined
@@ -242,7 +242,7 @@ export const updateStudent = async (id: string, data: UpdateStudentData) => {
   if (data.image) formData.append('image', data.image);
   if (data.group_id) formData.append('group_id', data.group_id.toString());
 
-  const response = await apiClient.put(`/students/${id}`, formData, {
+  const response = await api.put(`/students/${id}`, formData, {
     headers: {
       // Let the browser set the Content-Type with the proper boundary for FormData
       'Content-Type': undefined
@@ -253,7 +253,7 @@ export const updateStudent = async (id: string, data: UpdateStudentData) => {
 
 // Delete a student
 export const deleteStudent = async (id: string) => {
-  const response = await apiClient.delete(`/students/${id}`);
+  const response = await api.delete(`/students/${id}`);
   return response.data;
 };
 
@@ -263,7 +263,7 @@ export const bulkDeleteStudents = async (ids: string[]): Promise<{
   failed: { id: string; reason: string }[]
 }> => {
   try {
-    const response = await apiClient.post('/students/bulk-delete', { ids });
+    const response = await api.post('/students/bulk-delete', { ids });
     return response.data;
   } catch (error: any) {
     console.error('Error in bulkDeleteStudents:', error);

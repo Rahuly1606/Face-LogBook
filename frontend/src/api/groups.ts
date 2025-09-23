@@ -1,4 +1,4 @@
-import apiClient from './apiClient';
+import api from '../services/api';
 
 export interface Group {
   id: number;
@@ -12,7 +12,7 @@ export interface Group {
 // Get all groups
 export const getGroups = async (): Promise<Group[]> => {
   try {
-    const response = await apiClient.get('/groups');
+    const response = await api.get('/groups');
     // Check if the response is an array or an object with a groups property
     if (Array.isArray(response.data)) {
       return response.data as Group[];
@@ -31,7 +31,7 @@ export const getGroups = async (): Promise<Group[]> => {
 // Get a single group by ID
 export const getGroup = async (id: number): Promise<Group | null> => {
   try {
-    const response = await apiClient.get(`/groups/${id}`);
+    const response = await api.get(`/groups/${id}`);
     return response.data;
   } catch (error) {
     console.error(`Error fetching group ${id}:`, error);
@@ -42,7 +42,7 @@ export const getGroup = async (id: number): Promise<Group | null> => {
 // Create a new group
 export const createGroup = async (data: { name: string; code: string }): Promise<Group | null> => {
   try {
-    const response = await apiClient.post('/groups', data);
+    const response = await api.post('/groups', data);
     return response.data;
   } catch (error) {
     console.error('Error creating group:', error);
@@ -53,7 +53,7 @@ export const createGroup = async (data: { name: string; code: string }): Promise
 // Update a group
 export const updateGroup = async (id: number, data: { name?: string; code?: string }): Promise<Group | null> => {
   try {
-    const response = await apiClient.put(`/groups/${id}`, data);
+    const response = await api.put(`/groups/${id}`, data);
     return response.data;
   } catch (error) {
     console.error(`Error updating group ${id}:`, error);
@@ -64,7 +64,7 @@ export const updateGroup = async (id: number, data: { name?: string; code?: stri
 // Delete a group
 export const deleteGroup = async (id: number): Promise<boolean> => {
   try {
-    await apiClient.delete(`/groups/${id}`);
+    await api.delete(`/groups/${id}`);
     return true;
   } catch (error) {
     console.error(`Error deleting group ${id}:`, error);

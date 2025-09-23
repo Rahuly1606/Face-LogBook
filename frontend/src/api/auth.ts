@@ -1,13 +1,11 @@
 import axios from 'axios';
-import apiClient from './api_client_fixed';
 import { setAdminToken } from '../utils/authToken';
-
-const API_URL = "/api/v1";
+import api, { API_URL } from '../services/api';
 
 // Authentication endpoints
 export const login = async (username: string, password: string) => {
   try {
-    const response = await axios.post(`${API_URL}/auth/login`, { username, password });
+    const response = await api.post('/auth/login', { username, password });
 
     if (response.data.success && response.data.access_token) {
       const token: string = response.data.access_token;
@@ -32,23 +30,23 @@ export const refreshToken = async () => {
 
 // Group management endpoints
 export const getGroups = async () => {
-  const response = await apiClient.get('/groups');
+  const response = await api.get('/groups');
   return response.data;
 };
 
 export const createGroup = async (name: string) => {
-  const response = await apiClient.post('/groups', { name });
+  const response = await api.post('/groups', { name });
   return response.data;
 };
 
 export const getGroup = async (groupId: number) => {
-  const response = await apiClient.get(`/groups/${groupId}`);
+  const response = await api.get(`/groups/${groupId}`);
   return response.data;
 };
 
 export const deleteGroup = async (groupId: number) => {
-  const response = await apiClient.delete(`/groups/${groupId}`);
+  const response = await api.delete(`/groups/${groupId}`);
   return response.data;
 };
 
-export default apiClient;
+export default api;

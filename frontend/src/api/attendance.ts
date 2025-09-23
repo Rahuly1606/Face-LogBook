@@ -1,5 +1,4 @@
-import apiClient from './api_client_fixed';
-import api from './auth';  // Import the auth-enabled API client
+import api from '../services/api';
 
 export interface RecognizedStudent {
   student_id: string;
@@ -80,7 +79,7 @@ export const submitLiveAttendance = async (imageBlob: Blob, retryCount = 0): Pro
     const formData = new FormData();
     formData.append('image', imageBlob, 'capture.jpg');
 
-    const response = await apiClient.post('/attendance/live', formData, {
+    const response = await api.post('/attendance/live', formData, {
       headers: {
         // Let the browser set the Content-Type with proper boundary
         'Content-Type': undefined
@@ -91,7 +90,7 @@ export const submitLiveAttendance = async (imageBlob: Blob, retryCount = 0): Pro
     return response.data;
   } catch (error: any) {
     console.error('Error submitting live attendance:', error);
-    
+
     // Handle timeout errors specifically
     if (error.isTimeout) {
       console.warn('Processing timeout detected - likely due to many faces');
@@ -104,7 +103,7 @@ export const submitLiveAttendance = async (imageBlob: Blob, retryCount = 0): Pro
         errorMessage: 'Processing timeout - too many faces or complex image'
       } as LiveAttendanceResponse;
     }
-    
+
     // Implement automatic retry for network errors (max 1 retry)
     if (error.isNetworkError && retryCount < 1) {
       console.log(`Retrying live attendance (attempt ${retryCount + 1})...`);
@@ -112,7 +111,7 @@ export const submitLiveAttendance = async (imageBlob: Blob, retryCount = 0): Pro
       await new Promise(resolve => setTimeout(resolve, 1000));
       return submitLiveAttendance(imageBlob, retryCount + 1);
     }
-    
+
     // Return a fallback response to prevent UI errors
     return {
       recognized: [],
@@ -204,13 +203,13 @@ export const getAttendanceByDate = async (date: string): Promise<{ attendance: A
 
 // Get student attendance history
 export const getStudentAttendance = async (studentId: string): Promise<{ attendance: AttendanceRecord[] }> => {
-  const response = await apiClient.get(`/attendance/${studentId}`);
+  const response = await api.get(`/attendance/${studentId}`);
   return response.data;
 };
 
 // Get attendance by date range
 export const getAttendanceByDateRange = async (startDate: string, endDate: string): Promise<{ attendance: AttendanceRecord[] }> => {
-  const response = await apiClient.get('/attendance', {
+  const response = await api.get('/attendance', {
     params: { start_date: startDate, end_date: endDate }
   });
   return response.data;
@@ -219,7 +218,7 @@ export const getAttendanceByDateRange = async (startDate: string, endDate: strin
 // Get all students with their current attendance status
 export const getAllStudentsStatus = async (): Promise<AllStudentsStatusResponse> => {
   try {
-    const response = await apiClient.get('/attendance/status/all');
+    const response = await api.get('/attendance/status/all');
     return response.data;
   } catch (error) {
     console.error('Error fetching student status:', error);
@@ -233,6 +232,6 @@ export const getAllStudentsStatus = async (): Promise<AllStudentsStatusResponse>
 
 // Manually reset daily attendance
 export const resetDailyAttendance = async (): Promise<{ success: boolean; count: number }> => {
-  const response = await apiClient.post('/attendance/reset/daily');
+  const response = await api.post('/attendance/reset/daily');
   return response.data;
 };
