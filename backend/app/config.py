@@ -45,7 +45,11 @@ class Config:
     # CORS settings
     ALLOWED_ORIGINS = os.getenv('ALLOWED_ORIGINS', 'http://localhost:8080,http://127.0.0.1:8080,http://localhost:3000,http://127.0.0.1:3000,http://localhost:5173,http://127.0.0.1:5173')
     
-    # Google Drive settings
+    # --- MODIFIED: Added comment to clarify usage ---
+    # Google Drive settings.
+    # This value is read from the environment. For local development, it will be a file path.
+    # For deployment (e.g., Render), it will be the full JSON content string.
+    # The logic to handle both cases is located in the DriveService class.
     GOOGLE_SERVICE_ACCOUNT_JSON = os.getenv('GOOGLE_SERVICE_ACCOUNT_JSON', None)
     
     # Bulk import settings

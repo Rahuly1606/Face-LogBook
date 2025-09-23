@@ -2,6 +2,7 @@ import os
 import time
 import re
 import tempfile
+import json  # --- MODIFIED: Added for parsing JSON content
 from google.oauth2 import service_account
 from googleapiclient.discovery import build
 from googleapiclient.http import MediaIoBaseDownload
@@ -15,40 +16,61 @@ class DriveService:
         self.credentials = None
         self.service = None
         self.initialized = False
-    
+
     def initialize(self):
         """Initialize the Google Drive API client"""
         if self.initialized:
             return True
-            
-        # Get path to service account JSON file
-        service_account_file = current_app.config.get('GOOGLE_SERVICE_ACCOUNT_JSON')
-        
-        if not service_account_file or not os.path.exists(service_account_file):
-            current_app.logger.error("Google Drive service account JSON file not found")
+
+        # --- MODIFIED: This variable now holds either a file path or the JSON content string
+        service_account_config = current_app.config.get('GOOGLE_SERVICE_ACCOUNT_JSON')
+
+        if not service_account_config:
+            current_app.logger.error("Google Drive service account JSON file or content not found in config")
             return False
-        
+
         try:
-            # Create credentials
-            self.credentials = service_account.Credentials.from_service_account_file(
-                service_account_file,
-                scopes=['https://www.googleapis.com/auth/drive.readonly']
-            )
+            # --- MODIFIED: This block now handles both deployment and local scenarios ---
+            creds_info = None
+            service_account_email = None
+
+            try:
+                # --- DEPLOYMENT SCENARIO: Try to load as JSON content first ---
+                creds_info = json.loads(service_account_config)
+                self.credentials = service_account.Credentials.from_service_account_info(
+                    creds_info,
+                    scopes=['https://www.googleapis.com/auth/drive.readonly']
+                )
+                service_account_email = self.credentials.service_account_email
+                current_app.logger.info("Initialized Google Drive credentials from JSON content.")
             
-            # Create Drive API client
+            except json.JSONDecodeError:
+                # --- LOCAL SCENARIO: If it's not JSON, treat it as a file path ---
+                if not os.path.exists(service_account_config):
+                    current_app.logger.error(f"Google Drive service account file path not found: {service_account_config}")
+                    return False
+
+                self.credentials = service_account.Credentials.from_service_account_file(
+                    service_account_config,
+                    scopes=['https://www.googleapis.com/auth/drive.readonly']
+                )
+                service_account_email = self.credentials.service_account_email
+                current_app.logger.info("Initialized Google Drive credentials from file path.")
+            
+            # --- END OF MODIFIED BLOCK ---
+            
+            # Create Drive API client (this part is the same for both scenarios)
             self.service = build('drive', 'v3', credentials=self.credentials)
             self.initialized = True
             
             # Log service account email for sharing instructions
-            service_account_info = service_account.Credentials.from_service_account_file(
-                service_account_file).service_account_email
-            current_app.logger.info(f"Google Drive API client initialized with service account: {service_account_info}")
+            current_app.logger.info(f"Google Drive API client initialized with service account: {service_account_email}")
             
             return True
         except Exception as e:
             current_app.logger.error(f"Failed to initialize Google Drive API client: {str(e)}")
             return False
-    
+
     def extract_drive_file_id(self, url):
         """Extract file ID from Google Drive URL"""
         from flask import current_app
@@ -56,9 +78,6 @@ class DriveService:
         if not url:
             current_app.logger.error("No Drive URL provided")
             return None
-        
-        # Don't log the URL - this is too verbose
-        # current_app.logger.info(f"Extracting file ID from URL: {url}")
         
         # Patterns for various Google Drive URL formats
         patterns = [
@@ -77,19 +96,14 @@ class DriveService:
             match = re.search(pattern, url)
             if match:
                 file_id = match.group(1)
-                # Don't log the ID - too verbose
-                # current_app.logger.info(f"Matched pattern, extracted ID: {file_id}")
                 return file_id
         
-        # If it's just the ID itself (looks like a file ID)
         if re.match(r'^[a-zA-Z0-9_-]{25,}$', url):
-            # Don't log the ID - too verbose
-            # current_app.logger.info(f"URL appears to be a raw file ID: {url}")
             return url
         
         current_app.logger.warning(f"Could not extract file ID from URL: {url}")
         return None
-    
+
     def download_drive_file(self, file_id, dest_path=None, max_retries=3):
         """Download file from Google Drive with exponential backoff retry"""
         if not self.initialized:
@@ -99,7 +113,6 @@ class DriveService:
         if not file_id:
             raise ValueError("Invalid file ID")
         
-        # Create a temporary file if no destination path provided
         if not dest_path:
             _, dest_path = tempfile.mkstemp(suffix='.jpg')
         
@@ -114,10 +127,8 @@ class DriveService:
                     while not done:
                         status, done = downloader.next_chunk()
                 
-                # Validate the file is an image
                 try:
                     with Image.open(dest_path) as img:
-                        # This will fail if not a valid image
                         img.verify()
                     return dest_path
                 except Exception as e:
@@ -126,27 +137,22 @@ class DriveService:
             
             except HttpError as e:
                 error_code = e.resp.status
-                # Handle specific error codes
                 if error_code == 403:
                     raise PermissionError(f"Access denied to Google Drive file (ID: {file_id}). Make sure it's shared with the service account.")
                 elif error_code == 404:
                     raise FileNotFoundError(f"Google Drive file not found (ID: {file_id}) or has been deleted.")
                 elif error_code >= 500:
-                    # Server-side error, try to retry
                     retry_count += 1
-                    wait_time = (2 ** retry_count)  # Exponential backoff
+                    wait_time = (2 ** retry_count)
                     current_app.logger.warning(f"Google Drive server error {error_code}, retrying in {wait_time} seconds...")
                     time.sleep(wait_time)
                     continue
                 else:
-                    # Other client errors, don't retry
                     raise
             except Exception as e:
-                # Any other exceptions
                 current_app.logger.error(f"Error downloading file from Google Drive: {str(e)}")
                 raise
                 
-            # If we got here with no exceptions, break the retry loop
             break
         
         if retry_count >= max_retries:
@@ -168,8 +174,6 @@ class DriveService:
                 
             with Image.open(file_path) as img:
                 img.verify()
-                # Don't log successful validations - too verbose
-                # current_app.logger.info(f"Successfully validated image file: {file_path}")
                 return True
         except Exception as e:
             current_app.logger.error(f"Error validating image file {file_path}: {str(e)}")
@@ -177,17 +181,25 @@ class DriveService:
     
     def get_service_account_email(self):
         """Get the email address of the service account for sharing instructions"""
-        if not self.initialized:
-            if not self.initialize():
-                return None
+        # --- MODIFIED: This method now also handles both scenarios to be consistent ---
+        service_account_config = current_app.config.get('GOOGLE_SERVICE_ACCOUNT_JSON')
+        if not service_account_config:
+            return None
         
         try:
-            service_account_file = current_app.config.get('GOOGLE_SERVICE_ACCOUNT_JSON')
-            if service_account_file and os.path.exists(service_account_file):
-                return service_account.Credentials.from_service_account_file(
-                    service_account_file).service_account_email
+            # Try to load from JSON content first
+            creds_info = json.loads(service_account_config)
+            return creds_info.get('client_email')
+        except json.JSONDecodeError:
+            # Fallback to loading from file path
+            try:
+                if os.path.exists(service_account_config):
+                    return service_account.Credentials.from_service_account_file(
+                        service_account_config).service_account_email
+            except Exception as e:
+                current_app.logger.error(f"Error getting service account email from file: {str(e)}")
         except Exception as e:
-            current_app.logger.error(f"Error getting service account email: {str(e)}")
+             current_app.logger.error(f"Error getting service account email from JSON: {str(e)}")
         
         return None
         
@@ -195,7 +207,6 @@ class DriveService:
         """Wrapper for download_drive_file that takes a URL instead of a file ID"""
         from flask import current_app
         
-        # Ensure we're initialized
         if not self.initialized:
             current_app.logger.info("Drive service not initialized, initializing now...")
             if not self.initialize():
@@ -203,20 +214,14 @@ class DriveService:
                 current_app.logger.error(error_msg)
                 raise RuntimeError(error_msg)
         
-        # Extract file ID from the link
         file_id = self.extract_drive_file_id(drive_link)
         if not file_id:
             error_msg = f"Could not extract file ID from Drive link: {drive_link}"
             current_app.logger.error(error_msg)
             raise ValueError(error_msg)
         
-        # Don't log file IDs - too verbose
-        # current_app.logger.info(f"Extracted Drive file ID: {file_id}")
-        
         try:
-            # Download the file
             temp_path = self.download_drive_file(file_id)
-            # Only log the fact that download completed, not the full path
             current_app.logger.debug("Successfully downloaded file from Google Drive")
             return temp_path
         except Exception as e:
