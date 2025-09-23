@@ -9,8 +9,8 @@ const Layout: React.FC = () => {
       <Navbar />
       <main className="w-full">
         {/* Adds consistent padding and a max-width to all pages */}
-        <div className="container mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-8">
-            <Outlet />
+        <div className="container mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-2">
+          <Outlet />
         </div>
       </main>
       <Toaster />

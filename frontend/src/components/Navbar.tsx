@@ -59,7 +59,7 @@ const Navbar: React.FC = () => {
       ))}
     </nav>
   );
-  
+
   const UserMenu: React.FC = () => (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
@@ -98,15 +98,15 @@ const Navbar: React.FC = () => {
   );
 
   return (
-    <header className="sticky top-0 z-50 w-full border-b border-border/40 bg-background/95 backdrop-blur-sm">
+    <header className="sticky top-0 z-50 w-full border-b border-border/30 bg-background/95 backdrop-blur-sm shadow-sm">
       <div className="container mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="flex justify-between items-center h-20">
+        <div className="flex justify-between items-center h-14">
 
-          <Link to="/" className="flex items-center space-x-3 group">
-            <div className="p-2.5 rounded-xl bg-primary shadow-md group-hover:scale-105 group-focus-visible:ring-2 group-focus-visible:ring-primary/50 transition-transform duration-200">
-              <Camera className="h-6 w-6 text-primary-foreground" />
+          <Link to="/" className="flex items-center space-x-2 group">
+            <div className="p-2 rounded-lg bg-primary shadow-md group-hover:scale-105 group-focus-visible:ring-2 group-focus-visible:ring-primary/50 transition-transform duration-200">
+              <Camera className="h-5 w-5 text-primary-foreground" />
             </div>
-            <span className="font-bold text-2xl text-foreground tracking-tight hidden sm:block">
+            <span className="font-bold text-xl text-foreground tracking-tight hidden sm:block">
               FaceAttend
             </span>
           </Link>
@@ -116,14 +116,14 @@ const Navbar: React.FC = () => {
           </div>
 
           <div className="hidden md:flex items-center gap-4">
-             {isAuthenticated ? <UserMenu /> : (
+            {isAuthenticated ? <UserMenu /> : (
               <Button onClick={() => navigate('/login')} className="flex items-center gap-2">
                 <LogIn className="h-4 w-4" />
                 <span>Login</span>
               </Button>
             )}
           </div>
-          
+
           <div className="md:hidden">
             <Sheet open={isMobileMenuOpen} onOpenChange={setMobileMenuOpen}>
               <SheetTrigger asChild>
@@ -132,8 +132,8 @@ const Navbar: React.FC = () => {
                   <span className="sr-only">Open main menu</span>
                 </Button>
               </SheetTrigger>
-              <SheetContent side="right" className="w-[300px] flex flex-col p-6">
-                <div className="flex items-center gap-3 pb-6 border-b mb-6">
+              <SheetContent side="right" className="w-[300px] flex flex-col p-4">
+                <div className="flex items-center gap-3 pb-4 border-b mb-4">
                   <div className="p-2 rounded-lg bg-primary">
                     <Camera className="h-6 w-6 text-primary-foreground" />
                   </div>
@@ -142,12 +142,12 @@ const Navbar: React.FC = () => {
                 <div className="flex-1">
                   <NavLinks isMobile />
                 </div>
-                <div className="pt-6 border-t">
+                <div className="pt-4 border-t">
                   {isAuthenticated ? (
-                     <Button variant="outline" className="w-full justify-center gap-2" onClick={handleLogout}>
-                       <LogOut className="h-4 w-4" />
-                       <span>Logout</span>
-                     </Button>
+                    <Button variant="outline" className="w-full justify-center gap-2" onClick={handleLogout}>
+                      <LogOut className="h-4 w-4" />
+                      <span>Logout</span>
+                    </Button>
                   ) : (
                     <Button className="w-full justify-center gap-2" onClick={() => navigate('/login')}>
                       <LogIn className="h-4 w-4" />

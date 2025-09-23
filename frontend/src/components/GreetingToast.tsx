@@ -16,31 +16,15 @@ const GreetingToast: React.FC<GreetingToastProps> = ({ name, action, onClose }) 
   useEffect(() => {
     const timer = setTimeout(() => {
       setIsVisible(false);
-      // Allow time for exit animation before calling onClose
       setTimeout(onClose, 300);
     }, DURATION_MS);
-
     return () => clearTimeout(timer);
   }, [onClose]);
 
   const isCheckIn = action === 'checkin';
   const config = {
-    checkin: {
-      icon: CheckCircle,
-      iconColor: 'text-green-500',
-      bgColor: 'bg-green-500/10',
-      borderColor: 'border-green-200',
-      message: `Welcome, ${name}!`,
-      description: 'You have been checked in.',
-    },
-    checkout: {
-      icon: LogOut,
-      iconColor: 'text-amber-500',
-      bgColor: 'bg-amber-500/10',
-      borderColor: 'border-amber-200',
-      message: `Goodbye, ${name}.`,
-      description: 'You have been checked out.',
-    },
+    checkin: { icon: CheckCircle, iconColor: 'text-green-500', message: `Welcome, ${name}!` },
+    checkout: { icon: LogOut, iconColor: 'text-amber-500', message: `Goodbye, ${name}.` },
   };
 
   const currentConfig = config[action];
@@ -54,15 +38,14 @@ const GreetingToast: React.FC<GreetingToastProps> = ({ name, action, onClose }) 
           initial={{ opacity: 0, y: 50, scale: 0.3 }}
           animate={{ opacity: 1, y: 0, scale: 1 }}
           exit={{ opacity: 0, scale: 0.5, transition: { duration: 0.2 } }}
-          className={`relative w-full max-w-sm rounded-xl border ${currentConfig.borderColor} bg-background shadow-2xl overflow-hidden`}
+          className={`relative w-full max-w-sm rounded-xl border bg-background shadow-2xl overflow-hidden`}
         >
           <div className="p-4 flex items-start gap-4">
-            <div className={`p-2 rounded-full ${currentConfig.bgColor}`}>
+            <div className={`p-2 rounded-full`}>
               <Icon className={`h-6 w-6 ${currentConfig.iconColor}`} />
             </div>
             <div className="flex-1">
               <h3 className="font-semibold text-foreground">{currentConfig.message}</h3>
-              <p className="text-sm text-muted-foreground">{currentConfig.description}</p>
             </div>
           </div>
           <motion.div

@@ -2,13 +2,22 @@ import React, { useRef, useCallback, useState, useEffect } from 'react';
 import Webcam from 'react-webcam';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Camera, CameraOff, Play, Pause, RefreshCw, Users, Clock, CheckCircle2, LogOut, Smartphone, AlertTriangle } from 'lucide-react';
+import { Camera, Pause, Play, RefreshCw, Users, Clock, LogOut, Smartphone, AlertTriangle, CheckCircle2, CameraOff } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { IPCameraInput } from './IPCameraInput';
 import { submitLiveAttendance, RecognizedStudent as BaseRecognizedStudent, UnrecognizedFace } from '@/api/attendance';
 import { useAppContext } from '@/context/AppContext';
 import LiveStudentList from './LiveStudentList';
 import { checkMediaDeviceSupport, getCameraErrorMessage } from '@/utils/mediaDeviceUtils';
+import WelcomeOverlay from './WelcomeOverlay';
+
+// Add a global declaration for our custom window function
+declare global {
+  interface Window {
+    addWelcome: (name: string) => void;
+    addGoodbye: (name: string) => void;
+  }
+}
 
 // Extend RecognizedStudent to include optional goodbye_message property
 export interface RecognizedStudent extends BaseRecognizedStudent {
@@ -130,16 +139,31 @@ const WebcamCapture: React.FC<WebcamCaptureProps> = ({ groupId, onFaceRecognized
         existing.isPresent = true;
 
         if (existing.attendanceStatus === 'departed') {
-          if (student.name) pushAttendanceMessage(student.name, 'leave');
+          if (student.name) {
+            pushAttendanceMessage(student.name, 'leave');
+            if (window.addGoodbye) {
+              window.addGoodbye(student.name);
+            }
+          }
           return;
         }
 
         if (student.action === 'checkin' && existing.attendanceStatus === 'none') {
           existing.attendanceStatus = 'present';
-          if (student.name) pushAttendanceMessage(student.name, 'enter');
+          if (student.name) {
+            pushAttendanceMessage(student.name, 'enter');
+            if (window.addWelcome) {
+              window.addWelcome(student.name);
+            }
+          }
         } else if (student.action === 'checkout') {
           existing.attendanceStatus = 'departed';
-          if (student.name) pushAttendanceMessage(student.name, 'leave');
+          if (student.name) {
+            pushAttendanceMessage(student.name, 'leave');
+            if (window.addGoodbye) {
+              window.addGoodbye(student.name);
+            }
+          }
         }
       } else {
         const initialStatus = student.action === 'checkin' ? 'present' : student.action === 'checkout' ? 'departed' : 'none';
@@ -156,8 +180,14 @@ const WebcamCapture: React.FC<WebcamCaptureProps> = ({ groupId, onFaceRecognized
 
         if (initialStatus === 'present' && student.name) {
           pushAttendanceMessage(student.name, 'enter');
+          if (window.addWelcome) {
+            window.addWelcome(student.name);
+          }
         } else if (initialStatus === 'departed' && student.name) {
           pushAttendanceMessage(student.name, 'leave');
+          if (window.addGoodbye) {
+            window.addGoodbye(student.name);
+          }
         }
       }
     });
@@ -168,6 +198,9 @@ const WebcamCapture: React.FC<WebcamCaptureProps> = ({ groupId, onFaceRecognized
         if (student.attendanceStatus === 'present' && student.name) {
           student.attendanceStatus = 'departed';
           pushAttendanceMessage(student.name, 'leave');
+          if (window.addGoodbye) {
+            window.addGoodbye(student.name);
+          }
         }
       }
     });
@@ -184,54 +217,26 @@ const WebcamCapture: React.FC<WebcamCaptureProps> = ({ groupId, onFaceRecognized
 
   const captureScreenshot = useCallback((): string | null => {
     if (!webcamRef.current) return null;
-
     try {
-      // Check if we're using IP camera by looking at the element type
-      // or explicitly checking the useIpCamera flag
       const isVideoElement = webcamRef.current instanceof HTMLVideoElement || useIpCamera;
-
       if (isVideoElement) {
-        console.log("Using IP camera capture method (video element)");
-        // For IP camera, use canvas to capture from video element
         const video = webcamRef.current as unknown as HTMLVideoElement;
-
-        // Make sure video is playing and has dimensions
         if (!video.videoWidth || !video.videoHeight) {
-          console.warn('Video dimensions not available yet');
-          // Try to play the video if it's paused
           if (video.paused) {
             video.play().catch(err => console.warn('Could not play video:', err));
           }
           return null;
         }
-
         const canvas = document.createElement('canvas');
         canvas.width = video.videoWidth;
         canvas.height = video.videoHeight;
         const ctx = canvas.getContext('2d');
-        if (!ctx) {
-          console.error('Could not get canvas context');
-          return null;
-        }
-
-        // Draw the current video frame to the canvas
-        try {
-          ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-          return canvas.toDataURL('image/jpeg', 0.9);
-        } catch (err) {
-          console.error('Error capturing frame from video:', err);
-          return null;
-        }
+        if (!ctx) return null;
+        ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+        return canvas.toDataURL('image/jpeg', 0.9);
       } else {
-        console.log("Using regular webcam capture method");
-        // For regular webcam, use the Webcam component's getScreenshot method
         const webcam = webcamRef.current as Webcam;
-        if (typeof webcam.getScreenshot === 'function') {
-          return webcam.getScreenshot();
-        } else {
-          console.error('getScreenshot method not available on webcam');
-          return null;
-        }
+        return typeof webcam.getScreenshot === 'function' ? webcam.getScreenshot() : null;
       }
     } catch (error) {
       console.error('Screenshot error:', error);
@@ -257,15 +262,9 @@ const WebcamCapture: React.FC<WebcamCaptureProps> = ({ groupId, onFaceRecognized
       lastFpsTime.current = currentTime;
     }
 
-    // Use the captureScreenshot function to get a screenshot from either webcam or IP camera
     let imageSrc = null;
-    // Try up to 3 times to get a screenshot
     for (let attempt = 0; attempt < 3 && !imageSrc; attempt++) {
-      if (attempt > 0) {
-        console.log(`Screenshot attempt ${attempt + 1}...`);
-        // Small delay between attempts
-        await new Promise(resolve => setTimeout(resolve, 100));
-      }
+      if (attempt > 0) await new Promise(resolve => setTimeout(resolve, 100));
       imageSrc = captureScreenshot();
     }
 
@@ -278,66 +277,24 @@ const WebcamCapture: React.FC<WebcamCaptureProps> = ({ groupId, onFaceRecognized
 
     try {
       if (!imageSrc) {
-        // For IP camera, if we can't get a screenshot, try to restart the stream
         if (useIpCamera && webcamRef.current) {
           const video = webcamRef.current as unknown as HTMLVideoElement;
-          console.warn("Attempting to recover IP camera stream for screenshot...");
-
-          // Check if video element exists and has a valid state
-          if (video) {
-            // Check if the video is in a problematic state
-            const needsRestart = video.paused || video.ended ||
-              video.readyState < 2 || // Not enough data
-              !video.srcObject; // No source object
-
-            if (needsRestart) {
-              console.log("Video in bad state, attempting restart:", {
-                paused: video.paused,
-                ended: video.ended,
-                readyState: video.readyState,
-                hasSrcObject: !!video.srcObject
-              });
-
-              // If no srcObject but we have ipCameraStream, reconnect them
-              if (!video.srcObject && ipCameraStream) {
-                video.srcObject = ipCameraStream;
-                console.log("Reconnected video element to IP camera stream");
+          const needsRestart = video.paused || video.ended || video.readyState < 2 || !video.srcObject;
+          if (needsRestart) {
+            if (!video.srcObject && ipCameraStream) video.srcObject = ipCameraStream;
+            try {
+              if (!(video as any)._screenshotPlayInProgress) {
+                (video as any)._screenshotPlayInProgress = true;
+                await video.play();
+                await new Promise(resolve => setTimeout(resolve, 500));
+                (video as any)._screenshotPlayInProgress = false;
               }
-
-              // Try to restart the video
-              try {
-                // Check if we already have a play attempt in progress to avoid AbortError
-                if (!(video as any)._screenshotPlayInProgress) {
-                  console.log("Attempting to restart video playback for screenshot capture");
-
-                  // Mark that we have a play attempt in progress
-                  (video as any)._screenshotPlayInProgress = true;
-
-                  await video.play();
-                  console.log("Successfully restarted video playback");
-
-                  // Give it a moment to stabilize, then try again on next cycle
-                  await new Promise(resolve => setTimeout(resolve, 500));
-
-                  // Clear the flag
-                  (video as any)._screenshotPlayInProgress = false;
-                } else {
-                  console.log("Screenshot play attempt already in progress, skipping duplicate attempt");
-                  // Wait a moment in case the other attempt succeeds
-                  await new Promise(resolve => setTimeout(resolve, 200));
-                }
-              } catch (playErr) {
-                console.error("Failed to restart video playback:", playErr);
-                // Clear the flag after a delay
-                setTimeout(() => {
-                  (video as any)._screenshotPlayInProgress = false;
-                }, 1000);
-              }
+            } catch (playErr) {
+              setTimeout(() => { (video as any)._screenshotPlayInProgress = false; }, 1000);
             }
           }
         }
-
-        throw new Error("Could not get screenshot. Please check if the camera is working.");
+        throw new Error("Could not get screenshot. Check camera connection.");
       }
 
       setLastCapture(imageSrc);
@@ -374,110 +331,68 @@ const WebcamCapture: React.FC<WebcamCaptureProps> = ({ groupId, onFaceRecognized
       }
     } catch (error: any) {
       console.error('Capture error:', error);
-
-      // Don't show toast for every error to avoid overwhelming the user
-      // Only show if we haven't shown an error recently
       const now = Date.now();
       const lastErrorTime = lastProcessedFrame.current ? parseInt(lastProcessedFrame.current) : 0;
-
-      if (now - lastErrorTime > 5000) {  // Only show error toast every 5 seconds
+      if (now - lastErrorTime > 5000) {
         toast({
           title: "Capture Error",
           description: error.message || "Failed to process image",
           variant: "destructive",
         });
       }
-
     } finally {
       isProcessing.current = false;
       clearTimeout(safetyTimeout);
     }
-  }, [toast, onFaceRecognized, updateTrackedStudents, captureScreenshot, useIpCamera]);
+  }, [toast, onFaceRecognized, updateTrackedStudents, captureScreenshot, useIpCamera, ipCameraStream]);
 
   const startAutoCapture = useCallback(() => {
     setIsCapturing(true);
     frameCount.current = 0;
     lastFpsTime.current = Date.now();
-    setMessages([]);
     recentEventRef.current.clear();
     captureAndProcess();
     intervalRef.current = setInterval(captureAndProcess, Math.max(captureInterval, 500));
   }, [captureInterval, captureAndProcess]);
 
   const stopAutoCapture = useCallback(() => {
-    console.log("Stopping auto capture and cleaning up resources...");
-
-    // Stop the capture interval
     if (intervalRef.current) {
       clearInterval(intervalRef.current);
       intervalRef.current = null;
-      console.log("Cleared capture interval");
     }
-
-    // Stop IP camera stream if active
     if (useIpCamera && ipCameraStream) {
-      console.log("Stopping IP camera stream...");
       try {
-        ipCameraStream.getTracks().forEach(track => {
-          console.log(`Stopping track: ${track.kind}, enabled: ${track.enabled}`);
-          track.stop();
-        });
-
-        // Reset video element if it exists
+        ipCameraStream.getTracks().forEach(track => track.stop());
         if (webcamRef.current) {
           const videoEl = webcamRef.current as unknown as HTMLVideoElement;
-          if (videoEl.srcObject) {
-            videoEl.srcObject = null;
-            console.log("Cleared video srcObject");
-          }
-
-          // Pause the video element
-          if (!videoEl.paused) {
-            videoEl.pause();
-            console.log("Paused video element");
-          }
+          if (videoEl.srcObject) videoEl.srcObject = null;
+          if (!videoEl.paused) videoEl.pause();
         }
-
         setIpCameraStream(null);
-        console.log("IP camera stream stopped and reset");
       } catch (err) {
         console.error("Error stopping IP camera stream:", err);
       }
     }
-
-    // Reset processing flags
     isProcessing.current = false;
-
-    // Update state
     setIsCapturing(false);
-    setMessages([]);
-
-    console.log("Auto capture stopped successfully");
   }, [useIpCamera, ipCameraStream]);
 
   const [webcamError, setWebcamError] = useState<string | null>(null);
 
-  // Cleanup effect for intervals and streams
   useEffect(() => {
-    // Cleanup function for streams and intervals
     return () => {
       if (intervalRef.current) clearInterval(intervalRef.current);
-      if (ipCameraStream) {
-        ipCameraStream.getTracks().forEach(track => track.stop());
-      }
+      if (ipCameraStream) ipCameraStream.getTracks().forEach(track => track.stop());
       setIsCapturing(false);
       isProcessing.current = false;
     };
   }, [ipCameraStream]);
 
-  // Handle camera source changes
   useEffect(() => {
     if (useIpCamera) {
-      // When switching to IP camera, stop the webcam capture
       stopAutoCapture();
       isProcessing.current = false;
     } else {
-      // When switching back to webcam, cleanup IP camera
       if (ipCameraStream) {
         ipCameraStream.getTracks().forEach(track => track.stop());
         setIpCameraStream(null);
@@ -485,107 +400,48 @@ const WebcamCapture: React.FC<WebcamCaptureProps> = ({ groupId, onFaceRecognized
     }
   }, [useIpCamera, ipCameraStream, stopAutoCapture]);
 
-  // Add automatic IP camera error recovery
   useEffect(() => {
     if (useIpCamera && ipCameraStream && isCapturing) {
-      console.log("Setting up IP camera recovery monitoring");
-
-      // Recovery check timer - check video playback every 5 seconds
       const recoveryTimer = setInterval(() => {
         const video = webcamRef.current as unknown as HTMLVideoElement;
         if (!video) return;
-
-        const isVideoStalled =
-          video.paused || // Video is paused
-          video.readyState < 2 || // Not enough data
-          (video.currentTime > 0 && video.readyState > 2 && !video.played.length); // No playback recorded
-
+        const isVideoStalled = video.paused || video.readyState < 2 || (video.currentTime > 0 && video.readyState > 2 && !video.played.length);
         if (isVideoStalled) {
           console.warn('IP camera stream appears stalled, attempting recovery...');
-
-          // Check if the stream is still active
-          const isStreamActive = ipCameraStream.getTracks().some(track =>
-            track.readyState === 'live' && !track.muted
-          );
-
-          if (!isStreamActive) {
-            console.log('Stream tracks not active, attempting to restart stream...');
-            // Try to restart playback
-            video.play().catch(err => {
-              console.error('Could not restart video after stall:', err);
-
-              // If we can't restart, refresh the stream
-              toast({
-                title: "Stream Stalled",
-                description: "Trying to reconnect to camera...",
-                variant: "default",
-              });
-            });
-          } else if (video.paused) {
-            // If video is just paused, try to play it again
-            console.log('Video paused, attempting to resume playback...');
-
-            // Track if we already have a play attempt in progress to avoid AbortError
+          if (video.paused) {
             if (!(video as any)._recoveryPlayInProgress) {
               (video as any)._recoveryPlayInProgress = true;
-
-              video.play()
-                .then(() => {
-                  console.log('Successfully resumed video playback');
-                  (video as any)._recoveryPlayInProgress = false;
-                })
-                .catch(err => {
-                  console.warn('Could not resume stalled video:', err);
-                  // Clear the flag after a delay to allow retry
-                  setTimeout(() => {
-                    (video as any)._recoveryPlayInProgress = false;
-                  }, 2000);
-                });
-            } else {
-              console.log('Recovery play already in progress, skipping additional attempt');
+              video.play().then(() => {
+                (video as any)._recoveryPlayInProgress = false;
+              }).catch(err => {
+                setTimeout(() => { (video as any)._recoveryPlayInProgress = false; }, 2000);
+              });
             }
           }
         }
       }, 5000);
-
-      // Clean up timer
-      return () => {
-        console.log("Cleaning up IP camera recovery monitoring");
-        clearInterval(recoveryTimer);
-      };
+      return () => clearInterval(recoveryTimer);
     }
   }, [useIpCamera, ipCameraStream, isCapturing, toast]);
 
   const handleUserMedia = useCallback(() => {
     setWebcamError(null);
-    toast({
-      title: "Camera Connected",
-      description: "Webcam access granted successfully",
-    });
+    toast({ title: "Camera Connected", description: "Webcam access granted successfully" });
   }, [toast]);
 
   const handleUserMediaError = useCallback((error: string | DOMException) => {
-    console.error('Webcam error:', error);
-
-    // Get a user-friendly error message
     const userFriendlyMessage = getCameraErrorMessage(error);
-
     setWebcamError(userFriendlyMessage);
-
-    // Check if this is likely a secure context issue
     const support = checkMediaDeviceSupport();
     const isSecurityIssue = !support.isSecureContext;
-
     toast({
       title: isSecurityIssue ? "Security Restriction" : "Camera Error",
       description: userFriendlyMessage,
       variant: "destructive",
     });
-
     stopAutoCapture();
   }, [stopAutoCapture, toast]);
 
-  // Check media device support on component mount
   useEffect(() => {
     const support = checkMediaDeviceSupport();
     if (!support.isSupported) {
@@ -593,7 +449,7 @@ const WebcamCapture: React.FC<WebcamCaptureProps> = ({ groupId, onFaceRecognized
       if (!support.isSecureContext) {
         toast({
           title: "Security Restriction",
-          description: "Camera access requires HTTPS. You're currently on an insecure connection.",
+          description: "Camera access requires HTTPS.",
           variant: "destructive",
         });
       }
@@ -602,341 +458,160 @@ const WebcamCapture: React.FC<WebcamCaptureProps> = ({ groupId, onFaceRecognized
 
   useEffect(() => {
     if (isCapturing) {
-      const currentInterval = intervalRef.current;
-      if (currentInterval) clearInterval(currentInterval);
+      if (intervalRef.current) clearInterval(intervalRef.current);
       startAutoCapture();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [captureInterval]);
 
-  // JSX
   return (
-    <div className="space-y-6 p-4 sm:p-6 md:p-8" data-groupid={groupId}>
+    <div className="min-h-screen bg-slate-900 text-slate-100 font-sans p-1 xs:p-2 pt-4 xs:pt-5 sm:p-4 sm:pt-5 lg:p-6" data-groupid={groupId}>
       <div aria-live="polite" aria-atomic="true" className="sr-only" role="status">
         {lastAnnouncementRef.current}
       </div>
 
-      {isCapturing && (
-        <div
-          ref={panelRef}
-          onScroll={handlePanelScroll}
-          className="fixed z-50 top-4 inset-x-4 md:inset-x-auto md:right-6 md:top-6 md:bottom-6 md:w-72 max-h-[30vh] md:max-h-none overflow-y-auto bg-background/20 dark:bg-black/20 backdrop-blur-xl rounded-2xl ring-1 ring-border shadow-2xl space-y-3 p-3 md:p-4"
-        >
-          {messages.map(msg => (
-            <div
-              key={msg.id}
-              className="bg-background/80 dark:bg-white/10 rounded-lg p-3 flex items-center gap-3 shadow-md transition-transform hover:scale-[1.02]"
-            >
-              <div className={`flex-shrink-0 rounded-full p-1.5 ${msg.kind === 'enter' ? 'bg-green-100 text-green-700 dark:bg-green-900/50 dark:text-green-300' : 'bg-amber-100 text-amber-700 dark:bg-amber-900/50 dark:text-amber-400'}`}>
-                {msg.kind === 'enter' ? <CheckCircle2 className="h-5 w-5" /> : <LogOut className="h-5 w-5" />}
+      <div className="space-y-6 xs:space-y-8">
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 xs:gap-5 sm:gap-6">
+          <Card className="bg-slate-700/50 border-slate-700 overflow-hidden shadow-2xl shadow-black/20">
+            <CardHeader className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 xs:gap-4 p-3 xs:p-4 pb-1 xs:pb-2">
+              <CardTitle className="text-lg font-bold text-white">Live Camera Feed</CardTitle>
+              <div className="flex flex-wrap items-center gap-2">
+                {!isCapturing ? (
+                  <Button onClick={startAutoCapture} className="gap-2 bg-green-500 hover:bg-green-600 text-white font-semibold transition-transform hover:scale-105 active:scale-95">
+                    <Play className="h-4 w-4" /> Start
+                  </Button>
+                ) : (
+                  <Button onClick={stopAutoCapture} variant="destructive" className="gap-2 font-semibold transition-transform hover:scale-105 active:scale-95">
+                    <Pause className="h-4 w-4" /> Stop
+                  </Button>
+                )}
+                <Button onClick={captureAndProcess} variant="outline" className="gap-2 border-slate-600 bg-slate-700/50 hover:bg-slate-700 text-slate-200 transition-transform hover:scale-105 active:scale-95" disabled={isProcessing.current}>
+                  <Camera className="h-4 w-4" /> Manual
+                </Button>
+                <Button
+                  onClick={() => {
+                    if (isCapturing) stopAutoCapture();
+                    if (ipCameraStream) {
+                      ipCameraStream.getTracks().forEach(track => track.stop());
+                      setIpCameraStream(null);
+                    }
+                    setUseIpCamera(false);
+                    setShowIpCamera(true);
+                  }}
+                  variant="outline" className="gap-2 border-slate-600 bg-slate-700/50 hover:bg-slate-700 text-slate-200 transition-transform hover:scale-105 active:scale-95" disabled={isProcessing.current}>
+                  <Smartphone className="h-4 w-4" /> IP Cam
+                </Button>
               </div>
-              <div className="text-sm font-medium text-foreground">{msg.text}</div>
-            </div>
-          ))}
-        </div>
-      )}
-
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <Card className="overflow-hidden">
-          <CardHeader className="flex flex-row flex-wrap items-center justify-between gap-4">
-            <CardTitle>Live Camera Feed</CardTitle>
-            <div className="flex flex-grow sm:flex-grow-0 items-center gap-2">
-              {!isCapturing ? (
-                <Button onClick={startAutoCapture} className="gap-2 w-full sm:w-auto">
-                  <Play className="h-4 w-4" /> Start
-                </Button>
-              ) : (
-                <Button onClick={stopAutoCapture} variant="destructive" className="gap-2 w-full sm:w-auto">
-                  <Pause className="h-4 w-4" /> Stop
-                </Button>
-              )}
-              <Button onClick={captureAndProcess} variant="outline" className="gap-2 w-full sm:w-auto" disabled={isProcessing.current}>
-                <Camera className="h-4 w-4" /> Manual
-              </Button>
-              <Button
-                onClick={() => {
-                  if (isCapturing) {
-                    stopAutoCapture();
-                  }
-                  // Clean up existing IP camera stream if any
-                  if (ipCameraStream) {
-                    ipCameraStream.getTracks().forEach(track => track.stop());
-                    setIpCameraStream(null);
-                  }
-                  setUseIpCamera(false);
-                  setShowIpCamera(true);
-                }}
-                variant="outline"
-                className="gap-2 w-full sm:w-auto"
-                disabled={isProcessing.current}
-              >
-                <Smartphone className="h-4 w-4" /> Use IP Camera
-              </Button>
-            </div>
-          </CardHeader>
-          <CardContent>
-            <div className="relative aspect-video w-full rounded-lg overflow-hidden bg-secondary shadow-inner ring-1 ring-border">
-              {showIpCamera ? (
-                <div className="absolute inset-0 bg-black/90 p-4">
-                  <IPCameraInput
-                    onStreamReady={(stream) => {
-                      console.log("IP camera stream received, setting up...");
-                      setIpCameraStream(stream);
-                      setUseIpCamera(true);
-                      setShowIpCamera(false);
-                      toast({
-                        title: "Camera Connected",
-                        description: "IP camera connected successfully",
-                      });
-
-                      // Reset any previous errors
-                      setWebcamError(null);
-
-                      // Start auto capture once IP camera is connected
-                      setTimeout(() => {
-                        console.log("Initializing auto capture with IP camera...");
-                        if (!isCapturing) {
-                          startAutoCapture();
-                        }
-                      }, 2000); // Give more time for everything to initialize
-                    }}
-                    onError={(error) => {
-                      toast({
-                        title: "Camera Error",
-                        description: error,
-                        variant: "destructive",
-                      });
-                    }}
-                    onCancel={() => {
-                      setShowIpCamera(false);
-                    }}
-                  />
-                </div>
-              ) : useIpCamera && ipCameraStream ? (
-                <video
-                  ref={(el) => {
-                    if (el) {
-                      // Set the IP camera stream as the source for the video element
-                      console.log("Setting up IP camera video element");
-
-                      // IMPORTANT: Assign to webcamRef immediately so the capture function can use it
-                      webcamRef.current = el as any;
-                      console.log("Set webcamRef to video element");
-
-                      // Set up video element properties BEFORE assigning srcObject
-                      // This avoids triggering unnecessary load events that could interrupt play attempts
-                      el.muted = true;
-                      el.autoplay = true;
-                      el.playsInline = true;
-                      el.setAttribute('playsinline', '');
-                      el.setAttribute('webkit-playsinline', '');
-
-                      // Now that all properties are set, assign the srcObject
-                      if (el.srcObject !== ipCameraStream) {
-                        console.log("Assigning IP camera stream to video element");
-                        el.srcObject = ipCameraStream;
+            </CardHeader>
+            <CardContent className="p-2 pt-3 pb-6 sm:p-4 sm:pt-4 sm:pb-8">
+              <div className="relative w-full rounded-lg overflow-hidden bg-black shadow-inner ring-1 ring-slate-700 aspect-[3/4] xs:aspect-[3.5/4] sm:aspect-[4/3] md:aspect-[16/11]">
+                <WelcomeOverlay />
+                {showIpCamera ? (
+                  <div className="absolute inset-0 bg-black/90 p-4 z-10">
+                    <IPCameraInput
+                      onStreamReady={(stream) => {
+                        setIpCameraStream(stream);
+                        setUseIpCamera(true);
+                        setShowIpCamera(false);
+                        toast({ title: "Camera Connected", description: "IP camera connected successfully" });
+                        setWebcamError(null);
+                        setTimeout(() => { if (!isCapturing) startAutoCapture(); }, 1500);
+                      }}
+                      onError={(error) => toast({ title: "Camera Error", description: error, variant: "destructive" })}
+                      onCancel={() => setShowIpCamera(false)}
+                    />
+                  </div>
+                ) : useIpCamera && ipCameraStream ? (
+                  <video
+                    ref={(el) => {
+                      if (el) {
+                        webcamRef.current = el as any;
+                        el.muted = true;
+                        el.autoplay = true;
+                        el.playsInline = true;
+                        if (el.srcObject !== ipCameraStream) el.srcObject = ipCameraStream;
+                        el.onloadedmetadata = () => { setTimeout(() => el.play().catch(console.error), 100); };
                       }
-
-                      // Track play attempts to prevent multiple simultaneous attempts
-                      let playAttemptInProgress = false;
-
-                      // Centralized play function with debouncing
-                      const attemptPlay = () => {
-                        if (playAttemptInProgress || !el.paused) {
-                          console.log('Play already in progress or video already playing, skipping attempt');
-                          return Promise.resolve(); // Already playing or attempt in progress
-                        }
-
-                        console.log('Attempting to play video...');
-                        playAttemptInProgress = true;
-
-                        return el.play()
-                          .then(() => {
-                            console.log('Video playback started successfully');
-                            playAttemptInProgress = false;
-                          })
-                          .catch(err => {
-                            console.error('Error playing IP camera stream:', err);
-                            playAttemptInProgress = false;
-                            return Promise.reject(err); // Propagate error
-                          });
-                      };
-
-                      // Only try to play after metadata is loaded - this is critical for reliable playback
-                      el.onloadedmetadata = () => {
-                        console.log('Video metadata loaded, dimensions:', el.videoWidth, 'x', el.videoHeight);
-                        // Slight delay after metadata loads before playing
-                        setTimeout(() => attemptPlay(), 100);
-                      };
-
-                      // Try again with a longer delay as fallback
-                      setTimeout(() => {
-                        if (el.paused) {
-                          console.log('Delayed play attempt...');
-                          attemptPlay();
-                        }
-                      }, 1000);
-
-                      console.log('IP camera stream connected to video element successfully');
-                    }
-                  }}
-                  autoPlay
-                  playsInline
-                  muted
-                  onClick={(e) => {
-                    // Attempt to play on click (helps with autoplay restrictions)
-                    const video = e.currentTarget;
-
-                    // Check if we already have a play attempt in progress
-                    if ((video as any)._clickPlayInProgress) {
-                      console.log("Play attempt already in progress, ignoring additional click");
-                      return;
-                    }
-
-                    // Check if the video is paused before attempting to play
-                    if (video.paused || video.ended) {
-                      console.log("User clicked video to start playback");
-
-                      // Set flag to prevent multiple click attempts
-                      (video as any)._clickPlayInProgress = true;
-
-                      toast({
-                        title: "Starting Camera",
-                        description: "Attempting to start camera stream...",
-                        variant: "default",
-                      });
-
-                      video.play()
-                        .then(() => {
-                          console.log("Video playback started successfully via click");
-                          // Clear the flag
-                          (video as any)._clickPlayInProgress = false;
-                          toast({
-                            title: "Camera Active",
-                            description: "Camera stream started successfully",
-                            variant: "default",
-                          });
-                        })
-                        .catch(err => {
-                          console.warn('Could not play video on click:', err);
-                          // Clear the flag after a delay
-                          setTimeout(() => {
-                            (video as any)._clickPlayInProgress = false;
-                          }, 1000);
-
-                          toast({
-                            title: "Playback Failed",
-                            description: "Could not start camera. Please check browser permissions.",
-                            variant: "destructive",
-                          });
-                        });
-                    } else {
-                      console.log("Video already playing, user click ignored");
-                    }
-                  }}
-                  className="w-full h-full object-cover"
-                />
-              ) : !showIpCamera ? (
-                <Webcam
-                  ref={webcamRef}
-                  audio={false}
-                  screenshotFormat="image/jpeg"
-                  videoConstraints={videoConstraints}
-                  onUserMedia={handleUserMedia}
-                  onUserMediaError={handleUserMediaError}
-                  className="w-full h-full object-cover"
-                />
-              ) : null}
-              {webcamError && (
-                <div className="absolute inset-0 flex items-center justify-center bg-black/80">
-                  <div className="text-center p-4 max-w-md">
-                    <div className="flex justify-center mb-3">
-                      <AlertTriangle className="h-12 w-12 text-yellow-500" />
-                    </div>
-                    <p className="text-white font-medium mb-3 text-lg">Camera Access Error</p>
-                    <p className="text-sm text-gray-300 mb-4">{webcamError}</p>
-
-                    <div className="bg-slate-800 p-4 rounded-lg mb-4 text-left">
-                      <p className="text-sm text-white font-medium mb-2">Possible solutions:</p>
-                      <ul className="text-xs text-gray-300 list-disc pl-5 space-y-1">
-                        <li>Use HTTPS instead of HTTP when accessing from other devices</li>
-                        <li>Run the app on the device itself using localhost</li>
-                        <li>Try using an IP camera instead (click "Use IP Camera" button)</li>
-                        <li>Check browser permissions for camera access</li>
-                        <li>Try a different browser or device</li>
-                      </ul>
-                    </div>
-
-                    <div className="flex justify-center">
-                      <Button onClick={() => window.location.reload()} className="gap-2">
-                        <RefreshCw className="h-4 w-4" />
-                        Retry
+                    }}
+                    autoPlay playsInline muted
+                    className="w-full h-full object-cover"
+                  />
+                ) : !showIpCamera ? (
+                  <Webcam
+                    ref={webcamRef}
+                    audio={false}
+                    screenshotFormat="image/jpeg"
+                    videoConstraints={videoConstraints}
+                    onUserMedia={handleUserMedia}
+                    onUserMediaError={handleUserMediaError}
+                    className="w-full h-full object-cover"
+                  />
+                ) : null}
+                {webcamError && (
+                  <div className="absolute inset-0 flex items-center justify-center bg-black/80 z-20">
+                    <div className="text-center p-4 max-w-md">
+                      <AlertTriangle className="h-12 w-12 text-yellow-500 mx-auto mb-3" />
+                      <p className="text-white font-medium mb-3 text-lg">Camera Access Error</p>
+                      <p className="text-sm text-slate-300 mb-4">{webcamError}</p>
+                      <Button onClick={() => window.location.reload()} className="gap-2 bg-blue-500 hover:bg-blue-600">
+                        <RefreshCw className="h-4 w-4" /> Retry
                       </Button>
                     </div>
                   </div>
-                </div>
-              )}
-              {isCapturing && (
-                <div className="absolute top-3 right-3 flex items-center gap-2 bg-red-600 text-white px-3 py-1.5 rounded-full text-sm font-semibold">
-                  <span className="relative flex h-2 w-2">
-                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-white opacity-75"></span>
-                    <span className="relative inline-flex rounded-full h-2 w-2 bg-white"></span>
-                  </span>
-                  Live
-                </div>
-              )}
-              <div className="absolute bottom-0 left-0 right-0 p-3 bg-gradient-to-t from-black/80 to-transparent">
-                <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-white font-medium">
-                  <div className="flex items-center gap-1.5" title="Faces in View">
-                    <Users className="h-4 w-4" />
-                    <span>{currentFacesInView}</span>
+                )}
+                {isCapturing && (
+                  <div className="absolute top-3 right-3 flex items-center gap-2 bg-red-600 text-white px-3 py-1.5 rounded-full text-xs sm:text-sm font-semibold z-10">
+                    <span className="relative flex h-2 w-2">
+                      <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-white opacity-75"></span>
+                      <span className="relative inline-flex rounded-full h-2 w-2 bg-white"></span>
+                    </span>
+                    Live
                   </div>
-                  <div className="flex items-center gap-1.5" title="Frames Per Second">
-                    <Clock className="h-4 w-4" />
-                    <span>{fps} FPS</span>
+                )}
+                <div className="absolute bottom-0 left-0 right-0 p-2 sm:p-3 bg-gradient-to-t from-black/80 to-transparent">
+                  <div className="flex flex-wrap items-center gap-x-3 sm:gap-x-4 gap-y-1 text-xs sm:text-sm text-white font-medium">
+                    <div className="flex items-center gap-1.5" title="Faces in View"><Users className="h-4 w-4" /><span>{currentFacesInView}</span></div>
+                    <div className="flex items-center gap-1.5" title="Frames Per Second"><Clock className="h-4 w-4" /><span>{fps} FPS</span></div>
+                    {processingTime && (<div className="flex items-center gap-1.5" title="Server Processing Time"><span>{processingTime}ms</span></div>)}
                   </div>
-                  {processingTime && (
-                    <div className="flex items-center gap-1.5" title="Server Processing Time">
-                      <span>{processingTime}ms</span>
-                    </div>
-                  )}
                 </div>
               </div>
-            </div>
-          </CardContent>
-        </Card>
-        <Card className="overflow-hidden">
-          <CardHeader className="flex flex-row items-center justify-between">
-            <CardTitle>Last Capture</CardTitle>
-            <Button variant="ghost" size="sm" onClick={clearStudentList} className="gap-1.5">
-              <RefreshCw className="h-4 w-4" />
-              Reset List
-            </Button>
-          </CardHeader>
-          <CardContent>
-            <div className="aspect-video w-full rounded-lg overflow-hidden bg-secondary shadow-inner ring-1 ring-border">
-              {lastCapture ? (
-                <img src={lastCapture} alt="Last capture" className="w-full h-full object-cover" />
-              ) : (
-                <div className="flex h-full items-center justify-center text-muted-foreground">
-                  <div className="text-center">
-                    <CameraOff className="h-12 w-12 mx-auto mb-3 text-gray-400" />
-                    <p className="font-medium">No Capture Yet</p>
-                    <p className="text-xs text-gray-500">Press 'Start' to begin</p>
+            </CardContent>
+          </Card>
+
+          <Card className="bg-slate-700/50 border-slate-700 overflow-hidden shadow-2xl shadow-black/20">
+            <CardHeader className="flex flex-row items-center justify-between gap-3 xs:gap-4 p-3 xs:p-4 pb-1 xs:pb-2">
+              <CardTitle className="text-lg font-bold text-white">Last Capture</CardTitle>
+              <Button variant="ghost" size="sm" onClick={clearStudentList} className="gap-1.5 text-slate-300 hover:bg-slate-700 hover:text-white">
+                <RefreshCw className="h-4 w-4" /> Reset List
+              </Button>
+            </CardHeader>
+            <CardContent className="p-2 pt-3 pb-6 sm:p-4 sm:pt-4 sm:pb-8">
+              <div className="aspect-[3/4] xs:aspect-[3.5/4] sm:aspect-[4/3] md:aspect-[16/11] w-full rounded-lg overflow-hidden bg-black shadow-inner ring-1 ring-slate-700">
+                {lastCapture ? (
+                  <img src={lastCapture} alt="Last capture" className="w-full h-full object-cover" />
+                ) : (
+                  <div className="flex h-full items-center justify-center text-slate-400">
+                    <div className="text-center">
+                      <CameraOff className="h-12 w-12 mx-auto mb-3 text-slate-500" />
+                      <p className="font-medium">No Capture Yet</p>
+                      <p className="text-xs text-slate-500">Press 'Start' to begin</p>
+                    </div>
                   </div>
-                </div>
-              )}
-            </div>
-          </CardContent>
-        </Card>
+                )}
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+
+        <LiveStudentList
+          recognizedStudents={recognizedStudents}
+          unrecognizedCount={unrecognizedCount}
+          unrecognizedFaces={unrecognizedFaces}
+          totalFaces={totalFaces}
+          processingTime={processingTime || undefined}
+        />
       </div>
-      <LiveStudentList
-        recognizedStudents={recognizedStudents}
-        unrecognizedCount={unrecognizedCount}
-        unrecognizedFaces={unrecognizedFaces}
-        totalFaces={totalFaces}
-        processingTime={processingTime || undefined}
-      />
     </div>
   );
 };

@@ -5,6 +5,14 @@ export default {
   content: ["./pages/**/*.{ts,tsx}", "./components/**/*.{ts,tsx}", "./app/**/*.{ts,tsx}", "./src/**/*.{ts,tsx}"],
   prefix: "",
   theme: {
+    screens: {
+      'xs': '475px',
+      'sm': '640px',
+      'md': '768px',
+      'lg': '1024px',
+      'xl': '1280px',
+      '2xl': '1536px',
+    },
     container: {
       center: true,
       padding: "2rem",
@@ -99,9 +107,21 @@ export default {
         "fade-in": {
           from: {
             opacity: "0",
+            transform: "translateY(10px)"
           },
           to: {
             opacity: "1",
+            transform: "translateY(0)"
+          },
+        },
+        "fade-out": {
+          from: {
+            opacity: "1",
+            transform: "translateY(0)"
+          },
+          to: {
+            opacity: "0",
+            transform: "translateY(-10px)"
           },
         },
         "scale-in": {
@@ -119,7 +139,8 @@ export default {
         "accordion-down": "accordion-down 0.2s ease-out",
         "accordion-up": "accordion-up 0.2s ease-out",
         "slide-in": "slide-in 0.3s ease-out",
-        "fade-in": "fade-in 0.3s ease-out",
+        "fade-in": "fade-in 300ms ease-out forwards",
+        "fade-out": "fade-out 400ms ease-in forwards",
         "scale-in": "scale-in 0.2s ease-out",
       },
       backgroundImage: {
