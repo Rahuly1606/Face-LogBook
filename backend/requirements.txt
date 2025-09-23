@@ -18,3 +18,4 @@ Pillow==9.5.0
 pandas==2.0.1
 openpyxl==3.1.2
 pytz==2023.3
+gevent
