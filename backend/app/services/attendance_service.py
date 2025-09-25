@@ -38,8 +38,10 @@ class AttendanceService:
         if dt is None:
             return None
         if dt.tzinfo is None:
+            # If it's naive, assume it's in IST and localize it
             ist = pytz.timezone('Asia/Kolkata')
             return ist.localize(dt)
+        # If it's already timezone-aware, return it as is
         return dt
     
     @classmethod
@@ -120,6 +122,17 @@ class AttendanceService:
             
         group_id = student.group_id
         
+        # Record camera event (in/out alternating detection)
+        try:
+            from app.services.camera_event_service import CameraEventService
+            event_type, event = CameraEventService.process_camera_detection(student_id)
+            if event_type == "debounced":
+                # Skip further processing if event was debounced
+                return "debounced"
+        except Exception as e:
+            current_app.logger.error(f"Error processing camera event: {str(e)}")
+            # Continue with regular attendance processing even if event logging fails
+        
         # Get today's attendance record for the student
         attendance = Attendance.query.filter_by(
             student_id=student_id,
@@ -146,25 +159,41 @@ class AttendanceService:
         elif attendance.in_time and not attendance.out_time:
             # Already checked in, so this is a check-out
             # But only if enough time has passed (debounce)
-            # Make sure both datetimes are timezone-aware for comparison
-            in_time_aware = AttendanceService.make_timezone_aware(attendance.in_time)
-            time_diff = now - in_time_aware
-            if time_diff.total_seconds() > debounce_seconds:
+            try:
+                # Make sure both datetimes are timezone-aware for comparison
+                in_time_aware = AttendanceService.make_timezone_aware(attendance.in_time)
+                # Ensure now also has timezone info
+                now_aware = AttendanceService.make_timezone_aware(now)
+                time_diff = now_aware - in_time_aware
+                if time_diff.total_seconds() > debounce_seconds:
+                    attendance.out_time = now
+                    action = "checkout"
+                else:
+                    # Too soon for checkout, but still track that they're checked in
+                    action = "debounced"
+            except Exception as e:
+                current_app.logger.error(f"Error calculating time difference: {str(e)}")
+                # In case of an error, still update the out_time as a fallback
                 attendance.out_time = now
                 action = "checkout"
-            else:
-                # Too soon for checkout
-                action = "debounced"
         elif attendance.out_time:
             # Check if we need to update the checkout time
-            # Make sure both datetimes are timezone-aware for comparison
-            out_time_aware = AttendanceService.make_timezone_aware(attendance.out_time)
-            time_diff = now - out_time_aware
-            if time_diff.total_seconds() > debounce_seconds:
+            try:
+                # Make sure both datetimes are timezone-aware for comparison
+                out_time_aware = AttendanceService.make_timezone_aware(attendance.out_time)
+                # Ensure now also has timezone info
+                now_aware = AttendanceService.make_timezone_aware(now)
+                time_diff = now_aware - out_time_aware
+                if time_diff.total_seconds() > debounce_seconds:
+                    attendance.out_time = now
+                    action = "checkout_update"
+                else:
+                    action = "debounced"
+            except Exception as e:
+                current_app.logger.error(f"Error calculating time difference: {str(e)}")
+                # In case of an error, still update the out_time as a fallback
                 attendance.out_time = now
                 action = "checkout_update"
-            else:
-                action = "debounced"
         
         db.session.commit()
         return action

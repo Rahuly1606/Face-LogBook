@@ -9,6 +9,8 @@ export interface RecognizedStudent {
   action?: 'checkin' | 'checkout';
   timestamp?: string;
   bbox?: number[]; // Bounding box coordinates [x1, y1, x2, y2]
+  greeting_message?: string; // Welcome message for check-ins
+  goodbye_message?: string;  // Goodbye message for check-outs
 }
 
 export interface UnrecognizedFace {

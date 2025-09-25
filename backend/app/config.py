@@ -34,6 +34,7 @@ class Config:
     
     # Attendance settings
     DEBOUNCE_SECONDS = int(os.getenv('DEBOUNCE_SECONDS', 30))
+    EVENT_DEBOUNCE_SECONDS = int(os.getenv('EVENT_DEBOUNCE_SECONDS', 30))  # Debounce for camera events
     
     # Timezone settings
     TIMEZONE = pytz.timezone('Asia/Kolkata')  # Indian Standard Time

@@ -4,12 +4,14 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { getGroupAttendanceByDate, AttendanceRecord } from '@/api/attendance';
-import { Download, RotateCcw, Calendar as CalendarIcon, Loader2, User, UserCheck, UserX, Clock } from 'lucide-react';
+import { Download, RotateCcw, Calendar as CalendarIcon, Loader2, User, UserCheck, UserX, Clock, History } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { DatePicker } from '@/components/ui/date-picker';
 import { format } from 'date-fns';
 import { cn } from '@/lib/utils';
 import { Skeleton } from '@/components/ui/skeleton';
+import EventLogModal from './EventLogModal';
+import { getStudentEvents, getStudentEventPairs, CameraEvent, CameraEventPair } from '@/api/camera-events';
 
 interface GroupAttendanceTableProps {
   groupId: number;
@@ -20,6 +22,15 @@ const GroupAttendanceTable: React.FC<GroupAttendanceTableProps> = ({ groupId }) 
   const [loading, setLoading] = useState(true);
   const [selectedDate, setSelectedDate] = useState<Date | undefined>(new Date());
   const { toast } = useToast();
+  const [isEventLogOpen, setIsEventLogOpen] = useState(false);
+  const [eventLoading, setEventLoading] = useState(false);
+  const [selectedStudent, setSelectedStudent] = useState<{
+    id: string;
+    name: string;
+    date: string;
+    eventPairs: CameraEventPair[];
+    rawEvents: CameraEvent[];
+  } | null>(null);
 
   const fetchAttendance = useCallback(async () => {
     if (!groupId || !selectedDate) return;
@@ -38,6 +49,44 @@ const GroupAttendanceTable: React.FC<GroupAttendanceTableProps> = ({ groupId }) 
       setLoading(false);
     }
   }, [groupId, selectedDate, toast]);
+
+  const handleViewEvents = async (record: AttendanceRecord) => {
+    if (!record.student_id || !record.date) {
+      toast({
+        title: "Error",
+        description: "Missing student ID or date",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setEventLoading(true);
+    try {
+      // Fetch both raw events and event pairs in parallel
+      const [rawEventsResponse, eventPairsResponse] = await Promise.all([
+        getStudentEvents(record.student_id, record.date),
+        getStudentEventPairs(record.student_id, record.date)
+      ]);
+
+      setSelectedStudent({
+        id: record.student_id,
+        name: record.name || record.student_name || '',
+        date: record.date,
+        eventPairs: eventPairsResponse.event_pairs,
+        rawEvents: rawEventsResponse.events
+      });
+      setIsEventLogOpen(true);
+    } catch (error) {
+      console.error("Error fetching event data:", error);
+      toast({
+        title: "Error",
+        description: "Failed to load event data. Please try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setEventLoading(false);
+    }
+  };
 
   useEffect(() => {
     fetchAttendance();
@@ -60,7 +109,7 @@ const GroupAttendanceTable: React.FC<GroupAttendanceTableProps> = ({ groupId }) 
     };
     return <Badge variant="outline" className={cn("font-semibold capitalize", statusStyles[status])}>{status}</Badge>;
   };
-  
+
   const formatTime = (timeString: string | null) => {
     if (!timeString) return <span className="text-muted-foreground">-</span>;
     return new Date(timeString).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
@@ -80,58 +129,99 @@ const GroupAttendanceTable: React.FC<GroupAttendanceTableProps> = ({ groupId }) 
   };
 
   const renderSkeleton = () => (
-    <div className="rounded-lg border bg-card shadow-sm"><Table><TableHeader><TableRow>{[...Array(6)].map((_,i)=><TableHead key={i}><Skeleton className="h-5 w-24"/></TableHead>)}</TableRow></TableHeader><TableBody>{[...Array(5)].map((_,i)=><TableRow key={i}>{[...Array(6)].map((_,j)=><TableCell key={j}><Skeleton className="h-5 w-full"/></TableCell>)}</TableRow>)}</TableBody></Table></div>
+    <div className="rounded-lg border bg-card shadow-sm"><Table><TableHeader><TableRow>{[...Array(6)].map((_, i) => <TableHead key={i}><Skeleton className="h-5 w-24" /></TableHead>)}</TableRow></TableHeader><TableBody>{[...Array(5)].map((_, i) => <TableRow key={i}>{[...Array(6)].map((_, j) => <TableCell key={j}><Skeleton className="h-5 w-full" /></TableCell>)}</TableRow>)}</TableBody></Table></div>
   );
 
   return (
-    <Card className="shadow-lg rounded-xl">
-      <CardHeader>
-        <CardTitle>Attendance Log</CardTitle>
-        <CardDescription>Review and export daily attendance records for this group.</CardDescription>
-      </CardHeader>
-      <CardContent className="space-y-6">
-        <div className="flex flex-col sm:flex-row justify-between items-center gap-4 p-4 bg-muted/50 rounded-lg">
-          <div className="flex items-center gap-3 w-full sm:w-auto">
-            <DatePicker date={selectedDate} setDate={setSelectedDate} />
-            <Button variant="outline" size="icon" onClick={() => setSelectedDate(new Date())} title="Go to Today"><RotateCcw className="h-4 w-4" /></Button>
+    <>
+      <Card className="shadow-lg rounded-xl">
+        <CardHeader>
+          <CardTitle>Attendance Log</CardTitle>
+          <CardDescription>Review and export daily attendance records for this group.</CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-6">
+          <div className="flex flex-col sm:flex-row justify-between items-center gap-4 p-4 bg-muted/50 rounded-lg">
+            <div className="flex items-center gap-3 w-full sm:w-auto">
+              <DatePicker date={selectedDate} setDate={setSelectedDate} />
+              <Button variant="outline" size="icon" onClick={() => setSelectedDate(new Date())} title="Go to Today"><RotateCcw className="h-4 w-4" /></Button>
+            </div>
+            <Button onClick={handleExportCsv} variant="default" className="w-full sm:w-auto" disabled={records.length === 0}><Download className="h-4 w-4 mr-2" />Export CSV</Button>
           </div>
-          <Button onClick={handleExportCsv} variant="default" className="w-full sm:w-auto" disabled={records.length === 0}><Download className="h-4 w-4 mr-2" />Export CSV</Button>
-        </div>
-        
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-          <StatCard icon={User} value={loading ? '...' : stats.total} label="Total Students" />
-          <StatCard icon={UserCheck} value={loading ? '...' : stats.present} label="Present" />
-          <StatCard icon={UserX} value={loading ? '...' : stats.absent} label="Absent" />
-          <StatCard icon={Clock} value={loading ? '...' : stats.late} label="Late" />
-        </div>
 
-        {loading ? renderSkeleton() : (
-          <div className="rounded-lg border bg-card overflow-x-auto">
-            <Table className="min-w-[720px]">
-              <TableHeader><TableRow><TableHead>Student ID</TableHead><TableHead>Name</TableHead><TableHead>Check In</TableHead><TableHead>Check Out</TableHead><TableHead className="text-right">Status</TableHead></TableRow></TableHeader>
-              <TableBody>
-                {records.length === 0 ? (
-                  <TableRow><TableCell colSpan={5} className="text-center h-48 text-muted-foreground">No records for this date.</TableCell></TableRow>
-                ) : (records.map((record) => (
-                  <TableRow key={record.id}><TableCell className="font-mono text-muted-foreground">{record.student_id}</TableCell><TableCell className="font-medium">{record.name}</TableCell><TableCell>{formatTime(record.in_time)}</TableCell><TableCell>{formatTime(record.out_time)}</TableCell><TableCell className="text-right">{getStatusBadge(record.status)}</TableCell></TableRow>
-                )))}
-              </TableBody>
-            </Table>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            <StatCard icon={User} value={loading ? '...' : stats.total} label="Total Students" />
+            <StatCard icon={UserCheck} value={loading ? '...' : stats.present} label="Present" />
+            <StatCard icon={UserX} value={loading ? '...' : stats.absent} label="Absent" />
+            <StatCard icon={Clock} value={loading ? '...' : stats.late} label="Late" />
           </div>
-        )}
-      </CardContent>
-    </Card>
+
+          {loading ? renderSkeleton() : (
+            <div className="rounded-lg border bg-card overflow-x-auto">
+              <Table className="min-w-[720px]">
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Student ID</TableHead>
+                    <TableHead>Name</TableHead>
+                    <TableHead>Check In</TableHead>
+                    <TableHead>Check Out</TableHead>
+                    <TableHead>Status</TableHead>
+                    <TableHead className="text-right">Actions</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {records.length === 0 ? (
+                    <TableRow><TableCell colSpan={6} className="text-center h-48 text-muted-foreground">No records for this date.</TableCell></TableRow>
+                  ) : (records.map((record) => (
+                    <TableRow key={record.id}>
+                      <TableCell className="font-mono text-muted-foreground">{record.student_id}</TableCell>
+                      <TableCell className="font-medium">{record.name}</TableCell>
+                      <TableCell>{formatTime(record.in_time)}</TableCell>
+                      <TableCell>{formatTime(record.out_time)}</TableCell>
+                      <TableCell>{getStatusBadge(record.status)}</TableCell>
+                      <TableCell className="text-right">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => handleViewEvents(record)}
+                          disabled={eventLoading}
+                          title="View In/Out Events"
+                        >
+                          <History className="h-4 w-4 mr-1" />
+                          Events
+                        </Button>
+                      </TableCell>
+                    </TableRow>
+                  )))}
+                </TableBody>
+              </Table>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      {selectedStudent && (
+        <EventLogModal
+          isOpen={isEventLogOpen}
+          onClose={() => setIsEventLogOpen(false)}
+          studentId={selectedStudent.id}
+          studentName={selectedStudent.name}
+          date={selectedStudent.date}
+          eventPairs={selectedStudent.eventPairs}
+          rawEvents={selectedStudent.rawEvents}
+        />
+      )}
+    </>
   );
 };
 
 const StatCard: React.FC<{ icon: React.ElementType, value: number | string, label: string }> = ({ icon: Icon, value, label }) => (
-    <div className="bg-card border rounded-lg p-4 flex items-center gap-4">
-        <Icon className="h-6 w-6 text-muted-foreground" />
-        <div>
-            <div className="text-2xl font-bold">{value}</div>
-            <div className="text-sm text-muted-foreground">{label}</div>
-        </div>
+  <div className="bg-card border rounded-lg p-4 flex items-center gap-4">
+    <Icon className="h-6 w-6 text-muted-foreground" />
+    <div>
+      <div className="text-2xl font-bold">{value}</div>
+      <div className="text-sm text-muted-foreground">{label}</div>
     </div>
+  </div>
 );
 
 

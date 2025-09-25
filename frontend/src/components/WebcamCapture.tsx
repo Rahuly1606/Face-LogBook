@@ -316,15 +316,69 @@ const WebcamCapture: React.FC<WebcamCaptureProps> = ({ groupId, onFaceRecognized
         setUnrecognizedFaces(response.unrecognized_faces || []);
 
         if (response.recognized && response.recognized.length > 0) {
+          // Log the response for debugging
+          console.log("Recognition API response:", JSON.stringify(response.recognized));
+
           updateTrackedStudents(response.recognized);
           const studentsWithTimestamp = response.recognized.map(student => ({
             ...student,
             timestamp: new Date().toISOString()
           }));
           setRecognizedStudents(prev => {
-            const existingIds = new Set(prev.map(s => s.student_id));
-            const newStudents = studentsWithTimestamp.filter(s => !existingIds.has(s.student_id));
-            return [...prev, ...newStudents];
+            // Create a map of existing students for quick lookup
+            const existingMap = new Map(prev.map(s => [s.student_id, s]));
+
+            // Process all incoming students
+            const updatedStudents = studentsWithTimestamp.map(student => {
+              const existingStudent = existingMap.get(student.student_id);
+
+              // If student exists, update their action and messages
+              if (existingStudent) {
+                existingMap.delete(student.student_id); // Remove from map to track processed students
+
+                // Always use the most recent action from the API
+                const action = student.action || existingStudent.action;
+
+                // Use the appropriate message based on action type
+                let greetingMessage = null;
+                let goodbyeMessage = null;
+
+                if (action === 'checkin') {
+                  greetingMessage = student.greeting_message || existingStudent.greeting_message;
+                } else if (action === 'checkout') {
+                  goodbyeMessage = student.goodbye_message || existingStudent.goodbye_message;
+                }
+
+                return {
+                  ...existingStudent,
+                  action: action,
+                  greeting_message: greetingMessage,
+                  goodbye_message: goodbyeMessage,
+                  score: student.score,
+                  timestamp: new Date().toISOString()
+                };
+              } else {
+                // New student - ensure the action is correctly set
+                const action = student.action || 'checkin'; // Default to checkin if not set
+
+                // Set appropriate message based on action type
+                let newStudent = { ...student };
+
+                if (action === 'checkin' && !student.greeting_message) {
+                  newStudent.greeting_message = `Welcome, ${student.name}!`;
+                } else if (action === 'checkout' && !student.goodbye_message) {
+                  newStudent.goodbye_message = `Goodbye, ${student.name}!`;
+                }
+
+                newStudent.action = action;
+                return newStudent;
+              }
+            });
+
+            // Keep any students not in the current recognition batch
+            const remainingStudents = Array.from(existingMap.values());
+
+            return [...updatedStudents, ...remainingStudents];
           });
           if (onFaceRecognized) onFaceRecognized();
         }

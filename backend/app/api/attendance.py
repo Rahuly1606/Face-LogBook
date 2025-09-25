@@ -49,15 +49,31 @@ def process_live_attendance():
     # Process attendance for recognized faces
     for i, person in enumerate(result['recognized']):
         action = AttendanceService.process_attendance(person['student_id'])
-        result['recognized'][i]['action'] = action
-        # If already checked in (debounced), show goodbye message
-        if action == "debounced":
-            # Get student name
-            student = Student.query.get(person['student_id'])
-            if student:
-                result['recognized'][i]['goodbye_message'] = f"Goodbye, {student.name}!"
+        
+        # Get the student record
+        student = Student.query.get(person['student_id'])
+        student_name = student.name if student else "Student"
+        
+        # Set appropriate greeting message based on action
+        if action == "checkin":
+            result['recognized'][i]['action'] = "checkin"
+            result['recognized'][i]['greeting_message'] = f"Welcome, {student_name}!"
+        elif action == "checkout" or action == "checkout_update":
+            result['recognized'][i]['action'] = "checkout"
+            result['recognized'][i]['goodbye_message'] = f"Goodbye, {student_name}!"
+        elif action == "debounced":
+            # Check if the student is checked in or out to determine message
+            today = AttendanceService.get_ist_today()
+            attendance = Attendance.query.filter_by(student_id=person['student_id'], date=today).first()
+            
+            if attendance and attendance.out_time:
+                # Student already checked out
+                result['recognized'][i]['action'] = "checkout"
+                result['recognized'][i]['goodbye_message'] = f"Goodbye, {student_name}!"
             else:
-                result['recognized'][i]['goodbye_message'] = "Goodbye!"
+                # Student already checked in
+                result['recognized'][i]['action'] = "checkin"
+                result['recognized'][i]['greeting_message'] = f"Welcome, {student_name}!"
     
     return jsonify(result), 200
 
@@ -77,7 +93,31 @@ def process_group_photo():
     # Process attendance for recognized faces
     for i, person in enumerate(result['recognized']):
         action = AttendanceService.process_attendance(person['student_id'])
-        result['recognized'][i]['action'] = action
+        
+        # Get the student record
+        student = Student.query.get(person['student_id'])
+        student_name = student.name if student else "Student"
+        
+        # Set appropriate greeting message based on action
+        if action == "checkin":
+            result['recognized'][i]['action'] = "checkin"
+            result['recognized'][i]['greeting_message'] = f"Welcome, {student_name}!"
+        elif action == "checkout" or action == "checkout_update":
+            result['recognized'][i]['action'] = "checkout"
+            result['recognized'][i]['goodbye_message'] = f"Goodbye, {student_name}!"
+        elif action == "debounced":
+            # Check if the student is checked in or out to determine message
+            today = AttendanceService.get_ist_today()
+            attendance = Attendance.query.filter_by(student_id=person['student_id'], date=today).first()
+            
+            if attendance and attendance.out_time:
+                # Student already checked out
+                result['recognized'][i]['action'] = "checkout"
+                result['recognized'][i]['goodbye_message'] = f"Goodbye, {student_name}!"
+            else:
+                # Student already checked in
+                result['recognized'][i]['action'] = "checkin"
+                result['recognized'][i]['greeting_message'] = f"Welcome, {student_name}!"
     
     return jsonify(result), 200
 

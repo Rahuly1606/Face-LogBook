@@ -18,6 +18,7 @@ class Student(db.Model):
     # Relationships
     group = db.relationship('Group', back_populates='students')
     attendances = db.relationship('Attendance', back_populates='student', cascade='all, delete-orphan')
+    camera_events = db.relationship('CameraEvent', back_populates='student', cascade='all, delete-orphan')
     
     def __repr__(self):
         return f"<Student {self.student_id}: {self.name}>"

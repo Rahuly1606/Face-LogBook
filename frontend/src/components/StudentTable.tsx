@@ -3,16 +3,17 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Button } from '@/components/ui/button';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from '@/components/ui/dialog';
-import { 
-  Edit, 
-  Trash2, 
-  UserPlus, 
-  RefreshCw, 
-  FileSpreadsheet, 
-  AlertTriangle, 
-  Loader2, 
-  Check, 
-  AlertCircle 
+import {
+  Edit,
+  Trash2,
+  UserPlus,
+  RefreshCw,
+  FileSpreadsheet,
+  AlertTriangle,
+  Loader2,
+  Check,
+  AlertCircle,
+  History
 } from 'lucide-react';
 import { getStudentsByGroup, deleteStudent, updateStudent, Student, bulkDeleteStudents } from '@/api/students';
 import { useToast } from '@/hooks/use-toast';
@@ -21,6 +22,9 @@ import { Alert } from '@/components/ui/alert';
 import StudentForm from './StudentForm';
 import CSVBulkImport from './CSVBulkImport';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import EventLogModal from './EventLogModal';
+import { getStudentEvents, getStudentEventPairs, CameraEvent, CameraEventPair } from '@/api/camera-events';
+import { format } from 'date-fns';
 
 interface StudentTableProps {
   groupId?: number;
@@ -31,8 +35,8 @@ interface StudentTableProps {
   onEdit?: (student: Student) => void;
 }
 
-const StudentTable: React.FC<StudentTableProps> = ({ 
-  groupId, 
+const StudentTable: React.FC<StudentTableProps> = ({
+  groupId,
   students: propStudents,
   refreshTrigger = 0,
   onUpdate,
@@ -45,7 +49,7 @@ const StudentTable: React.FC<StudentTableProps> = ({
   const [showEditDialog, setShowEditDialog] = useState(false);
   const [showBulkImportDialog, setShowBulkImportDialog] = useState(false);
   const [activeTab, setActiveTab] = useState<'list' | 'import'>('list');
-  
+
   // New state for bulk deletion
   const [selectedStudents, setSelectedStudents] = useState<{ [key: string]: boolean }>({});
   const [isSelectAll, setIsSelectAll] = useState(false);
@@ -56,7 +60,18 @@ const StudentTable: React.FC<StudentTableProps> = ({
     deleted: string[];
     failed: { id: string; reason: string }[];
   } | null>(null);
-  
+
+  // State for event log modal
+  const [isEventLogOpen, setIsEventLogOpen] = useState(false);
+  const [eventLoading, setEventLoading] = useState(false);
+  const [selectedEventStudent, setSelectedEventStudent] = useState<{
+    id: string;
+    name: string;
+    date: string;
+    eventPairs: CameraEventPair[];
+    rawEvents: CameraEvent[];
+  } | null>(null);
+
   const { toast } = useToast();
 
   // Only fetch students if groupId is provided and propStudents is not
@@ -66,26 +81,26 @@ const StudentTable: React.FC<StudentTableProps> = ({
       setIsLoading(false);
       return;
     }
-    
+
     if (!groupId) return;
-    
+
     const fetchStudents = async () => {
       setIsLoading(true);
       try {
         console.log('Fetching students for group:', groupId);
         const response = await getStudentsByGroup(groupId);
         console.log('Students data received:', response);
-        
+
         if (response && Array.isArray(response.students)) {
           // Validate each student object to ensure it has the required fields
-          const validStudents = response.students.filter(student => 
+          const validStudents = response.students.filter(student =>
             student && typeof student === 'object' && student.student_id && student.name
           );
-          
+
           if (validStudents.length !== response.students.length) {
             console.warn('Some student objects were invalid and filtered out');
           }
-          
+
           setStudents(validStudents);
         } else {
           console.warn('Unexpected students data format:', response);
@@ -122,15 +137,15 @@ const StudentTable: React.FC<StudentTableProps> = ({
 
     try {
       await deleteStudent(student.student_id);
-      
+
       // Update local state
       setStudents(students.filter(s => s.student_id !== student.student_id));
-      
+
       toast({
         title: 'Student deleted',
         description: `${student.name} has been deleted successfully`,
       });
-      
+
       if (onDelete) {
         onDelete(student);
       }
@@ -150,15 +165,15 @@ const StudentTable: React.FC<StudentTableProps> = ({
       title: 'Student updated',
       description: 'Student information has been updated successfully',
     });
-    
+
     // Refresh student list
     if (onUpdate) {
       onUpdate();
     } else {
       // Refresh locally
-      setStudents(prevStudents => 
-        prevStudents.map(s => s.student_id === editStudent?.student_id ? 
-          { ...s, ...editStudent } : 
+      setStudents(prevStudents =>
+        prevStudents.map(s => s.student_id === editStudent?.student_id ?
+          { ...s, ...editStudent } :
           s
         )
       );
@@ -169,28 +184,70 @@ const StudentTable: React.FC<StudentTableProps> = ({
   const toggleSelectAll = () => {
     const newSelectAll = !isSelectAll;
     setIsSelectAll(newSelectAll);
-    
+
     const newSelectedStudents = { ...selectedStudents };
     students.forEach(student => {
       newSelectedStudents[student.student_id] = newSelectAll;
     });
-    
+
     setSelectedStudents(newSelectedStudents);
   };
-  
+
+  // Handle view events for a student
+  const handleViewEvents = async (student: Student) => {
+    if (!student.student_id) {
+      toast({
+        title: "Error",
+        description: "Missing student ID",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setEventLoading(true);
+    try {
+      // Get today's date in YYYY-MM-DD format
+      const today = format(new Date(), 'yyyy-MM-dd');
+
+      // Fetch both raw events and event pairs in parallel
+      const [rawEventsResponse, eventPairsResponse] = await Promise.all([
+        getStudentEvents(student.student_id, today),
+        getStudentEventPairs(student.student_id, today)
+      ]);
+
+      setSelectedEventStudent({
+        id: student.student_id,
+        name: student.name,
+        date: today,
+        eventPairs: eventPairsResponse.event_pairs,
+        rawEvents: rawEventsResponse.events
+      });
+      setIsEventLogOpen(true);
+    } catch (error) {
+      console.error("Error fetching event data:", error);
+      toast({
+        title: "Error",
+        description: "Failed to load event data. Please try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setEventLoading(false);
+    }
+  };
+
   const toggleSelectStudent = (studentId: string) => {
-    const newSelectedStudents = { 
-      ...selectedStudents, 
-      [studentId]: !selectedStudents[studentId] 
+    const newSelectedStudents = {
+      ...selectedStudents,
+      [studentId]: !selectedStudents[studentId]
     };
-    
+
     setSelectedStudents(newSelectedStudents);
-    
+
     // Check if all are selected to update the selectAll state
-    const allSelected = students.every(student => 
+    const allSelected = students.every(student =>
       newSelectedStudents[student.student_id]
     );
-    
+
     setIsSelectAll(allSelected);
   };
 
@@ -208,10 +265,10 @@ const StudentTable: React.FC<StudentTableProps> = ({
   const confirmBulkDelete = () => {
     const ids = getSelectedStudentIds();
     if (ids.length === 0) return;
-    
+
     setShowDeleteConfirmDialog(true);
   };
-  
+
   // Execute bulk delete
   const executeBulkDelete = async () => {
     const ids = getSelectedStudentIds();
@@ -219,34 +276,33 @@ const StudentTable: React.FC<StudentTableProps> = ({
       setShowDeleteConfirmDialog(false);
       return;
     }
-    
+
     setIsDeletingBulk(true);
     setBulkDeleteProgress({ current: 0, total: ids.length });
-    
+
     try {
       const result = await bulkDeleteStudents(ids);
-      
+
       // Update local state by removing deleted students
-      setStudents(prevStudents => 
+      setStudents(prevStudents =>
         prevStudents.filter(student => !result.deleted.includes(student.student_id))
       );
-      
+
       // Reset selections
       setSelectedStudents({});
       setIsSelectAll(false);
-      
+
       // Store results for display
       setDeleteResults(result);
-      
+
       // Show success toast
       toast({
         title: 'Students deleted',
-        description: `Successfully deleted ${result.deleted.length} students${
-          result.failed.length > 0 ? `, ${result.failed.length} failed` : ''
-        }`,
+        description: `Successfully deleted ${result.deleted.length} students${result.failed.length > 0 ? `, ${result.failed.length} failed` : ''
+          }`,
         variant: result.failed.length > 0 ? 'destructive' : 'default',
       });
-      
+
       // Trigger parent update if provided
       if (onUpdate) {
         onUpdate();
@@ -283,8 +339,8 @@ const StudentTable: React.FC<StudentTableProps> = ({
       <div className="flex justify-between items-center">
         <h2 className="text-xl font-bold">Students in this Group</h2>
         <div className="flex gap-2">
-          <Button 
-            variant={activeTab === 'import' ? 'default' : 'outline'} 
+          <Button
+            variant={activeTab === 'import' ? 'default' : 'outline'}
             onClick={() => setActiveTab('import')}
             className="flex items-center gap-2"
           >
@@ -300,8 +356,8 @@ const StudentTable: React.FC<StudentTableProps> = ({
           <div className="font-medium">
             {selectedCount} student{selectedCount !== 1 ? 's' : ''} selected
           </div>
-          <Button 
-            variant="destructive" 
+          <Button
+            variant="destructive"
             onClick={confirmBulkDelete}
             className="flex items-center gap-2"
             disabled={isDeletingBulk}
@@ -342,7 +398,7 @@ const StudentTable: React.FC<StudentTableProps> = ({
               <TableHeader>
                 <TableRow>
                   <TableHead className="w-[40px]">
-                    <Checkbox 
+                    <Checkbox
                       checked={isSelectAll && students.length > 0}
                       onCheckedChange={toggleSelectAll}
                       disabled={isLoading || students.length === 0}
@@ -373,7 +429,7 @@ const StudentTable: React.FC<StudentTableProps> = ({
                   students.map((student) => (
                     <TableRow key={student.student_id}>
                       <TableCell>
-                        <Checkbox 
+                        <Checkbox
                           checked={!!selectedStudents[student.student_id]}
                           onCheckedChange={() => toggleSelectStudent(student.student_id)}
                           aria-label={`Select ${student.name}`}
@@ -396,6 +452,17 @@ const StudentTable: React.FC<StudentTableProps> = ({
                       </TableCell>
                       <TableCell className="text-right">
                         <div className="flex justify-end gap-2">
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => handleViewEvents(student)}
+                            disabled={eventLoading}
+                            className="gap-1"
+                            title="View In/Out Events"
+                          >
+                            <History className="h-3 w-3" />
+                            Events
+                          </Button>
                           <Button
                             variant="outline"
                             size="sm"
@@ -425,12 +492,12 @@ const StudentTable: React.FC<StudentTableProps> = ({
         </TabsContent>
 
         <TabsContent value="import">
-          <CSVBulkImport 
-            groupId={groupId} 
+          <CSVBulkImport
+            groupId={groupId}
             onSuccess={() => {
               setActiveTab('list');
               if (onUpdate) onUpdate();
-            }} 
+            }}
           />
         </TabsContent>
       </Tabs>
@@ -441,7 +508,7 @@ const StudentTable: React.FC<StudentTableProps> = ({
           <DialogHeader>
             <DialogTitle>{editStudent ? 'Edit Student' : 'Add Student'}</DialogTitle>
           </DialogHeader>
-          <StudentForm 
+          <StudentForm
             student={editStudent || undefined}
             groupId={groupId}
             onSuccess={handleUpdateSuccess}
@@ -460,7 +527,7 @@ const StudentTable: React.FC<StudentTableProps> = ({
               and remove their data from the system.
             </DialogDescription>
           </DialogHeader>
-          
+
           {selectedCount <= 10 && (
             <div className="max-h-[200px] overflow-y-auto border rounded-md p-2">
               <ul className="space-y-1">
@@ -483,22 +550,22 @@ const StudentTable: React.FC<StudentTableProps> = ({
             <Alert variant="destructive" className="my-2">
               <AlertTriangle className="h-4 w-4" />
               <span>
-                You are about to delete <strong>{selectedCount} students</strong>. 
+                You are about to delete <strong>{selectedCount} students</strong>.
                 This is a large number of students and cannot be undone.
               </span>
             </Alert>
           )}
-          
+
           <DialogFooter className="gap-2 sm:gap-0">
-            <Button 
-              variant="outline" 
+            <Button
+              variant="outline"
               onClick={() => setShowDeleteConfirmDialog(false)}
               disabled={isDeletingBulk}
             >
               Cancel
             </Button>
-            <Button 
-              variant="destructive" 
+            <Button
+              variant="destructive"
               onClick={executeBulkDelete}
               disabled={isDeletingBulk}
               className="gap-2"
@@ -525,7 +592,7 @@ const StudentTable: React.FC<StudentTableProps> = ({
           <DialogHeader>
             <DialogTitle>Delete Results</DialogTitle>
           </DialogHeader>
-          
+
           {deleteResults && (
             <div className="space-y-4">
               <div className="flex gap-4">
@@ -540,7 +607,7 @@ const StudentTable: React.FC<StudentTableProps> = ({
                   </div>
                 )}
               </div>
-              
+
               {deleteResults.failed.length > 0 && (
                 <div>
                   <h3 className="text-lg font-medium mb-2">Failed Deletions</h3>
@@ -564,7 +631,7 @@ const StudentTable: React.FC<StudentTableProps> = ({
               )}
             </div>
           )}
-          
+
           <DialogFooter>
             <Button onClick={handleCloseDeleteResults}>
               Close
@@ -572,6 +639,19 @@ const StudentTable: React.FC<StudentTableProps> = ({
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Event Log Modal */}
+      {selectedEventStudent && (
+        <EventLogModal
+          isOpen={isEventLogOpen}
+          onClose={() => setIsEventLogOpen(false)}
+          studentId={selectedEventStudent.id}
+          studentName={selectedEventStudent.name}
+          date={selectedEventStudent.date}
+          eventPairs={selectedEventStudent.eventPairs}
+          rawEvents={selectedEventStudent.rawEvents}
+        />
+      )}
     </div>
   );
 };

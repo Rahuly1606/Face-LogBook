@@ -24,8 +24,26 @@ const LiveStudentList: React.FC<LiveStudentListProps> = ({
   totalFaces,
   processingTime,
 }) => {
+  // Log the incoming recognized students for debugging
+  React.useEffect(() => {
+    console.log("LiveStudentList received students:", recognizedStudents);
+  }, [recognizedStudents]);
+
+  // Process students to ensure they have proper action values
+  const processedStudents = recognizedStudents.map(student => {
+    // Determine action from messages if action is missing
+    if (!student.action) {
+      if (student.greeting_message) {
+        return { ...student, action: 'checkin' };
+      } else if (student.goodbye_message) {
+        return { ...student, action: 'checkout' };
+      }
+    }
+    return student;
+  });
+
   const uniqueStudents = Array.from(
-    new Map(recognizedStudents.map(s => [s.student_id, s])).values()
+    new Map(processedStudents.map(s => [s.student_id, s])).values()
   ).sort((a, b) => new Date(b.timestamp || 0).getTime() - new Date(a.timestamp || 0).getTime());
 
   return (
@@ -71,12 +89,22 @@ const LiveStudentList: React.FC<LiveStudentListProps> = ({
                     <div>
                       <p className="font-bold">{student.name}</p>
                       <p className="text-sm text-muted-foreground font-mono">{student.student_id}</p>
+                      {student.action && (
+                        <p className={`text-xs font-medium ${student.action === 'checkin' ? 'text-green-600' : 'text-amber-600'}`}>
+                          {student.action === 'checkin'
+                            ? (student.greeting_message || `Welcome, ${student.name}!`)
+                            : (student.goodbye_message || `Goodbye, ${student.name}!`)}
+                        </p>
+                      )}
                     </div>
                   </div>
                   <div className="flex items-center gap-2">
                     <Badge variant="outline" className="font-semibold">{Math.round(student.score * 100)}%</Badge>
-                    <Badge variant={student.action === 'checkin' ? 'success' : 'warning'} className="capitalize">
-                      {student.action}
+                    <Badge
+                      variant={student.action === 'checkin' ? 'success' : 'warning'}
+                      className="capitalize"
+                    >
+                      {student.action === 'checkin' ? 'Checkin' : 'Checkout'}
                     </Badge>
                   </div>
                 </motion.div>

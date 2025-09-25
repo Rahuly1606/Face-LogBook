@@ -82,12 +82,14 @@ def create_app(config_name='dev'):
     from .api.health import health_bp
     from .api.auth import auth_bp
     from .api.groups import groups_bp
+    from .api.camera_events import camera_events_bp
     
     app.register_blueprint(student_bp, url_prefix='/api/v1/students')
     app.register_blueprint(attendance_bp, url_prefix='/api/v1/attendance')
     app.register_blueprint(health_bp, url_prefix='/api/v1')
     app.register_blueprint(auth_bp, url_prefix='/api/v1/auth')
     app.register_blueprint(groups_bp, url_prefix='/api/v1/groups')
+    app.register_blueprint(camera_events_bp, url_prefix='/api/v1/camera-events')
     
     # Global error handler
     @app.errorhandler(Exception)
