@@ -2,7 +2,7 @@ import React, { useRef, useCallback, useState, useEffect } from 'react';
 import Webcam from 'react-webcam';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Camera, Pause, Play, RefreshCw, Users, Clock, LogOut, Smartphone, AlertTriangle, CheckCircle2, CameraOff } from 'lucide-react';
+import { Camera, Pause, Play, RefreshCw, Users, Clock, LogOut, Smartphone, AlertTriangle, CheckCircle2, CameraOff, RotateCcw } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { IPCameraInput } from './IPCameraInput';
 import { submitLiveAttendance, RecognizedStudent as BaseRecognizedStudent, UnrecognizedFace } from '@/api/attendance';
@@ -67,6 +67,8 @@ const WebcamCapture: React.FC<WebcamCaptureProps> = ({ groupId, onFaceRecognized
   const [totalFaces, setTotalFaces] = useState(0);
   const [currentFacesInView, setCurrentFacesInView] = useState(0);
   const [fps, setFps] = useState(0);
+  const [facingMode, setFacingMode] = useState<"user" | "environment">("user");
+  const [hasMultipleCameras, setHasMultipleCameras] = useState<boolean>(true);
 
   const [messages, setMessages] = useState<AttendanceMessage[]>([]);
   const panelRef = useRef<HTMLDivElement | null>(null);
@@ -83,7 +85,7 @@ const WebcamCapture: React.FC<WebcamCaptureProps> = ({ groupId, onFaceRecognized
   const videoConstraints = {
     width: { ideal: 1280, min: 640 },
     height: { ideal: 720, min: 480 },
-    facingMode: "user",
+    facingMode: facingMode,
     aspectRatio: { ideal: 1.7777777778 }
   };
 
@@ -431,6 +433,43 @@ const WebcamCapture: React.FC<WebcamCaptureProps> = ({ groupId, onFaceRecognized
     setIsCapturing(false);
   }, [useIpCamera, ipCameraStream]);
 
+  const toggleCamera = useCallback(() => {
+    const wasCapturing = isCapturing;
+    if (wasCapturing) {
+      stopAutoCapture();
+    }
+
+    // Toggle between front and back camera
+    setFacingMode(prevMode => prevMode === "user" ? "environment" : "user");
+
+    // Force any existing stream to stop
+    if (webcamRef.current) {
+      try {
+        const videoEl = webcamRef.current as unknown as HTMLVideoElement;
+        if (videoEl.srcObject) {
+          const stream = videoEl.srcObject as MediaStream;
+          stream.getTracks().forEach(track => track.stop());
+          videoEl.srcObject = null;
+        }
+      } catch (err) {
+        console.error("Error stopping camera stream:", err);
+      }
+    }
+
+    // Show a toast notification indicating the camera change
+    toast({
+      title: `Switching Camera`,
+      description: `Attempting to switch to ${facingMode === "user" ? "back" : "front"} camera...`,
+      duration: 2000
+    });
+
+    // Resume capturing if it was active before
+    if (wasCapturing) {
+      // Small delay to allow camera to switch before resuming
+      setTimeout(() => startAutoCapture(), 1000);
+    }
+  }, [facingMode, isCapturing, startAutoCapture, stopAutoCapture, toast]);
+
   const [webcamError, setWebcamError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -481,6 +520,23 @@ const WebcamCapture: React.FC<WebcamCaptureProps> = ({ groupId, onFaceRecognized
   const handleUserMedia = useCallback(() => {
     setWebcamError(null);
     toast({ title: "Camera Connected", description: "Webcam access granted successfully" });
+
+    // Always set hasMultipleCameras to true to ensure the flip button is visible
+    // This is especially important for mobile devices
+    setHasMultipleCameras(true);
+
+    // Still try to detect multiple cameras for logging purposes
+    if (navigator.mediaDevices && navigator.mediaDevices.enumerateDevices) {
+      navigator.mediaDevices.enumerateDevices()
+        .then(devices => {
+          const videoDevices = devices.filter(device => device.kind === 'videoinput');
+          console.log(`Detected ${videoDevices.length} video input devices`);
+          // We don't update hasMultipleCameras here anymore
+        })
+        .catch(err => {
+          console.error("Error checking camera devices:", err);
+        });
+    }
   }, [toast]);
 
   const handleUserMediaError = useCallback((error: string | DOMException) => {
@@ -530,17 +586,22 @@ const WebcamCapture: React.FC<WebcamCaptureProps> = ({ groupId, onFaceRecognized
             <CardHeader className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 xs:gap-4 p-3 xs:p-4 pb-1 xs:pb-2">
               <CardTitle className="text-lg font-bold text-white">Live Camera Feed</CardTitle>
               <div className="flex flex-wrap items-center gap-2">
-                {!isCapturing ? (
-                  <Button onClick={startAutoCapture} className="gap-2 bg-green-500 hover:bg-green-600 text-white font-semibold transition-transform hover:scale-105 active:scale-95">
-                    <Play className="h-4 w-4" /> Start
+                <div className="flex gap-2">
+                  {!isCapturing ? (
+                    <Button onClick={startAutoCapture} size="sm" className="h-8 px-3 py-0 gap-1 bg-green-500 hover:bg-green-600 text-white font-semibold transition-transform hover:scale-105 active:scale-95">
+                      <Play className="h-3 w-3" /> Start
+                    </Button>
+                  ) : (
+                    <Button onClick={stopAutoCapture} size="sm" variant="destructive" className="h-8 px-3 py-0 gap-1 font-semibold transition-transform hover:scale-105 active:scale-95">
+                      <Pause className="h-3 w-3" /> Stop
+                    </Button>
+                  )}
+                  <Button onClick={toggleCamera} variant="outline" size="sm" className="h-8 px-2 py-0 gap-1 bg-blue-500 hover:bg-blue-600 text-white transition-transform hover:scale-105 active:scale-95">
+                    <RotateCcw className="h-3 w-3" />
                   </Button>
-                ) : (
-                  <Button onClick={stopAutoCapture} variant="destructive" className="gap-2 font-semibold transition-transform hover:scale-105 active:scale-95">
-                    <Pause className="h-4 w-4" /> Stop
-                  </Button>
-                )}
-                <Button onClick={captureAndProcess} variant="outline" className="gap-2 border-slate-600 bg-slate-700/50 hover:bg-slate-700 text-slate-200 transition-transform hover:scale-105 active:scale-95" disabled={isProcessing.current}>
-                  <Camera className="h-4 w-4" /> Manual
+                </div>
+                <Button onClick={captureAndProcess} variant="outline" size="sm" className="h-8 px-2 py-0 gap-1 border-slate-600 bg-slate-700/50 hover:bg-slate-700 text-slate-200 transition-transform hover:scale-105 active:scale-95" disabled={isProcessing.current}>
+                  <Camera className="h-3 w-3" /> Manual
                 </Button>
                 <Button
                   onClick={() => {
@@ -552,8 +613,8 @@ const WebcamCapture: React.FC<WebcamCaptureProps> = ({ groupId, onFaceRecognized
                     setUseIpCamera(false);
                     setShowIpCamera(true);
                   }}
-                  variant="outline" className="gap-2 border-slate-600 bg-slate-700/50 hover:bg-slate-700 text-slate-200 transition-transform hover:scale-105 active:scale-95" disabled={isProcessing.current}>
-                  <Smartphone className="h-4 w-4" /> IP Cam
+                  variant="outline" size="sm" className="h-8 px-2 py-0 gap-1 border-slate-600 bg-slate-700/50 hover:bg-slate-700 text-slate-200 transition-transform hover:scale-105 active:scale-95" disabled={isProcessing.current}>
+                  <Smartphone className="h-3 w-3" /> IP Cam
                 </Button>
               </div>
             </CardHeader>
