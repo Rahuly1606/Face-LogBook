@@ -32,8 +32,11 @@ const EventLogModal: React.FC<EventLogModalProps> = ({
     const formatTime = (timeString: string | null | undefined) => {
         if (!timeString) return <span className="text-muted-foreground">-</span>;
         try {
-            return new Date(timeString).toLocaleTimeString('en-US', {
-                hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: true
+            // The backend now sends timestamps with proper IST timezone info
+            // Parse the ISO string with timezone information and format it for display
+            return new Date(timeString).toLocaleTimeString('en-IN', {
+                hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: true,
+                timeZone: 'Asia/Kolkata' // Explicitly use IST timezone for consistent display
             });
         } catch {
             return <span className="text-muted-foreground">Invalid</span>;
@@ -44,6 +47,7 @@ const EventLogModal: React.FC<EventLogModalProps> = ({
         if (!inTime || !outTime) return <span className="text-muted-foreground">-</span>;
 
         try {
+            // Parse ISO strings with timezone information
             const inDate = new Date(inTime);
             const outDate = new Date(outTime);
             const diff = outDate.getTime() - inDate.getTime();
@@ -102,8 +106,9 @@ const EventLogModal: React.FC<EventLogModalProps> = ({
                                 <span className="font-medium text-foreground">Student ID:</span> {studentId}
                             </div>
                             <div className="text-sm text-muted-foreground">
-                                <span className="font-medium text-foreground">Date:</span> {new Date(date).toLocaleDateString('en-GB', {
-                                    day: '2-digit', month: 'short', year: 'numeric'
+                                <span className="font-medium text-foreground">Date:</span> {new Date(date).toLocaleDateString('en-IN', {
+                                    day: '2-digit', month: 'short', year: 'numeric',
+                                    timeZone: 'Asia/Kolkata' // Explicitly use IST timezone
                                 })}
                             </div>
                         </div>

@@ -447,7 +447,12 @@ const StudentTable: React.FC<StudentTableProps> = ({
                       <TableCell>{student.name}</TableCell>
                       <TableCell>
                         {student.created_at
-                          ? new Date(student.created_at).toLocaleDateString()
+                          ? new Date(student.created_at).toLocaleDateString('en-IN', {
+                            timeZone: 'Asia/Kolkata', // Explicitly use IST timezone
+                            day: '2-digit',
+                            month: 'short',
+                            year: 'numeric'
+                          })
                           : 'N/A'}
                       </TableCell>
                       <TableCell className="text-right">

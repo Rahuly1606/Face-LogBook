@@ -11,6 +11,15 @@ import numpy as np
 health_bp = Blueprint('health', __name__)
 face_service = FaceService()
 
+@health_bp.route('/health/ping', methods=['GET'])
+def ping():
+    """Lightweight health check endpoint to keep the service alive"""
+    return jsonify({
+        "status": "ok",
+        "message": "Backend service is running",
+        "timestamp": time.time()
+    }), 200
+
 @health_bp.route('/health', methods=['GET'])
 def health_check():
     """Check if the application is running and services are available"""

@@ -44,7 +44,7 @@ class Config:
     MAX_CONTENT_LENGTH = 32 * 1024 * 1024  # Increased from 16MB to 32MB max upload
     
     # CORS settings
-    ALLOWED_ORIGINS = os.getenv('ALLOWED_ORIGINS', 'http://localhost:8080,http://127.0.0.1:8080,http://localhost:3000,http://127.0.0.1:3000,http://localhost:5173,http://127.0.0.1:5173')
+    ALLOWED_ORIGINS = os.getenv('ALLOWED_ORIGINS', 'http://localhost:8080,http://127.0.0.1:8080,http://localhost:3000,http://127.0.0.1:3000,http://localhost:5173,http://127.0.0.1:5173,https://face-logbook.vercel.app,https://face-logbook-frontend.vercel.app')
     
     # --- MODIFIED: Added comment to clarify usage ---
     # Google Drive settings.

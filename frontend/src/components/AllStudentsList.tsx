@@ -67,12 +67,12 @@ const AllStudentsList: React.FC<AllStudentsListProps> = ({ onRefresh }) => {
         <div>
           <CardTitle>Today's Roster</CardTitle>
           <CardDescription>
-            {date ? `Attendance status for ${new Date(date).toLocaleDateString('en-GB', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}` : 'Live attendance overview'}
+            {date ? `Attendance status for ${new Date(date).toLocaleDateString('en-IN', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric', timeZone: 'Asia/Kolkata' })}` : 'Live attendance overview'}
           </CardDescription>
         </div>
-        <Button 
-          variant="outline" 
-          size="sm" 
+        <Button
+          variant="outline"
+          size="sm"
           onClick={handleRefresh}
           disabled={loading}
           className="gap-1.5 self-start md:self-center"
@@ -81,7 +81,7 @@ const AllStudentsList: React.FC<AllStudentsListProps> = ({ onRefresh }) => {
           Refresh
         </Button>
       </CardHeader>
-      
+
       <CardContent>
         {/* Stats Section */}
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6 p-4 bg-muted/50 rounded-lg">
@@ -107,44 +107,44 @@ const AllStudentsList: React.FC<AllStudentsListProps> = ({ onRefresh }) => {
             </div>
           </div>
         </div>
-        
+
         {/* Student List */}
         <div className="space-y-2 max-h-[500px] overflow-y-auto pr-2">
-          {loading ? renderSkeleton() : 
-           error ? (
-            <div className="bg-destructive/10 text-destructive p-4 rounded-md flex items-center gap-3">
-              <AlertTriangle className="h-5 w-5" />
-              <p>{error}</p>
-            </div>
-          ) : students.length === 0 ? (
-            <div className="text-center py-12 text-muted-foreground">
-              <p className="font-medium">No students registered in the system.</p>
-            </div>
-          ) : (
-            students.map((student) => (
-              <div 
-                key={student.student_id}
-                className="flex items-center justify-between p-3 rounded-lg hover:bg-muted/50 transition-colors"
-              >
-                <div className="flex items-center gap-4">
-                  <div className={cn('rounded-full h-10 w-10 flex items-center justify-center font-bold text-lg',
-                    student.status === 'present' 
-                      ? 'bg-green-100 text-green-700' 
-                      : 'bg-muted text-muted-foreground'
-                  )}>
-                    {student.name.charAt(0).toUpperCase()}
-                  </div>
-                  <div>
-                    <p className="font-semibold">{student.name}</p>
-                    <p className="text-sm text-muted-foreground font-mono">{student.student_id}</p>
-                  </div>
-                </div>
-                <Badge variant={student.status === 'present' ? 'success' : 'destructive'} className="capitalize">
-                  {student.status}
-                </Badge>
+          {loading ? renderSkeleton() :
+            error ? (
+              <div className="bg-destructive/10 text-destructive p-4 rounded-md flex items-center gap-3">
+                <AlertTriangle className="h-5 w-5" />
+                <p>{error}</p>
               </div>
-            ))
-          )}
+            ) : students.length === 0 ? (
+              <div className="text-center py-12 text-muted-foreground">
+                <p className="font-medium">No students registered in the system.</p>
+              </div>
+            ) : (
+              students.map((student) => (
+                <div
+                  key={student.student_id}
+                  className="flex items-center justify-between p-3 rounded-lg hover:bg-muted/50 transition-colors"
+                >
+                  <div className="flex items-center gap-4">
+                    <div className={cn('rounded-full h-10 w-10 flex items-center justify-center font-bold text-lg',
+                      student.status === 'present'
+                        ? 'bg-green-100 text-green-700'
+                        : 'bg-muted text-muted-foreground'
+                    )}>
+                      {student.name.charAt(0).toUpperCase()}
+                    </div>
+                    <div>
+                      <p className="font-semibold">{student.name}</p>
+                      <p className="text-sm text-muted-foreground font-mono">{student.student_id}</p>
+                    </div>
+                  </div>
+                  <Badge variant={student.status === 'present' ? 'success' : 'destructive'} className="capitalize">
+                    {student.status}
+                  </Badge>
+                </div>
+              ))
+            )}
         </div>
       </CardContent>
     </Card>

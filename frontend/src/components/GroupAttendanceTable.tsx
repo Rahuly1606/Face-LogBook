@@ -112,7 +112,13 @@ const GroupAttendanceTable: React.FC<GroupAttendanceTableProps> = ({ groupId }) 
 
   const formatTime = (timeString: string | null) => {
     if (!timeString) return <span className="text-muted-foreground">-</span>;
-    return new Date(timeString).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
+    return new Date(timeString).toLocaleTimeString('en-IN', {
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit',
+      hour12: true,
+      timeZone: 'Asia/Kolkata' // Explicitly use IST timezone
+    });
   };
 
   const handleExportCsv = () => {

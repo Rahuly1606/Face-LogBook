@@ -44,8 +44,9 @@ const AttendanceTable: React.FC<AttendanceTableProps> = ({ records }) => {
   const formatTime = (timeString: string | null) => {
     if (!timeString) return <span className="text-muted-foreground">-</span>;
     try {
-      return new Date(timeString).toLocaleTimeString('en-US', {
-        hour: '2-digit', minute: '2-digit', hour12: true
+      return new Date(timeString).toLocaleTimeString('en-IN', {
+        hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: true,
+        timeZone: 'Asia/Kolkata' // Explicitly use IST timezone
       });
     } catch {
       return <span className="text-muted-foreground">Invalid</span>;
@@ -54,8 +55,9 @@ const AttendanceTable: React.FC<AttendanceTableProps> = ({ records }) => {
 
   const formatDate = (dateString: string | null) => {
     if (!dateString) return '-';
-    return new Date(dateString).toLocaleDateString('en-GB', {
-      day: '2-digit', month: 'short', year: 'numeric'
+    return new Date(dateString).toLocaleDateString('en-IN', {
+      day: '2-digit', month: 'short', year: 'numeric',
+      timeZone: 'Asia/Kolkata' // Explicitly use IST timezone
     });
   };
 

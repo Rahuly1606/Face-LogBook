@@ -1,11 +1,11 @@
 import { useState, useEffect } from 'react';
-import { 
-  Table, 
-  TableBody, 
-  TableCell, 
-  TableHead, 
-  TableHeader, 
-  TableRow 
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow
 } from './ui/table';
 import { Button } from './ui/button';
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from './ui/card';
@@ -62,15 +62,15 @@ const GroupTable = ({ onSelect, onDelete, refreshTrigger = 0 }: GroupTableProps)
 
     try {
       await deleteGroup(groupId);
-      
+
       // Update local state
       setGroups(groups.filter(group => group.id !== groupId));
-      
+
       toast({
         title: 'Group deleted',
         description: 'The group has been deleted successfully',
       });
-      
+
       // Call callback if provided
       if (onDelete) {
         onDelete(groupId);
@@ -88,7 +88,15 @@ const GroupTable = ({ onSelect, onDelete, refreshTrigger = 0 }: GroupTableProps)
   // Format date for display
   const formatDate = (dateString: string) => {
     const date = new Date(dateString);
-    return date.toLocaleDateString() + ' ' + date.toLocaleTimeString();
+    return date.toLocaleDateString('en-IN', {
+      timeZone: 'Asia/Kolkata' // Explicitly use IST timezone
+    }) + ' ' + date.toLocaleTimeString('en-IN', {
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit',
+      hour12: true,
+      timeZone: 'Asia/Kolkata' // Explicitly use IST timezone
+    });
   };
 
   return (
@@ -113,10 +121,10 @@ const GroupTable = ({ onSelect, onDelete, refreshTrigger = 0 }: GroupTableProps)
             const colors = ['bg-blue-500', 'bg-green-500', 'bg-purple-500', 'bg-amber-500', 'bg-pink-500', 'bg-indigo-500'];
             const colorIndex = group.id % colors.length;
             const bgColor = colors[colorIndex];
-            
+
             return (
-              <Card 
-                key={group.id} 
+              <Card
+                key={group.id}
                 className="overflow-hidden transition-all duration-200 hover:shadow-lg border-2 hover:border-primary/20"
               >
                 <div className={cn("h-2 w-full", bgColor)} />
@@ -130,19 +138,19 @@ const GroupTable = ({ onSelect, onDelete, refreshTrigger = 0 }: GroupTableProps)
                     </Badge>
                   </div>
                 </CardHeader>
-                
+
                 <CardContent className="pb-4">
                   <div className="flex items-center text-sm text-muted-foreground mb-2">
                     <Users className="mr-2 h-4 w-4" />
                     <span>{group.student_count} student{group.student_count !== 1 ? 's' : ''}</span>
                   </div>
-                  
+
                   <div className="flex items-center text-sm text-muted-foreground">
                     <Calendar className="mr-2 h-4 w-4" />
                     <span>Created {formatDate(group.created_at)}</span>
                   </div>
                 </CardContent>
-                
+
                 <CardFooter className="flex justify-between pt-2 border-t">
                   {onSelect && (
                     <Button
@@ -155,9 +163,9 @@ const GroupTable = ({ onSelect, onDelete, refreshTrigger = 0 }: GroupTableProps)
                       <ChevronRight className="ml-1 h-4 w-4" />
                     </Button>
                   )}
-                  
+
                   <Button
-                    variant="ghost" 
+                    variant="ghost"
                     size="sm"
                     onClick={() => handleDeleteGroup(group.id)}
                     className="hover:bg-destructive/10 hover:text-destructive transition-colors"

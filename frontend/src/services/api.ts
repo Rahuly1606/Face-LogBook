@@ -15,7 +15,7 @@ console.log('API configured with:', {
 // Create axios instance with proper configuration
 const apiClient = axios.create({
     baseURL: API_URL,
-    timeout: 60000, // 60 seconds for face processing
+    timeout: 20000, // 20 seconds max timeout (reduced from 60s)
     withCredentials: true, // Important for CORS with credentials
 });
 
@@ -66,6 +66,27 @@ apiClient.interceptors.request.use(
     }
 );
 
+// Utility for handling retries
+const retry = async (fn: () => Promise<any>, retries = 2, delay = 1000, backoff = 2) => {
+    try {
+        return await fn();
+    } catch (error) {
+        if (retries <= 0) {
+            throw error;
+        }
+
+        // If backend is likely sleeping, wait longer
+        if (!(error as AxiosError).response) {
+            console.log(`Backend might be waking up. Retrying in ${delay}ms...`);
+        } else {
+            console.log(`Request failed. Retrying in ${delay}ms...`);
+        }
+
+        await new Promise(resolve => setTimeout(resolve, delay));
+        return retry(fn, retries - 1, delay * backoff);
+    }
+};
+
 // Response interceptor for error handling
 apiClient.interceptors.response.use(
     (response) => {
@@ -78,7 +99,39 @@ apiClient.interceptors.response.use(
         }
         return response;
     },
-    (error: AxiosError) => {
+    async (error: AxiosError) => {
+        const config = error.config as AxiosRequestConfig & { _retry?: boolean, _isRetryRequest?: boolean };
+
+        // Automatically retry network errors (likely backend waking up)
+        // But only retry GET requests or specific important endpoints like login
+        const isIdempotent = !config.method || config.method.toLowerCase() === 'get';
+        const isImportantEndpoint = config.url?.includes('/auth/login') || config.url?.includes('/auth/refresh');
+        const shouldRetry = (isIdempotent || isImportantEndpoint) && !config._retry;
+
+        if (!error.response && shouldRetry) {
+            config._retry = true;
+            console.log('Network error detected. Backend might be waking up - attempting retry...');
+
+            // Display a message to the user that we're trying to wake up the backend
+            const wakeupEvent = new CustomEvent('api:backend-waking', {
+                detail: { message: 'Connecting to backend service, this might take a moment...' }
+            });
+            window.dispatchEvent(wakeupEvent);
+
+            try {
+                // Try to wake up backend with a lightweight ping first
+                await fetch(`${API_BASE}/api/v1/health/ping`, {
+                    method: 'GET',
+                    headers: { 'Accept': 'application/json' },
+                });
+
+                // Now retry the original request
+                return await retry(() => apiClient(config), 2, 1500, 1.5);
+            } catch (retryError) {
+                console.error('Retry failed after multiple attempts', retryError);
+            }
+        }
+
         if (error.response) {
             // The request was made and the server responded with a status code
             // that falls out of the range of 2xx
@@ -108,9 +161,10 @@ apiClient.interceptors.response.use(
 
             // Create network error with helpful message
             const networkError = new Error(
-                `Cannot reach backend at ${API_BASE} — check server and CORS. See console for details.`
+                `Cannot reach backend at ${API_BASE}. The server may be waking up - try again in a minute or check server status.`
             );
             (networkError as any).isNetworkError = true;
+            (networkError as any).isBackendSleeping = true;
 
             return Promise.reject(networkError);
         } else {

@@ -25,22 +25,62 @@ class AttendanceService:
         """Format datetime to IST string for API responses"""
         if dt is None:
             return None
+            
+        # Check if the timestamp is between 1970 and 2050
+        # If not in this range, something is wrong with the data
+        if dt.year < 1970 or dt.year > 2050:
+            current_app.logger.warning(f"Suspicious timestamp detected: {dt}")
+            # Return None for invalid timestamps
+            return None
+            
+        # If it's a naive datetime, we need to determine if it's UTC or IST
         if dt.tzinfo is None:
-            # If datetime is naive, assume it's already in IST
-            return dt.isoformat()
-        # Convert to IST and format
+            # Calculate the hour in UTC and IST to see which makes more sense
+            current_hour_utc = datetime.now(pytz.UTC).hour
+            current_hour_ist = datetime.now(pytz.timezone('Asia/Kolkata')).hour
+            
+            # If the hour is close to the current IST hour, it's likely an IST timestamp
+            # otherwise assume it's UTC
+            if abs(dt.hour - current_hour_ist) < abs(dt.hour - current_hour_utc):
+                # It's likely an IST timestamp, so localize it as IST
+                ist = pytz.timezone('Asia/Kolkata')
+                dt = ist.localize(dt)
+            else:
+                # It's likely a UTC timestamp
+                dt = pytz.UTC.localize(dt)
+            
+        # Convert to IST and format with timezone info
         ist = pytz.timezone('Asia/Kolkata')
         return dt.astimezone(ist).isoformat()
     
     @staticmethod
     def make_timezone_aware(dt):
-        """Convert naive datetime to IST timezone-aware datetime"""
+        """Convert naive datetime to timezone-aware datetime"""
         if dt is None:
             return None
+            
         if dt.tzinfo is None:
-            # If it's naive, assume it's in IST and localize it
-            ist = pytz.timezone('Asia/Kolkata')
-            return ist.localize(dt)
+            # Check if the timestamp is between 1970 and 2050
+            # If not in this range, something is wrong with the data
+            if dt.year < 1970 or dt.year > 2050:
+                current_app.logger.warning(f"Suspicious timestamp detected: {dt}")
+                # Return original naive datetime for invalid timestamps
+                return dt
+                
+            # Calculate the hour in UTC and IST to see which makes more sense
+            current_hour_utc = datetime.now(pytz.UTC).hour
+            current_hour_ist = datetime.now(pytz.timezone('Asia/Kolkata')).hour
+            
+            # If the hour is close to the current IST hour, it's likely an IST timestamp
+            # otherwise assume it's UTC
+            if abs(dt.hour - current_hour_ist) < abs(dt.hour - current_hour_utc):
+                # It's likely an IST timestamp, so localize it as IST
+                ist = pytz.timezone('Asia/Kolkata')
+                return ist.localize(dt)
+            else:
+                # It's likely a UTC timestamp
+                return pytz.UTC.localize(dt)
+                
         # If it's already timezone-aware, return it as is
         return dt
     
@@ -111,8 +151,10 @@ class AttendanceService:
     @staticmethod
     def process_attendance(student_id):
         """Process attendance for a student, handling check-in/check-out logic"""
-        today = AttendanceService.get_ist_today()
-        now = AttendanceService.get_ist_now()
+        # Get current time in UTC for storage consistency with camera events
+        now_utc = datetime.now(pytz.timezone('UTC'))
+        # But still use IST for date-based lookups
+        today = now_utc.astimezone(pytz.timezone('Asia/Kolkata')).date()
         debounce_seconds = current_app.config.get('DEBOUNCE_SECONDS', 30)
         
         # Get the student to get their group_id
@@ -146,7 +188,7 @@ class AttendanceService:
                 student_id=student_id,
                 group_id=group_id,
                 date=today,
-                in_time=now,
+                in_time=now_utc,
                 status='present'
             )
             db.session.add(attendance)
@@ -154,7 +196,7 @@ class AttendanceService:
         elif attendance.status == 'absent':
             # Student was marked absent but is now present
             attendance.status = 'present'
-            attendance.in_time = now
+            attendance.in_time = now_utc
             action = "checkin"
         elif attendance.in_time and not attendance.out_time:
             # Already checked in, so this is a check-out
@@ -162,11 +204,10 @@ class AttendanceService:
             try:
                 # Make sure both datetimes are timezone-aware for comparison
                 in_time_aware = AttendanceService.make_timezone_aware(attendance.in_time)
-                # Ensure now also has timezone info
-                now_aware = AttendanceService.make_timezone_aware(now)
-                time_diff = now_aware - in_time_aware
+                # now_utc is already timezone-aware
+                time_diff = now_utc - in_time_aware
                 if time_diff.total_seconds() > debounce_seconds:
-                    attendance.out_time = now
+                    attendance.out_time = now_utc
                     action = "checkout"
                 else:
                     # Too soon for checkout, but still track that they're checked in
@@ -174,25 +215,24 @@ class AttendanceService:
             except Exception as e:
                 current_app.logger.error(f"Error calculating time difference: {str(e)}")
                 # In case of an error, still update the out_time as a fallback
-                attendance.out_time = now
+                attendance.out_time = now_utc
                 action = "checkout"
         elif attendance.out_time:
             # Check if we need to update the checkout time
             try:
                 # Make sure both datetimes are timezone-aware for comparison
                 out_time_aware = AttendanceService.make_timezone_aware(attendance.out_time)
-                # Ensure now also has timezone info
-                now_aware = AttendanceService.make_timezone_aware(now)
-                time_diff = now_aware - out_time_aware
+                # now_utc is already timezone-aware
+                time_diff = now_utc - out_time_aware
                 if time_diff.total_seconds() > debounce_seconds:
-                    attendance.out_time = now
+                    attendance.out_time = now_utc
                     action = "checkout_update"
                 else:
                     action = "debounced"
             except Exception as e:
                 current_app.logger.error(f"Error calculating time difference: {str(e)}")
                 # In case of an error, still update the out_time as a fallback
-                attendance.out_time = now
+                attendance.out_time = now_utc
                 action = "checkout_update"
         
         db.session.commit()
