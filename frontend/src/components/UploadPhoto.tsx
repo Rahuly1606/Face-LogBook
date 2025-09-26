@@ -1,9 +1,10 @@
 import React, { useState, useCallback, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
-import { Upload, X, Image as ImageIcon, CheckCircle } from 'lucide-react';
+import { Upload, X, Image as ImageIcon, CheckCircle, Camera } from 'lucide-react';
 import { validateImageFile, resizeImage } from '@/utils/imageHelpers';
 import { useToast } from '@/hooks/use-toast';
 import { cn } from '@/lib/utils';
+import CapturePhoto from './CapturePhoto';
 
 interface UploadPhotoProps {
   onImageSelect: (file: File | null) => void;
@@ -19,6 +20,7 @@ const UploadPhoto: React.FC<UploadPhotoProps> = ({
   const [preview, setPreview] = useState<string | null>(null);
   const [fileName, setFileName] = useState<string | null>(null);
   const [isDragging, setIsDragging] = useState(false);
+  const [isCameraOpen, setIsCameraOpen] = useState(false);
   const { toast } = useToast();
 
   useEffect(() => {
@@ -65,9 +67,27 @@ const UploadPhoto: React.FC<UploadPhotoProps> = ({
 
   const triggerFileInput = () => document.getElementById('photo-upload')?.click();
 
+  const handleCapturedImage = useCallback((file: File) => {
+    handleFileSelect(file);
+  }, [handleFileSelect]);
+
+  const openCamera = () => {
+    if (!navigator.mediaDevices?.getUserMedia) {
+      toast({
+        title: "Camera Not Supported",
+        description: "Your browser doesn't support camera access.",
+        variant: "destructive"
+      });
+      return;
+    }
+    setIsCameraOpen(true);
+  };
+
   return (
     <div>
       <label className="block text-sm font-medium mb-2">{label}</label>
+
+      {/* Upload area */}
       <div
         className={cn(
           "relative border-2 border-dashed rounded-xl p-4 transition-all duration-300 ease-in-out text-center cursor-pointer group",
@@ -78,14 +98,38 @@ const UploadPhoto: React.FC<UploadPhotoProps> = ({
         onDragOver={(e) => { e.preventDefault(); setIsDragging(true); }}
         onDragLeave={(e) => setIsDragging(false)}
         onClick={!preview ? triggerFileInput : undefined}
+        aria-label={preview ? "Image preview" : "Drag and drop area for image upload"}
+        role="button"
+        tabIndex={0}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter' || e.key === ' ') {
+            if (!preview) triggerFileInput();
+          }
+        }}
       >
-        <input type="file" accept="image/jpeg, image/png, image/webp" onChange={handleFileInput} className="hidden" id="photo-upload" />
+        <input
+          type="file"
+          accept="image/jpeg, image/png, image/webp"
+          onChange={handleFileInput}
+          className="hidden"
+          id="photo-upload"
+          aria-label="Upload photo file input"
+        />
 
         {preview ? (
           <div className="relative aspect-video w-full">
             <img src={preview} alt="Preview" className="w-full h-full object-contain rounded-md" />
             <div className="absolute inset-0 bg-black/50 flex flex-col items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity rounded-md">
-              <Button variant="destructive" size="sm" onClick={clearImage} className="gap-2">
+              <Button
+                variant="destructive"
+                size="sm"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  clearImage();
+                }}
+                className="gap-2"
+                aria-label="Remove current image"
+              >
                 <X className="h-4 w-4" /> Change Image
               </Button>
             </div>
@@ -104,6 +148,31 @@ const UploadPhoto: React.FC<UploadPhotoProps> = ({
           </div>
         )}
       </div>
+
+      {/* Camera capture button */}
+      {!preview && (
+        <div className="mt-2 flex justify-center">
+          <Button
+            type="button"
+            variant="outline"
+            onClick={(e) => {
+              e.preventDefault();
+              openCamera();
+            }}
+            className="gap-2"
+            aria-label="Capture photo with camera"
+          >
+            <Camera className="h-4 w-4" /> Capture with Camera
+          </Button>
+        </div>
+      )}
+
+      {/* Camera capture modal */}
+      <CapturePhoto
+        isOpen={isCameraOpen}
+        onClose={() => setIsCameraOpen(false)}
+        onCapture={handleCapturedImage}
+      />
     </div>
   );
 };
