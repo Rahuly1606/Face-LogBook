@@ -30,7 +30,7 @@ class Config:
     FACE_MATCH_THRESHOLD = float(os.getenv('MATCH_THRESHOLD', 0.60))
     FACE_DETECTOR_BACKEND = os.getenv('FACE_DETECTOR_BACKEND', 'retinaface')
     FACE_MODEL_PATH = os.getenv('INSIGHTFACE_MODEL_ROOT', 'models')
-    MAX_IMAGE_SIZE = int(os.getenv('MAX_IMAGE_SIZE', 1024))  # Increased from 800 to 1024
+    MAX_IMAGE_SIZE = int(os.getenv('MAX_IMAGE_SIZE', 2048))  # Increased from 1024 to 2048
     
     # Attendance settings
     DEBOUNCE_SECONDS = int(os.getenv('DEBOUNCE_SECONDS', 30))
@@ -41,7 +41,7 @@ class Config:
     
     # Upload settings
     UPLOAD_FOLDER = os.getenv('UPLOAD_FOLDER', 'uploads')
-    MAX_CONTENT_LENGTH = 32 * 1024 * 1024  # Increased from 16MB to 32MB max upload
+    MAX_CONTENT_LENGTH = 50 * 1024 * 1024  # Increased from 32MB to 50MB max upload
     
     # CORS settings
     ALLOWED_ORIGINS = os.getenv('ALLOWED_ORIGINS', 'http://localhost:8080,http://127.0.0.1:8080,http://localhost:3000,http://127.0.0.1:3000,http://localhost:5173,http://127.0.0.1:5173,https://face-logbook.vercel.app,https://face-logbook-frontend.vercel.app')

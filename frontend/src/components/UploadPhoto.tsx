@@ -11,10 +11,10 @@ interface UploadPhotoProps {
   label?: string;
 }
 
-const UploadPhoto: React.FC<UploadPhotoProps> = ({ 
-  onImageSelect, 
-  currentImage, 
-  label = "Upload Photo" 
+const UploadPhoto: React.FC<UploadPhotoProps> = ({
+  onImageSelect,
+  currentImage,
+  label = "Upload Photo"
 }) => {
   const [preview, setPreview] = useState<string | null>(null);
   const [fileName, setFileName] = useState<string | null>(null);
@@ -35,11 +35,11 @@ const UploadPhoto: React.FC<UploadPhotoProps> = ({
     try {
       const resizedBlob = await resizeImage(file, 1024);
       const resizedFile = new File([resizedBlob], file.name, { type: 'image/jpeg' });
-      
+
       const reader = new FileReader();
       reader.onloadend = () => setPreview(reader.result as string);
       reader.readAsDataURL(resizedFile);
-      
+
       setFileName(resizedFile.name);
       onImageSelect(resizedFile);
     } catch (error) {
@@ -80,27 +80,27 @@ const UploadPhoto: React.FC<UploadPhotoProps> = ({
         onClick={!preview ? triggerFileInput : undefined}
       >
         <input type="file" accept="image/jpeg, image/png, image/webp" onChange={handleFileInput} className="hidden" id="photo-upload" />
-        
+
         {preview ? (
           <div className="relative aspect-video w-full">
             <img src={preview} alt="Preview" className="w-full h-full object-contain rounded-md" />
             <div className="absolute inset-0 bg-black/50 flex flex-col items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity rounded-md">
-                <Button variant="destructive" size="sm" onClick={clearImage} className="gap-2">
-                    <X className="h-4 w-4" /> Change Image
-                </Button>
+              <Button variant="destructive" size="sm" onClick={clearImage} className="gap-2">
+                <X className="h-4 w-4" /> Change Image
+              </Button>
             </div>
             <div className="absolute bottom-2 left-2 right-2 bg-background/80 backdrop-blur-sm text-xs p-2 rounded-md flex items-center gap-2 text-green-700 font-semibold">
-                <CheckCircle className="h-4 w-4 flex-shrink-0" />
-                <span className="truncate" title={fileName || ""}>{fileName}</span>
+              <CheckCircle className="h-4 w-4 flex-shrink-0" />
+              <span className="truncate" title={fileName || ""}>{fileName}</span>
             </div>
           </div>
         ) : (
           <div className="flex flex-col items-center justify-center py-6">
             <div className="mb-4 rounded-full bg-secondary p-4">
-                <ImageIcon className="h-10 w-10 text-muted-foreground" />
+              <ImageIcon className="h-10 w-10 text-muted-foreground" />
             </div>
             <p className="font-semibold text-foreground">Drag & drop or click to upload</p>
-            <p className="text-sm text-muted-foreground mt-1">PNG, JPG, or WEBP (max 5MB)</p>
+            <p className="text-sm text-muted-foreground mt-1">PNG, JPG, or WEBP (max 20MB)</p>
           </div>
         )}
       </div>

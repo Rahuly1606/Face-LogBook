@@ -11,7 +11,7 @@ export const fileToBase64 = (file: File): Promise<string> => {
 };
 
 // Resize image to max width while maintaining aspect ratio
-export const resizeImage = (file: File, maxWidth: number = 1024): Promise<Blob> => {
+export const resizeImage = (file: File, maxWidth: number = 2048): Promise<Blob> => {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
     reader.readAsDataURL(file);
@@ -30,15 +30,15 @@ export const resizeImage = (file: File, maxWidth: number = 1024): Promise<Blob> 
 
         canvas.width = width;
         canvas.height = height;
-        
+
         const ctx = canvas.getContext('2d');
         if (!ctx) {
           reject(new Error('Could not get canvas context'));
           return;
         }
-        
+
         ctx.drawImage(img, 0, 0, width, height);
-        
+
         canvas.toBlob((blob) => {
           if (blob) {
             resolve(blob);
@@ -58,30 +58,30 @@ export const base64ToBlob = (base64: string): Blob => {
   const mimeString = base64.split(',')[0].split(':')[1].split(';')[0];
   const ab = new ArrayBuffer(byteString.length);
   const ia = new Uint8Array(ab);
-  
+
   for (let i = 0; i < byteString.length; i++) {
     ia[i] = byteString.charCodeAt(i);
   }
-  
+
   return new Blob([ab], { type: mimeString });
 };
 
 // Validate image file
 export const validateImageFile = (file: File): { valid: boolean; error?: string } => {
   const validTypes = ['image/jpeg', 'image/jpg', 'image/png'];
-  const maxSize = 5 * 1024 * 1024; // 5MB
+  const maxSize = 20 * 1024 * 1024; // 20MB - Increased from 5MB
 
   if (!validTypes.includes(file.type)) {
-    return { 
-      valid: false, 
-      error: 'Please upload a valid image file (JPEG or PNG only)' 
+    return {
+      valid: false,
+      error: 'Please upload a valid image file (JPEG or PNG only)'
     };
   }
 
   if (file.size > maxSize) {
-    return { 
-      valid: false, 
-      error: `Image size must be less than 5MB (current size: ${(file.size / (1024 * 1024)).toFixed(2)}MB)` 
+    return {
+      valid: false,
+      error: `Image size must be less than 20MB (current size: ${(file.size / (1024 * 1024)).toFixed(2)}MB)`
     };
   }
 
