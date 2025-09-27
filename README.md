@@ -19,19 +19,52 @@ A comprehensive full-stack attendance management system using facial recognition
 - **Database**: MySQL (recommended) or SQLite for quick testing
 - **Git**: For repository management
 - **Webcam**: For live attendance tracking (optional)
+- **Docker** (optional): For containerized deployment
 
-## Detailed Setup Instructions
+## Deployment Options
 
-### 1. Clone the Repository
+### Option 1: Using Docker (Recommended for Production)
+
+The easiest way to run the application is using Docker:
+
+1. Clone the repository:
+   ```bash
+   git clone https://github.com/Rahuly1606/Face-LogBook.git
+   cd Face-LogBook
+   ```
+
+2. Copy the environment variables template:
+   ```bash
+   cp .env.example .env
+   ```
+
+3. Edit the `.env` file with your specific settings.
+
+4. Start the application:
+   ```bash
+   docker-compose up -d
+   ```
+
+5. The backend will be available at http://localhost:5000
+
+#### Docker Configuration Details
+- The Docker setup mounts these directories:
+  - `backend/uploads`: For storing uploaded images
+  - `backend/models`: For caching face recognition models
+  - `backend/credentials`: For storing service credentials
+
+### Option 2: Manual Setup
+
+#### 1. Clone the Repository
 
 ```bash
 git clone https://github.com/Rahuly1606/Face-LogBook.git
 cd face_logbook
 ```
 
-### 2. Backend Setup
+#### 2. Backend Setup
 
-#### Create and Activate Virtual Environment
+##### Create and Activate Virtual Environment
 
 ```bash
 cd backend

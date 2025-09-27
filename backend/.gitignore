@@ -6,15 +6,27 @@ yarn-debug.log*
 yarn-error.log*
 pnpm-debug.log*
 lerna-debug.log*
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Dependencies & Build artifacts
 venv/
 node_modules
 dist
 dist-ssr
 *.local
+
+# Secrets & Uploads
 .env
-# models/models/retinaface/
-credentials
+credentials/
 uploads/
+
+# Ignored model directories
+models/models/retinaface/
 
 # Editor directories and files
 .vscode/*

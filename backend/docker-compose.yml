@@ -1,0 +1,33 @@
+version: '3.8'
+
+services:
+  backend:
+    build: .
+    container_name: face-logbook-backend
+    restart: unless-stopped
+    ports:
+      - "5000:5000"
+    volumes:
+      - ./uploads:/app/uploads
+      - ./models:/app/models
+      - ./credentials:/app/credentials
+    env_file:
+      - .env
+    environment:
+      - FLASK_APP=run.py
+      - FLASK_ENV=production
+      - UPLOAD_FOLDER=/app/uploads
+      - INSIGHTFACE_MODEL_ROOT=/app/models
+      # Uncomment and set these if not using .env file
+      # - AIVEN_HOST=your_aiven_host.aivencloud.com
+      # - AIVEN_PORT=your_aiven_port
+      # - AIVEN_USER=your_aiven_user
+      # - AIVEN_PASSWORD=your_aiven_password
+      # - AIVEN_DB=your_aiven_dbname
+      # - AIVEN_CA_PATH=/app/credentials/ca.pem
+    networks:
+      - face-logbook-network
+
+networks:
+  face-logbook-network:
+    driver: bridge
