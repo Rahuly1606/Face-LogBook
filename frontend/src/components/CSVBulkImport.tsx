@@ -78,6 +78,25 @@ const CSVBulkImport: React.FC<BulkImportProps> = ({ groupId: propGroupId, onSucc
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [toast]);
 
+  // Progress bar resilience - ensure it completes to 100% even if there are errors
+  useEffect(() => {
+    // If we're processing but progress is stuck between 10-90% for more than 10 seconds, complete it
+    let progressTimer: number | null = null;
+
+    if ((isLoading || isValidating) && progress > 0 && progress < 100) {
+      progressTimer = window.setTimeout(() => {
+        console.log('Progress bar failsafe triggered - completing progress to 100%');
+        setProgress(100);
+      }, 10000); // 10 second failsafe
+    }
+
+    return () => {
+      if (progressTimer) {
+        window.clearTimeout(progressTimer);
+      }
+    };
+  }, [isLoading, isValidating, progress]);
+
   const resetForm = () => {
     setSelectedFile(null);
     setPreviewData([]);
@@ -260,23 +279,27 @@ const CSVBulkImport: React.FC<BulkImportProps> = ({ groupId: propGroupId, onSucc
     }
 
     setIsValidating(true);
-    try {
-      // Prepare validation payload
-      const formData = new FormData();
-      formData.append('file', selectedFile);
-      formData.append('group_id', selectedGroupId.toString());
-      formData.append('dry_run', 'true');
+    setProgress(0);
 
+    // Set up progressive progress bar
+    const progressInterval = setInterval(() => {
+      setProgress(prev => {
+        if (prev >= 90) {
+          return prev; // Stop at 90% until complete
+        }
+        return Math.min(90, prev + 5);
+      });
+    }, 500);
+
+    try {
       // Reset validation state
       setValidationErrors([]);
-      setProgress(10);
 
       // Use the validateStudentImport function from API client
       const result = await validateStudentImport(selectedGroupId, selectedFile);
 
-      setProgress(60);
-
-      // Set progress to 100% for validation
+      // Complete progress
+      clearInterval(progressInterval);
       setProgress(100);
 
       // Check for validation errors
@@ -303,12 +326,30 @@ const CSVBulkImport: React.FC<BulkImportProps> = ({ groupId: propGroupId, onSucc
       return true;
     } catch (error) {
       console.error('Validation error:', error);
-      toast({
-        title: 'Validation failed',
-        description: error instanceof Error ? error.message : 'An unknown error occurred',
-        variant: 'destructive'
-      });
-      return false;
+
+      // Ensure progress completes even on error
+      clearInterval(progressInterval);
+      setProgress(100);
+
+      // Show different messaging based on error type
+      if (error instanceof Error &&
+        (error.message.includes('Cannot reach backend') ||
+          (error as any)?.isNetworkError)) {
+        toast({
+          title: 'Server connection issue',
+          description: 'Cannot connect to the server. Your data may be valid, but we cannot verify it at this moment.',
+          variant: 'destructive'
+        });
+        // Allow import to proceed even with validation issues if it's just a network error
+        return true;
+      } else {
+        toast({
+          title: 'Validation failed',
+          description: error instanceof Error ? error.message : 'An unknown error occurred',
+          variant: 'destructive'
+        });
+        return false;
+      }
     } finally {
       setIsValidating(false);
     }
@@ -324,7 +365,7 @@ const CSVBulkImport: React.FC<BulkImportProps> = ({ groupId: propGroupId, onSucc
       return;
     }
 
-    // Run validation first
+    // Run validation first if dry run is enabled
     if (isDryRun) {
       await validateData();
       return;
@@ -345,26 +386,25 @@ const CSVBulkImport: React.FC<BulkImportProps> = ({ groupId: propGroupId, onSucc
     setIsLoading(true);
     setProgress(0);
 
+    // Set up progressive progress bar
+    const progressInterval = setInterval(() => {
+      setProgress(prev => {
+        if (prev >= 90) {
+          return prev; // Stop at 90% until complete
+        }
+        return Math.min(90, prev + 5);
+      });
+    }, 500);
+
     try {
       console.log('Submitting with groupId:', selectedGroupId);
+      setProgress(10); // Initial progress
 
-      // Prepare import payload
-      const formData = new FormData();
-      formData.append('file', selectedFile);
-      formData.append('group_id', selectedGroupId.toString());
-      formData.append('dry_run', 'false');
-
-      // Start progress indicator
-      setProgress(10);
-
-      // Send actual import request using the API client function
-      // Midway progress update
-      setProgress(50);
-
-      // Use the bulkImportStudents function from the API client
+      // Call the API to import students
       const result = await bulkImportStudents(selectedGroupId, selectedFile);
 
-      // Complete progress
+      // Ensure progress completes
+      clearInterval(progressInterval);
       setProgress(100);
 
       // Handle the backend response
@@ -382,9 +422,6 @@ const CSVBulkImport: React.FC<BulkImportProps> = ({ groupId: propGroupId, onSucc
         });
 
         if (onSuccess) onSuccess();
-
-        // Don't show the dialog for a placeholder response
-        setIsLoading(false);
         resetForm();
         return;
       }
@@ -396,8 +433,6 @@ const CSVBulkImport: React.FC<BulkImportProps> = ({ groupId: propGroupId, onSucc
           description: result.message || 'Unknown error occurred during import',
           variant: 'destructive'
         });
-
-        setIsLoading(false);
         return;
       }
 
@@ -421,11 +456,33 @@ const CSVBulkImport: React.FC<BulkImportProps> = ({ groupId: propGroupId, onSucc
       }
     } catch (error) {
       console.error('Error importing students:', error);
-      toast({
-        title: 'Import failed',
-        description: error instanceof Error ? error.message : 'Failed to import students',
-        variant: 'destructive'
-      });
+
+      // Ensure progress completes even on error
+      clearInterval(progressInterval);
+      setProgress(100);
+
+      // Show a different toast if it's a network error
+      // Network errors might indicate the request succeeded but the response failed
+      if (error instanceof Error &&
+        (error.message.includes('Cannot reach backend') ||
+          (error as any)?.isNetworkError)) {
+        toast({
+          title: 'Connection issue',
+          description: 'Students may have been imported successfully, but we lost connection to the server. Please check your student list after a minute.',
+          variant: 'destructive'
+        });
+
+        // Call onSuccess with a delay as the import might have succeeded
+        if (onSuccess) {
+          setTimeout(onSuccess, 2000);
+        }
+      } else {
+        toast({
+          title: 'Import failed',
+          description: error instanceof Error ? error.message : 'Failed to import students',
+          variant: 'destructive'
+        });
+      }
     } finally {
       setIsLoading(false);
     }
@@ -582,7 +639,7 @@ const CSVBulkImport: React.FC<BulkImportProps> = ({ groupId: propGroupId, onSucc
           )}
 
           {largeBatchWarning && (
-            <Alert className="mt-4" variant="warning">
+            <Alert className="mt-4" variant="destructive">
               <AlertTriangle className="h-4 w-4" />
               <AlertTitle>Large Import Detected</AlertTitle>
               <AlertDescription>

@@ -596,7 +596,7 @@ const WebcamCapture: React.FC<WebcamCaptureProps> = ({ groupId, onFaceRecognized
                       <Pause className="h-3 w-3" /> Stop
                     </Button>
                   )}
-                  <Button onClick={toggleCamera} variant="outline" size="sm" className="h-8 px-2 py-0 gap-1 bg-blue-500 hover:bg-blue-600 text-white transition-transform hover:scale-105 active:scale-95">
+                  <Button onClick={toggleCamera} variant="outline" size="sm" className="h-8 px-2 py-0 gap-1 bg-black hover:bg-black/80 text-white transition-transform hover:scale-105 active:scale-95">
                     <RotateCcw className="h-3 w-3" />
                   </Button>
                 </div>
@@ -668,7 +668,7 @@ const WebcamCapture: React.FC<WebcamCaptureProps> = ({ groupId, onFaceRecognized
                       <AlertTriangle className="h-12 w-12 text-yellow-500 mx-auto mb-3" />
                       <p className="text-white font-medium mb-3 text-lg">Camera Access Error</p>
                       <p className="text-sm text-slate-300 mb-4">{webcamError}</p>
-                      <Button onClick={() => window.location.reload()} className="gap-2 bg-blue-500 hover:bg-blue-600">
+                      <Button onClick={() => window.location.reload()} className="gap-2 bg-black hover:bg-black/80">
                         <RefreshCw className="h-4 w-4" /> Retry
                       </Button>
                     </div>

@@ -20,8 +20,8 @@
     --popover: 0 0% 100%;
     --popover-foreground: 222 47% 11%;
 
-    /* Primary - Professional Blue */
-    --primary: 217 91% 60%;
+    /* Primary - Professional Black (was Blue) */
+    --primary: 0 0% 0%;
     --primary-foreground: 0 0% 100%;
 
     /* Secondary - Subtle Gray */
@@ -59,7 +59,7 @@
     /* Sidebar */
     --sidebar-background: 222 47% 11%;
     --sidebar-foreground: 210 40% 98%;
-    --sidebar-primary: 217 91% 60%;
+    --sidebar-primary: 0 0% 0%;
     --sidebar-primary-foreground: 0 0% 100%;
     --sidebar-accent: 217 33% 17%;
     --sidebar-accent-foreground: 210 40% 98%;
@@ -67,9 +67,9 @@
     --sidebar-ring: 217 91% 60%;
 
     /* Gradients */
-    --gradient-primary: linear-gradient(135deg, hsl(217 91% 60%), hsl(200 98% 39%));
+    --gradient-primary: linear-gradient(135deg, hsl(0 0% 0%), hsl(0 0% 20%));
     --gradient-secondary: linear-gradient(135deg, hsl(220 14% 96%), hsl(220 13% 91%));
-    --gradient-accent: linear-gradient(135deg, hsl(200 98% 39%), hsl(217 91% 60%));
+    --gradient-accent: linear-gradient(135deg, hsl(0 0% 0%), hsl(0 0% 20%));
     --gradient-success: linear-gradient(135deg, hsl(142 71% 45%), hsl(142 71% 35%));
 
     /* Shadows */
@@ -89,8 +89,8 @@
     --popover: 222 47% 15%;
     --popover-foreground: 210 40% 98%;
 
-    --primary: 217 91% 60%;
-    --primary-foreground: 222 47% 11%;
+    --primary: 0 0% 0%;
+    --primary-foreground: 0 0% 100%;
 
     --secondary: 217 33% 17%;
     --secondary-foreground: 210 40% 98%;
@@ -116,8 +116,8 @@
 
     --sidebar-background: 224 71% 4%;
     --sidebar-foreground: 210 40% 98%;
-    --sidebar-primary: 217 91% 60%;
-    --sidebar-primary-foreground: 222 47% 11%;
+    --sidebar-primary: 0 0% 0%;
+    --sidebar-primary-foreground: 0 0% 100%;
     --sidebar-accent: 217 33% 17%;
     --sidebar-accent-foreground: 210 40% 98%;
     --sidebar-border: 217 33% 17%;
@@ -132,6 +132,28 @@
 
   body {
     @apply bg-background text-foreground;
+  }
+
+  /* Global button style overrides */
+  .btn,
+  .button,
+  button[type="submit"]:not([class*="bg-"]):not(.btn-secondary):not(.btn-destructive):not(.btn-ghost):not(.btn-outline) {
+    background-color: black !important;
+    color: white !important;
+    border-color: black !important;
+  }
+
+  .btn:disabled,
+  .button:disabled,
+  button[type="submit"]:disabled {
+    opacity: 0.5 !important;
+    pointer-events: none !important;
+  }
+
+  .btn:hover,
+  .button:hover,
+  button[type="submit"]:hover:not(.btn-secondary):not(.btn-destructive):not(.btn-ghost):not(.btn-outline) {
+    background-color: rgba(0, 0, 0, 0.8) !important;
   }
 }
 
