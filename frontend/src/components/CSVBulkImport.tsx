@@ -20,7 +20,8 @@ import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
 import { useToast } from '@/hooks/use-toast';
 import { bulkImportStudents, validateStudentImport, BulkImportResult, BulkImportSuccess, BulkImportFailure } from '@/api/students';
-import { getGroups, Group } from '@/api/groups';
+import { getGroups, Group, startBulkImportAsync } from '@/api/groups';
+import ImportJobMonitor from './ImportJobMonitor';
 
 interface BulkImportProps {
   groupId?: number;
@@ -48,6 +49,8 @@ const CSVBulkImport: React.FC<BulkImportProps> = ({ groupId: propGroupId, onSucc
   const [totalRows, setTotalRows] = useState(0);
   const [validationErrors, setValidationErrors] = useState<{ row: number; message: string }[]>([]);
   const [largeBatchWarning, setLargeBatchWarning] = useState(false);
+  const [useAsyncImport, setUseAsyncImport] = useState(true); // Use async by default
+  const [currentJobId, setCurrentJobId] = useState<number | null>(null);
   const [showLargeImportConfirm, setShowLargeImportConfirm] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const { toast } = useToast();
@@ -384,36 +387,61 @@ const CSVBulkImport: React.FC<BulkImportProps> = ({ groupId: propGroupId, onSucc
     }
 
     setIsLoading(true);
-    setProgress(0);
-
-    // Set up progressive progress bar
-    const progressInterval = setInterval(() => {
-      setProgress(prev => {
-        if (prev >= 90) {
-          return prev; // Stop at 90% until complete
-        }
-        return Math.min(90, prev + 5);
-      });
-    }, 500);
 
     try {
       console.log('Submitting with groupId:', selectedGroupId);
-      setProgress(10); // Initial progress
 
-      // Call the API to import students
+      // Use async import (background processing)
+      if (useAsyncImport) {
+        const response = await startBulkImportAsync(selectedGroupId, selectedFile);
+
+        if (response.success && response.job_id) {
+          setCurrentJobId(response.job_id);
+          toast({
+            title: 'Import started',
+            description: `Processing ${response.total_records} records in the background. You can navigate away and come back later.`,
+            variant: 'default'
+          });
+          // Reset form but keep showing the job monitor
+          setSelectedFile(null);
+          setPreviewData([]);
+          if (fileInputRef.current) {
+            fileInputRef.current.value = '';
+          }
+        } else {
+          toast({
+            title: 'Error',
+            description: response.message || 'Failed to start import',
+            variant: 'destructive'
+          });
+        }
+        setIsLoading(false);
+        return;
+      }
+
+      // Fallback to synchronous import (legacy)
+      setProgress(0);
+      let progressInterval: number | undefined;
+      progressInterval = window.setInterval(() => {
+        setProgress(prev => {
+          if (prev >= 90) {
+            return prev;
+          }
+          return Math.min(90, prev + 5);
+        });
+      }, 500);
+
+      setProgress(10);
       const result = await bulkImportStudents(selectedGroupId, selectedFile);
 
-      // Ensure progress completes
-      clearInterval(progressInterval);
+      if (progressInterval) clearInterval(progressInterval);
       setProgress(100);
 
-      // Handle the backend response
       const compatibleResult: BulkImportResult = {
         successes: result.successes || [],
         failures: result.failures || []
       };
 
-      // If the backend returns a success message but no arrays
       if (result.success === true && (!result.successes || !result.failures)) {
         toast({
           title: 'Import processing',
@@ -458,7 +486,6 @@ const CSVBulkImport: React.FC<BulkImportProps> = ({ groupId: propGroupId, onSucc
       console.error('Error importing students:', error);
 
       // Ensure progress completes even on error
-      clearInterval(progressInterval);
       setProgress(100);
 
       // Show a different toast if it's a network error
@@ -600,6 +627,20 @@ const CSVBulkImport: React.FC<BulkImportProps> = ({ groupId: propGroupId, onSucc
 
           <div className="flex items-center space-x-2 mt-4">
             <Switch
+              id="async-import"
+              checked={useAsyncImport}
+              onCheckedChange={setUseAsyncImport}
+            />
+            <Label htmlFor="async-import" className="font-medium">
+              Background processing
+            </Label>
+            <div className="text-sm text-muted-foreground ml-2">
+              Process import in background (recommended for large batches)
+            </div>
+          </div>
+
+          <div className="flex items-center space-x-2 mt-4">
+            <Switch
               id="dry-run"
               checked={isDryRun}
               onCheckedChange={setIsDryRun}
@@ -611,6 +652,18 @@ const CSVBulkImport: React.FC<BulkImportProps> = ({ groupId: propGroupId, onSucc
               Only check data without importing
             </div>
           </div>
+
+          {currentJobId && (
+            <div className="mt-6">
+              <ImportJobMonitor
+                jobId={currentJobId}
+                onComplete={() => {
+                  setCurrentJobId(null);
+                  if (onSuccess) onSuccess();
+                }}
+              />
+            </div>
+          )}
 
           {previewData.length > 0 && (
             <div className="mt-4">

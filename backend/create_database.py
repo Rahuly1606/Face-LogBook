@@ -122,6 +122,7 @@ def create_schema():
         from app.models.group import Group
         from app.models.attendance import Attendance
         from app.models.user import User
+        from app.models.import_job import ImportJob
         try:
             from app.models.camera_event import CameraEvent
             logger.info("Camera Event model imported successfully")
@@ -139,7 +140,7 @@ def create_schema():
             
             # Verify tables
             from sqlalchemy import text
-            tables = ['students', 'groups', 'attendance', 'users', 'camera_events']
+            tables = ['students', 'groups', 'attendance', 'users', 'import_jobs', 'camera_events']
             for table in tables:
                 result = db.session.execute(text(f"SHOW TABLES LIKE '{table}'"))
                 if result.fetchone():

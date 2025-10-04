@@ -11,13 +11,14 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
-import { Menu, Camera, Group, Home, LogIn, LogOut, User, UserCog } from 'lucide-react';
+import { Menu, Camera, Group, Home, LogIn, LogOut, User, UserCog, Info } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useApp } from '@/context/AppContext';
 
 const navItems = [
   { title: 'Dashboard', href: '/admin-dashboard', icon: Home },
   { title: 'Groups', href: '/groups', icon: Group },
+  { title: 'About', href: '/about', icon: Info },
 ];
 
 const Navbar: React.FC = () => {

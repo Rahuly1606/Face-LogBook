@@ -17,6 +17,8 @@ import NotFound from "./pages/NotFound";
 import GroupsPage from "./pages/GroupsPage";
 import GroupWorkspace from "./pages/GroupWorkspace";
 import Diagnostics from "./pages/Diagnostics";
+import About from "./pages/About";
+import PublicAbout from "./pages/PublicAbout";
 import AuthCheck from "./components/AuthCheck";
 
 const queryClient = new QueryClient();
@@ -25,8 +27,9 @@ const queryClient = new QueryClient();
 const AppRoutes = () => {
   return (
     <Routes>
-      {/* Public login route */}
+      {/* Public routes */}
       <Route path="/login" element={<Login />} />
+      <Route path="/public-about" element={<PublicAbout />} />
 
       {/* Protected application routes inside layout */}
       <Route element={<AuthCheck><Layout /></AuthCheck>}>
@@ -43,6 +46,7 @@ const AppRoutes = () => {
         <Route path="/attendance/live" element={<LiveAttendance />} />
         <Route path="/attendance/upload" element={<UploadAttendance />} />
         <Route path="/attendance/logs" element={<AttendanceLogs />} />
+        <Route path="/about" element={<About />} />
         <Route path="/diagnostics" element={<Diagnostics />} />
       </Route>
 

@@ -33,6 +33,11 @@ interface StudentTableProps {
   onUpdate?: () => void;
   onDelete?: (student: Student) => void;
   onEdit?: (student: Student) => void;
+  hasExternalControls?: boolean;
+  triggerBulkImport?: boolean;
+  onBulkImportComplete?: () => void;
+  triggerAddStudent?: boolean;
+  onAddStudentComplete?: () => void;
 }
 
 const StudentTable: React.FC<StudentTableProps> = ({
@@ -41,7 +46,12 @@ const StudentTable: React.FC<StudentTableProps> = ({
   refreshTrigger = 0,
   onUpdate,
   onDelete,
-  onEdit
+  onEdit,
+  hasExternalControls = false,
+  triggerBulkImport,
+  onBulkImportComplete,
+  triggerAddStudent,
+  onAddStudentComplete
 }) => {
   const [students, setStudents] = useState<Student[]>(propStudents || []);
   const [isLoading, setIsLoading] = useState(!propStudents);
@@ -120,6 +130,23 @@ const StudentTable: React.FC<StudentTableProps> = ({
 
     fetchStudents();
   }, [groupId, refreshTrigger, propStudents, toast]);
+
+  // Handle external trigger for bulk import
+  useEffect(() => {
+    if (triggerBulkImport) {
+      setActiveTab('import');
+      onBulkImportComplete?.();
+    }
+  }, [triggerBulkImport, onBulkImportComplete]);
+
+  // Handle external trigger for add student
+  useEffect(() => {
+    if (triggerAddStudent) {
+      setEditStudent(null);
+      setShowEditDialog(true);
+      onAddStudentComplete?.();
+    }
+  }, [triggerAddStudent, onAddStudentComplete]);
 
   const handleEdit = (student: Student) => {
     if (onEdit) {
@@ -336,19 +363,22 @@ const StudentTable: React.FC<StudentTableProps> = ({
 
   return (
     <div className="space-y-4">
-      <div className="flex justify-between items-center">
-        <h2 className="text-xl font-bold">Students in this Group</h2>
-        <div className="flex gap-2">
-          <Button
-            variant={activeTab === 'import' ? 'default' : 'outline'}
-            onClick={() => setActiveTab('import')}
-            className="flex items-center gap-2"
-          >
-            <FileSpreadsheet className="h-4 w-4" />
-            Bulk Import
-          </Button>
+      {/* Only show internal header/buttons when no external controls are used */}
+      {!hasExternalControls && (
+        <div className="flex justify-between items-center">
+          <h2 className="text-xl font-bold">Students in this Group</h2>
+          <div className="flex gap-2">
+            <Button
+              variant={activeTab === 'import' ? 'default' : 'outline'}
+              onClick={() => setActiveTab('import')}
+              className="flex items-center gap-2"
+            >
+              <FileSpreadsheet className="h-4 w-4" />
+              Bulk Import
+            </Button>
+          </div>
         </div>
-      </div>
+      )}
 
       {/* Show action bar when students are selected */}
       {selectedCount > 0 && (
@@ -381,16 +411,19 @@ const StudentTable: React.FC<StudentTableProps> = ({
                 {students.length} student{students.length !== 1 ? 's' : ''} registered
               </div>
             )}
-            <Button
-              onClick={() => {
-                setEditStudent(null);
-                setShowEditDialog(true);
-              }}
-              className="flex items-center gap-2"
-            >
-              <UserPlus className="h-4 w-4" />
-              Add Student
-            </Button>
+            {/* Only show Add Student button when no external controls are used */}
+            {!hasExternalControls && (
+              <Button
+                onClick={() => {
+                  setEditStudent(null);
+                  setShowEditDialog(true);
+                }}
+                className="flex items-center gap-2"
+              >
+                <UserPlus className="h-4 w-4" />
+                Add Student
+              </Button>
+            )}
           </div>
 
           <div className="rounded-lg border bg-card shadow-sm">

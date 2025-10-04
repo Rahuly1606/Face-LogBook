@@ -4,6 +4,7 @@ from app.models.group import Group
 from app.models.student import Student
 from app.utils.auth import admin_required
 import os
+import csv
 
 groups_bp = Blueprint('groups', __name__)
 
@@ -629,3 +630,133 @@ def bulk_add_students(group_id):
             "success": False,
             "message": f"Error processing bulk import: {str(e)}"
         }), 500
+
+
+# Async bulk import endpoints
+@groups_bp.route('/<int:group_id>/students/bulk-async', methods=['POST'])
+@admin_required()
+def bulk_add_students_async(group_id):
+    """Start a background job to bulk add students to a group from CSV file"""
+    from app.models.import_job import ImportJob
+    from app.services.import_job_processor import ImportJobProcessor
+    import io
+    
+    current_app.logger.info(f"Async bulk import request for group {group_id}")
+    
+    try:
+        # Check if group exists
+        group = Group.query.get_or_404(group_id)
+        
+        if 'file' not in request.files:
+            return jsonify({"success": False, "message": "No file provided"}), 400
+        
+        file = request.files['file']
+        if file.filename == '':
+            return jsonify({"success": False, "message": "No file selected"}), 400
+        
+        if not file.filename.endswith('.csv'):
+            return jsonify({
+                "success": False, 
+                "message": "Only CSV files are accepted"
+            }), 400
+        
+        # Read file content
+        file_content = file.stream.read().decode("UTF8")
+        
+        # Count total records
+        stream = io.StringIO(file_content, newline=None)
+        csv_reader = csv.reader(stream)
+        try:
+            next(csv_reader)  # Skip header
+            total_records = sum(1 for row in csv_reader if row and any(row))
+        except:
+            total_records = 0
+        
+        # Create import job
+        job = ImportJob(
+            group_id=group_id,
+            filename=file.filename,
+            total_records=total_records,
+            status='pending'
+        )
+        db.session.add(job)
+        db.session.commit()
+        
+        current_app.logger.info(f"Created import job {job.id} for {total_records} records")
+        
+        # Start background processing
+        ImportJobProcessor.process_job_async(job.id, file_content, current_app._get_current_object())
+        
+        return jsonify({
+            "success": True,
+            "message": "Import job started",
+            "job_id": job.id,
+            "total_records": total_records
+        }), 202
+        
+    except Exception as e:
+        current_app.logger.error(f"Error starting async bulk import: {str(e)}")
+        import traceback
+        current_app.logger.error(traceback.format_exc())
+        return jsonify({
+            "success": False,
+            "message": f"Error starting import: {str(e)}"
+        }), 500
+
+
+@groups_bp.route('/import-jobs/<int:job_id>', methods=['GET'])
+@admin_required()
+def get_import_job_status(job_id):
+    """Get the status of an import job"""
+    from app.models.import_job import ImportJob
+    
+    job = ImportJob.query.get_or_404(job_id)
+    return jsonify(job.to_dict()), 200
+
+
+@groups_bp.route('/import-jobs', methods=['GET'])
+@admin_required()
+def get_all_import_jobs():
+    """Get all import jobs, optionally filtered by group"""
+    from app.models.import_job import ImportJob
+    
+    group_id = request.args.get('group_id', type=int)
+    status = request.args.get('status')
+    
+    query = ImportJob.query
+    
+    if group_id:
+        query = query.filter_by(group_id=group_id)
+    
+    if status:
+        query = query.filter_by(status=status)
+    
+    jobs = query.order_by(ImportJob.created_at.desc()).all()
+    
+    return jsonify({
+        "jobs": [job.to_dict() for job in jobs]
+    }), 200
+
+
+@groups_bp.route('/import-jobs/<int:job_id>', methods=['DELETE'])
+@admin_required()
+def delete_import_job(job_id):
+    """Delete an import job record"""
+    from app.models.import_job import ImportJob
+    
+    job = ImportJob.query.get_or_404(job_id)
+    
+    # Only allow deletion of completed or failed jobs
+    if job.status in ['processing', 'pending']:
+        return jsonify({
+            "success": False,
+            "message": "Cannot delete a job that is still processing"
+        }), 400
+    
+    db.session.delete(job)
+    db.session.commit()
+    
+    return jsonify({
+        "success": True,
+        "message": "Import job deleted"
+    }), 200
