@@ -14,8 +14,7 @@ import WelcomeOverlay from './WelcomeOverlay';
 // Add a global declaration for our custom window function
 declare global {
   interface Window {
-    addWelcome: (name: string, studentId?: string) => void;
-    addGoodbye: (name: string, studentId?: string) => void;
+    addGreeting: (name: string, studentId: string) => void;
   }
 }
 
@@ -141,12 +140,12 @@ const WebcamCapture: React.FC<WebcamCaptureProps> = ({ groupId, onFaceRecognized
         existing.isPresent = true;
 
         if (existing.attendanceStatus === 'departed') {
-          // Person has returned after leaving - show welcome greeting!
+          // Person has returned after leaving - show greeting!
           existing.attendanceStatus = 'present';
           if (student.name) {
             pushAttendanceMessage(student.name, 'enter');
-            if (window.addWelcome) {
-              window.addWelcome(student.name, studentId);
+            if (window.addGreeting) {
+              window.addGreeting(student.name, studentId);
             }
           }
           return;
@@ -156,16 +155,16 @@ const WebcamCapture: React.FC<WebcamCaptureProps> = ({ groupId, onFaceRecognized
           existing.attendanceStatus = 'present';
           if (student.name) {
             pushAttendanceMessage(student.name, 'enter');
-            if (window.addWelcome) {
-              window.addWelcome(student.name, studentId);
+            if (window.addGreeting) {
+              window.addGreeting(student.name, studentId);
             }
           }
         } else if (student.action === 'checkout') {
           existing.attendanceStatus = 'departed';
           if (student.name) {
             pushAttendanceMessage(student.name, 'leave');
-            if (window.addGoodbye) {
-              window.addGoodbye(student.name, studentId);
+            if (window.addGreeting) {
+              window.addGreeting(student.name, studentId);
             }
           }
         }
@@ -184,13 +183,13 @@ const WebcamCapture: React.FC<WebcamCaptureProps> = ({ groupId, onFaceRecognized
 
         if (initialStatus === 'present' && student.name) {
           pushAttendanceMessage(student.name, 'enter');
-          if (window.addWelcome) {
-            window.addWelcome(student.name, studentId);
+          if (window.addGreeting) {
+            window.addGreeting(student.name, studentId);
           }
         } else if (initialStatus === 'departed' && student.name) {
           pushAttendanceMessage(student.name, 'leave');
-          if (window.addGoodbye) {
-            window.addGoodbye(student.name, studentId);
+          if (window.addGreeting) {
+            window.addGreeting(student.name, studentId);
           }
         }
       }
@@ -202,8 +201,8 @@ const WebcamCapture: React.FC<WebcamCaptureProps> = ({ groupId, onFaceRecognized
         if (student.attendanceStatus === 'present' && student.name) {
           student.attendanceStatus = 'departed';
           pushAttendanceMessage(student.name, 'leave');
-          if (window.addGoodbye) {
-            window.addGoodbye(student.name, studentId);
+          if (window.addGreeting) {
+            window.addGreeting(student.name, studentId);
           }
         }
       }

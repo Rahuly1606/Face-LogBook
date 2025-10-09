@@ -4,44 +4,42 @@ import React, { useState, useEffect, useCallback, useRef } from 'react';
 interface OverlayMessage {
     id: number;
     name: string;
+    studentId: string;
     type: 'welcome' | 'goodbye';
     timerId?: NodeJS.Timeout;
     isLeaving: boolean;
-    colorIndex: number; // For alternating colors
-}
-
-interface PendingGoodbye {
-    name: string;
-    studentId: string;
-    timerId: NodeJS.Timeout;
+    colorIndex: number;
 }
 
 const MAX_MESSAGES = 3;
 const MESSAGE_DURATION = 5000; // 5 seconds
-const GOODBYE_DELAY = 30000; // 30 seconds delay for same person
 
-// Color schemes for alternating messages
-const WELCOME_COLORS = [
+// Unified color palette - each person gets one color from this array
+const PERSON_COLORS = [
     'bg-gradient-to-r from-purple-600 to-pink-500',
     'bg-gradient-to-r from-blue-600 to-cyan-500',
     'bg-gradient-to-r from-green-600 to-emerald-500',
     'bg-gradient-to-r from-indigo-600 to-purple-500',
-];
-
-const GOODBYE_COLORS = [
     'bg-gradient-to-r from-amber-500 to-orange-600',
     'bg-gradient-to-r from-red-500 to-pink-600',
-    'bg-gradient-to-r from-orange-500 to-red-500',
-    'bg-gradient-to-r from-yellow-500 to-orange-500',
+    'bg-gradient-to-r from-teal-500 to-cyan-600',
+    'bg-gradient-to-r from-violet-500 to-purple-600',
+    'bg-gradient-to-r from-lime-500 to-green-600',
+    'bg-gradient-to-r from-rose-500 to-pink-600',
 ];
 
 // --- Component ---
 const WelcomeOverlay: React.FC = () => {
     const [messages, setMessages] = useState<OverlayMessage[]>([]);
-    const messageQueue = useRef<{ name: string, type: 'welcome' | 'goodbye', studentId?: string }[]>([]);
-    const pendingGoodbye = useRef<PendingGoodbye | null>(null);
-    const lastSeenStudent = useRef<{ studentId: string, name: string } | null>(null);
-    const messageColorIndex = useRef<number>(0); // Track color index for alternating colors
+
+    // Track which students have been welcomed today (session-based)
+    const welcomedToday = useRef<Set<string>>(new Set());
+
+    // Map student IDs to their assigned color index (persistent within session)
+    const studentColorMap = useRef<Map<string, number>>(new Map());
+
+    // Counter for assigning new colors
+    const nextColorIndex = useRef<number>(0);
 
     // Function to remove a message after its animation
     const removeMessage = useCallback((id: number) => {
@@ -55,134 +53,86 @@ const WelcomeOverlay: React.FC = () => {
                 prev.map(msg => (msg.id === id ? { ...msg, isLeaving: true } : msg))
             );
             // Wait for the fade-out animation to complete before removing from DOM
-            setTimeout(() => removeMessage(id), 400); // Matches fade-out duration
+            setTimeout(() => removeMessage(id), 400);
         }, MESSAGE_DURATION);
         return timerId;
     }, [removeMessage]);
 
-    // Processes the next message in the queue if there's space
-    const processQueue = useCallback(() => {
-        setMessages(currentMessages => {
-            if (currentMessages.length < MAX_MESSAGES && messageQueue.current.length > 0) {
-                const message = messageQueue.current.shift();
-                if (message) {
-                    // Get color index and increment for next message
-                    const colorIndex = messageColorIndex.current;
-                    messageColorIndex.current = (messageColorIndex.current + 1) %
-                        (message.type === 'welcome' ? WELCOME_COLORS.length : GOODBYE_COLORS.length);
-
-                    const newMessage: OverlayMessage = {
-                        id: Date.now(),
-                        name: message.name,
-                        type: message.type,
-                        isLeaving: false,
-                        colorIndex: colorIndex,
-                    };
-                    // Schedule removal and store the timer ID
-                    const timerId = scheduleRemoval(newMessage.id);
-                    return [...currentMessages, { ...newMessage, timerId }];
-                }
-            }
-            return currentMessages;
-        });
-    }, [scheduleRemoval]);
-
-    // Main function to add a new welcome message
-    const addWelcome = useCallback((name: string, studentId?: string) => {
-        // Requirement: Remove any legacy greeting elements
-        document.querySelectorAll('.legacy-greeting').forEach(el => el.remove());
-
-        // If this person had a pending goodbye, cancel it (they're back!)
-        if (studentId && pendingGoodbye.current && pendingGoodbye.current.studentId === studentId) {
-            clearTimeout(pendingGoodbye.current.timerId);
-            pendingGoodbye.current = null;
+    // Get or assign color for a student
+    const getColorForStudent = useCallback((studentId: string): number => {
+        if (studentColorMap.current.has(studentId)) {
+            return studentColorMap.current.get(studentId)!;
         }
 
-        // Update last seen student when they enter
-        if (studentId) {
-            lastSeenStudent.current = { studentId, name };
+        // Assign new color
+        const colorIndex = nextColorIndex.current % PERSON_COLORS.length;
+        studentColorMap.current.set(studentId, colorIndex);
+        nextColorIndex.current++;
+
+        return colorIndex;
+    }, []);
+
+    // Add a greeting message for a student
+    const addGreeting = useCallback((name: string, studentId: string) => {
+        if (!studentId || !name) return;
+
+        // Determine if this is first appearance today
+        const isFirstAppearance = !welcomedToday.current.has(studentId);
+        const messageType = isFirstAppearance ? 'welcome' : 'goodbye';
+
+        // Mark as welcomed if first time
+        if (isFirstAppearance) {
+            welcomedToday.current.add(studentId);
         }
 
-        messageQueue.current.push({ name, type: 'welcome', studentId });
-        processQueue();
-    }, [processQueue]);
+        // Get consistent color for this student
+        const colorIndex = getColorForStudent(studentId);
 
-    // Main function to add a new goodbye message
-    const addGoodbye = useCallback((name: string, studentId?: string) => {
-        // If a different person appears, cancel the pending goodbye for the previous person
-        // and show goodbye immediately
-        if (studentId && lastSeenStudent.current && lastSeenStudent.current.studentId !== studentId) {
-            // Different person detected - show goodbye immediately for previous person
-            if (pendingGoodbye.current) {
-                clearTimeout(pendingGoodbye.current.timerId);
-                // Show the goodbye message immediately
-                messageQueue.current.push({
-                    name: pendingGoodbye.current.name,
-                    type: 'goodbye',
-                    studentId: pendingGoodbye.current.studentId
-                });
-                pendingGoodbye.current = null;
-                processQueue();
-            }
-        }
-
-        // If same person is still in view, set up a REPEATING goodbye every 30 seconds
-        if (studentId && lastSeenStudent.current && lastSeenStudent.current.studentId === studentId) {
-            // Cancel any existing pending goodbye for this person
-            if (pendingGoodbye.current && pendingGoodbye.current.studentId === studentId) {
-                clearTimeout(pendingGoodbye.current.timerId);
-            }
-
-            // Set up REPEATING goodbye - shows message and schedules next one
-            const scheduleNextGoodbye = () => {
-                // Show the goodbye message
-                messageQueue.current.push({ name, type: 'goodbye', studentId });
-                processQueue();
-
-                // Schedule the next goodbye in 30 seconds (REPEATING)
-                const timerId = setTimeout(scheduleNextGoodbye, GOODBYE_DELAY);
-                pendingGoodbye.current = { name, studentId, timerId };
-            };
-
-            // Start the first goodbye after 30 seconds
-            const timerId = setTimeout(scheduleNextGoodbye, GOODBYE_DELAY);
-            pendingGoodbye.current = { name, studentId, timerId };
-
-        } else {
-            // No studentId provided or first time seeing someone - show immediately
-            messageQueue.current.push({ name, type: 'goodbye', studentId });
-            processQueue();
-        }
-
-        // Update last seen student
-        if (studentId) {
-            lastSeenStudent.current = { studentId, name };
-        }
-    }, [processQueue]);
-
-    // Expose functions globally and process queue when messages are removed
-    useEffect(() => {
-        (window as any).addWelcome = addWelcome;
-        (window as any).addGoodbye = addGoodbye;
-        processQueue(); // Process queue in case a spot opened up
-
-        // Cleanup global functions on unmount
-        return () => {
-            delete (window as any).addWelcome;
-            delete (window as any).addGoodbye;
+        // Create new message
+        const newMessage: OverlayMessage = {
+            id: Date.now() + Math.random(), // Ensure uniqueness
+            name,
+            studentId,
+            type: messageType,
+            isLeaving: false,
+            colorIndex,
         };
-    }, [addWelcome, addGoodbye, messages.length, processQueue]);
 
-    // Cleanup all timers on component unmount to prevent memory leaks
+        setMessages(prev => {
+            // If we're at max capacity, remove the oldest (first) message
+            let updatedMessages = [...prev];
+            if (updatedMessages.length >= MAX_MESSAGES) {
+                // Cancel timer for the oldest message
+                const oldestMsg = updatedMessages[0];
+                if (oldestMsg.timerId) {
+                    clearTimeout(oldestMsg.timerId);
+                }
+                // Remove oldest message (shift removes from beginning)
+                updatedMessages.shift();
+            }
+
+            // Add new message at the end (bottom of visual stack)
+            const timerId = scheduleRemoval(newMessage.id);
+            return [...updatedMessages, { ...newMessage, timerId }];
+        });
+    }, [getColorForStudent, scheduleRemoval]);
+
+    // Expose function globally
+    useEffect(() => {
+        (window as any).addGreeting = addGreeting;
+
+        // Cleanup
+        return () => {
+            delete (window as any).addGreeting;
+        };
+    }, [addGreeting]);
+
+    // Cleanup all timers on component unmount
     useEffect(() => {
         return () => {
             messages.forEach(msg => {
                 if (msg.timerId) clearTimeout(msg.timerId);
             });
-            // Clear pending goodbye timer
-            if (pendingGoodbye.current) {
-                clearTimeout(pendingGoodbye.current.timerId);
-            }
         };
     }, [messages]);
 
@@ -190,7 +140,7 @@ const WelcomeOverlay: React.FC = () => {
         setMessages(prev =>
             prev.map(msg => {
                 if (msg.id === id && msg.timerId) {
-                    clearTimeout(msg.timerId); // Pause removal
+                    clearTimeout(msg.timerId);
                     return { ...msg, timerId: undefined };
                 }
                 return msg;
@@ -202,7 +152,7 @@ const WelcomeOverlay: React.FC = () => {
         setMessages(prev =>
             prev.map(msg => {
                 if (msg.id === id && !msg.timerId) {
-                    const newTimerId = scheduleRemoval(id); // Resume removal
+                    const newTimerId = scheduleRemoval(id);
                     return { ...msg, timerId: newTimerId };
                 }
                 return msg;
@@ -213,13 +163,10 @@ const WelcomeOverlay: React.FC = () => {
     return (
         <div
             aria-live="polite"
-            className="absolute bottom-4 left-4 w-full max-w-xs flex flex-col-reverse space-y-2 space-y-reverse z-50"
+            className="absolute bottom-4 left-4 w-full max-w-xs flex flex-col space-y-2 z-50"
         >
             {messages.map(msg => {
-                // Get the color based on type and color index
-                const colorClass = msg.type === 'welcome'
-                    ? WELCOME_COLORS[msg.colorIndex % WELCOME_COLORS.length]
-                    : GOODBYE_COLORS[msg.colorIndex % GOODBYE_COLORS.length];
+                const colorClass = PERSON_COLORS[msg.colorIndex % PERSON_COLORS.length];
 
                 return (
                     <div
