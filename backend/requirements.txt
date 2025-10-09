@@ -11,6 +11,7 @@ insightface==0.7.3
 onnxruntime
 opencv-python-headless==4.7.0.72
 numpy>=1.26,<2.0
+faiss-cpu>=1.8.0
 Werkzeug==2.2.3
 google-api-python-client==2.86.0
 google-auth==2.17.3

@@ -149,6 +149,9 @@ def register_student():
         db.session.add(new_student)
         db.session.commit()
         
+        # Invalidate the face service cache since we added a new student
+        face_service.invalidate_cache()
+        
         return jsonify({"message": "Student registered successfully", "student": new_student.to_dict()}), 201
     except Exception as e:
         db.session.rollback()
@@ -201,6 +204,9 @@ def delete_student(student_id):
         # Delete the student from the database
         db.session.delete(student)
         db.session.commit()
+        
+        # Invalidate the face service cache since we deleted a student
+        face_service.invalidate_cache()
         
         current_app.logger.info(f"Successfully deleted student with ID: {student_id}")
         return jsonify({"message": f"Student with ID {student_id} has been deleted"}), 200
@@ -266,6 +272,9 @@ def bulk_delete_students():
                 
                 # Commit this batch
                 db.session.commit()
+                
+                # Invalidate the face service cache since we deleted students
+                face_service.invalidate_cache()
                 
             except SQLAlchemyError as e:
                 # If anything goes wrong with this batch, roll it back
@@ -677,6 +686,9 @@ def bulk_import_all_students():
                     
                     # Commit the batch
                     db.session.commit()
+                    
+                    # Invalidate the face service cache since we added/updated students
+                    face_service.invalidate_cache()
                 
                 except Exception as e:
                     # If batch processing fails, roll back and mark all rows as failed

@@ -14,8 +14,8 @@ import WelcomeOverlay from './WelcomeOverlay';
 // Add a global declaration for our custom window function
 declare global {
   interface Window {
-    addWelcome: (name: string) => void;
-    addGoodbye: (name: string) => void;
+    addWelcome: (name: string, studentId?: string) => void;
+    addGoodbye: (name: string, studentId?: string) => void;
   }
 }
 
@@ -141,10 +141,12 @@ const WebcamCapture: React.FC<WebcamCaptureProps> = ({ groupId, onFaceRecognized
         existing.isPresent = true;
 
         if (existing.attendanceStatus === 'departed') {
+          // Person has returned after leaving - show welcome greeting!
+          existing.attendanceStatus = 'present';
           if (student.name) {
-            pushAttendanceMessage(student.name, 'leave');
-            if (window.addGoodbye) {
-              window.addGoodbye(student.name);
+            pushAttendanceMessage(student.name, 'enter');
+            if (window.addWelcome) {
+              window.addWelcome(student.name, studentId);
             }
           }
           return;
@@ -155,7 +157,7 @@ const WebcamCapture: React.FC<WebcamCaptureProps> = ({ groupId, onFaceRecognized
           if (student.name) {
             pushAttendanceMessage(student.name, 'enter');
             if (window.addWelcome) {
-              window.addWelcome(student.name);
+              window.addWelcome(student.name, studentId);
             }
           }
         } else if (student.action === 'checkout') {
@@ -163,7 +165,7 @@ const WebcamCapture: React.FC<WebcamCaptureProps> = ({ groupId, onFaceRecognized
           if (student.name) {
             pushAttendanceMessage(student.name, 'leave');
             if (window.addGoodbye) {
-              window.addGoodbye(student.name);
+              window.addGoodbye(student.name, studentId);
             }
           }
         }
@@ -183,12 +185,12 @@ const WebcamCapture: React.FC<WebcamCaptureProps> = ({ groupId, onFaceRecognized
         if (initialStatus === 'present' && student.name) {
           pushAttendanceMessage(student.name, 'enter');
           if (window.addWelcome) {
-            window.addWelcome(student.name);
+            window.addWelcome(student.name, studentId);
           }
         } else if (initialStatus === 'departed' && student.name) {
           pushAttendanceMessage(student.name, 'leave');
           if (window.addGoodbye) {
-            window.addGoodbye(student.name);
+            window.addGoodbye(student.name, studentId);
           }
         }
       }
@@ -201,7 +203,7 @@ const WebcamCapture: React.FC<WebcamCaptureProps> = ({ groupId, onFaceRecognized
           student.attendanceStatus = 'departed';
           pushAttendanceMessage(student.name, 'leave');
           if (window.addGoodbye) {
-            window.addGoodbye(student.name);
+            window.addGoodbye(student.name, studentId);
           }
         }
       }
@@ -235,7 +237,8 @@ const WebcamCapture: React.FC<WebcamCaptureProps> = ({ groupId, onFaceRecognized
         const ctx = canvas.getContext('2d');
         if (!ctx) return null;
         ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-        return canvas.toDataURL('image/jpeg', 0.9);
+        // Reduced quality from 0.9 to 0.7 for faster upload and processing
+        return canvas.toDataURL('image/jpeg', 0.7);
       } else {
         const webcam = webcamRef.current as Webcam;
         return typeof webcam.getScreenshot === 'function' ? webcam.getScreenshot() : null;
@@ -251,7 +254,8 @@ const WebcamCapture: React.FC<WebcamCaptureProps> = ({ groupId, onFaceRecognized
     isProcessing.current = true;
 
     const currentTime = Date.now();
-    if (lastProcessedFrame.current && currentTime - parseInt(lastProcessedFrame.current) < 100) {
+    // Reduced from 100ms to 50ms for faster response
+    if (lastProcessedFrame.current && currentTime - parseInt(lastProcessedFrame.current) < 50) {
       isProcessing.current = false;
       return;
     }
@@ -270,12 +274,13 @@ const WebcamCapture: React.FC<WebcamCaptureProps> = ({ groupId, onFaceRecognized
       imageSrc = captureScreenshot();
     }
 
+    // Reduced safety timeout from 30s to 10s for faster recovery
     const safetyTimeout = setTimeout(() => {
       if (isProcessing.current) {
         console.warn('Processing timeout - resetting flag');
         isProcessing.current = false;
       }
-    }, 30000);
+    }, 10000);
 
     try {
       if (!imageSrc) {

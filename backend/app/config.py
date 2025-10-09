@@ -30,7 +30,7 @@ class Config:
     FACE_MATCH_THRESHOLD = float(os.getenv('MATCH_THRESHOLD', 0.60))
     FACE_DETECTOR_BACKEND = os.getenv('FACE_DETECTOR_BACKEND', 'retinaface')
     FACE_MODEL_PATH = os.getenv('INSIGHTFACE_MODEL_ROOT', 'models')
-    MAX_IMAGE_SIZE = int(os.getenv('MAX_IMAGE_SIZE', 2048))  # Increased from 1024 to 2048
+    MAX_IMAGE_SIZE = int(os.getenv('MAX_IMAGE_SIZE', 800))  # Optimized from 2048 to 800 for faster processing
     
     # Attendance settings
     DEBOUNCE_SECONDS = int(os.getenv('DEBOUNCE_SECONDS', 30))

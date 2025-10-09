@@ -86,8 +86,8 @@ export const submitLiveAttendance = async (imageBlob: Blob, retryCount = 0): Pro
         // Let the browser set the Content-Type with proper boundary
         'Content-Type': undefined
       },
-      // Increase timeout for images with multiple faces
-      timeout: 30000 // 30 seconds
+      // Reduced timeout from 30s to 15s for faster error feedback
+      timeout: 15000 // 15 seconds
     });
     return response.data;
   } catch (error: any) {
