@@ -51,6 +51,10 @@ def check_face_service():
     """Check if face recognition service is running properly"""
     start_time = time.time()
     try:
+        model_path = current_app.config.get('FACE_MODEL_PATH', 'models')
+        detector_backend = current_app.config.get('FACE_DETECTOR_BACKEND', 'retinaface')
+        model_path_exists = os.path.exists(model_path)
+        
         model_loaded = face_service.initialized
         if not model_loaded:
             # Try to initialize model
@@ -63,13 +67,20 @@ def check_face_service():
             return {
                 "status": "ok",
                 "message": "Face recognition model loaded successfully",
-                "latency": latency
+                "latency": latency,
+                "model_path": model_path,
+                "model_path_exists": model_path_exists,
+                "detector_backend": detector_backend
             }
         else:
             return {
                 "status": "error",
                 "message": "Face recognition model failed to load",
-                "latency": latency
+                "latency": latency,
+                "model_path": model_path,
+                "model_path_exists": model_path_exists,
+                "detector_backend": detector_backend,
+                "hint": "Run 'python download_models.py' to download models" if not model_path_exists else "Check server logs for errors"
             }
     except Exception as e:
         end_time = time.time()
@@ -77,7 +88,9 @@ def check_face_service():
         return {
             "status": "error",
             "message": f"Error in face service: {str(e)}",
-            "latency": latency
+            "latency": latency,
+            "model_path": current_app.config.get('FACE_MODEL_PATH', 'models'),
+            "hint": "Check server logs for detailed error information"
         }
 
 def check_database():

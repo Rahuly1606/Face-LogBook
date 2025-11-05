@@ -43,8 +43,32 @@ def process_live_attendance():
         except Exception as e:
             return jsonify({"success": False, "message": f"Invalid base64 image: {str(e)}"}), 400
     
+    # Check if face service is initialized
+    if not face_service.initialized or face_service.model is None:
+        current_app.logger.error("Face service not initialized for live attendance")
+        return jsonify({
+            "success": False,
+            "message": "Face recognition service is not available. Please check server logs.",
+            "detected_faces": [],
+            "total_detected": 0,
+            "recognized": [],
+            "unrecognized_count": 0
+        }), 503
+    
     # Process the image
     result = face_service.process_image_for_attendance(image_data)
+    
+    # Check if there was an error in processing
+    if result.get('error'):
+        current_app.logger.error(f"Error processing image: {result.get('error_message')}")
+        return jsonify({
+            "success": False,
+            "message": result.get('error_message', 'Failed to process image'),
+            "detected_faces": [],
+            "total_detected": 0,
+            "recognized": [],
+            "unrecognized_count": 0
+        }), 500
     
     # Process attendance for recognized faces and add student group info
     detected_faces = []

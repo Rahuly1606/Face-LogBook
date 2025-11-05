@@ -48,6 +48,18 @@ class FaceService:
             model_path = current_app.config.get('FACE_MODEL_PATH')
             detector_backend = current_app.config.get('FACE_DETECTOR_BACKEND')
             
+            current_app.logger.info(f"Initializing face model with path: {model_path}, backend: {detector_backend}")
+            
+            # Check if model path exists
+            if not os.path.exists(model_path):
+                current_app.logger.error(f"Model path does not exist: {model_path}")
+                # Try to create the directory
+                try:
+                    os.makedirs(model_path, exist_ok=True)
+                    current_app.logger.info(f"Created model directory: {model_path}")
+                except Exception as e:
+                    current_app.logger.error(f"Failed to create model directory: {str(e)}")
+            
             try:
                 # Try to initialize the face model with optimized detection size
                 self.model = FaceAnalysis(name=detector_backend, root=model_path, providers=['CPUExecutionProvider'])
