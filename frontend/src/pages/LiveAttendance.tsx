@@ -137,20 +137,33 @@ export default function LiveAttendance() {
             return null;
         }
 
-        // Set canvas dimensions to match video
-        canvas.width = video.videoWidth;
-        canvas.height = video.videoHeight;
+        // Optimize image size for faster upload and processing
+        const maxSize = 640;
+        let targetWidth = video.videoWidth;
+        let targetHeight = video.videoHeight;
 
-        // Draw the video frame to canvas
-        context.drawImage(video, 0, 0, canvas.width, canvas.height);
+        // Resize if too large
+        if (Math.max(targetWidth, targetHeight) > maxSize) {
+            const scale = maxSize / Math.max(targetWidth, targetHeight);
+            targetWidth = Math.floor(targetWidth * scale);
+            targetHeight = Math.floor(targetHeight * scale);
+        }
+
+        // Set canvas to optimized dimensions
+        canvas.width = targetWidth;
+        canvas.height = targetHeight;
+
+        // Draw the video frame to canvas (scaled if needed)
+        context.drawImage(video, 0, 0, targetWidth, targetHeight);
 
         return new Promise<Blob | null>((resolve) => {
+            // Use 0.85 quality for faster processing (still good quality)
             canvas.toBlob((blob) => {
                 if (!blob) {
                     console.error('Failed to create blob from canvas');
                 }
                 resolve(blob);
-            }, 'image/jpeg', 0.95);
+            }, 'image/jpeg', 0.85);
         });
     }, []);
 

@@ -62,11 +62,17 @@ class FaceService:
             
             try:
                 # Try to initialize the face model with optimized detection size
-                self.model = FaceAnalysis(name=detector_backend, root=model_path, providers=['CPUExecutionProvider'])
-                # Reduced from 640x640 to 320x320 for faster detection
-                self.model.prepare(ctx_id=0, det_size=(320, 320))
+                self.model = FaceAnalysis(
+                    name=detector_backend, 
+                    root=model_path, 
+                    providers=['CPUExecutionProvider'],
+                    allowed_modules=['detection', 'recognition']  # Only load what we need
+                )
+                # Optimized detection size: smaller = faster, but still accurate
+                # 256x256 is a good balance between speed and accuracy
+                self.model.prepare(ctx_id=0, det_size=(256, 256), det_thresh=0.5)
                 self.initialized = True
-                current_app.logger.info("Face recognition model successfully initialized")
+                current_app.logger.info("Face recognition model successfully initialized with optimized settings")
                 return True
             except ModuleNotFoundError as e:
                 current_app.logger.error(f"Module error during face model initialization: {str(e)}")
@@ -184,33 +190,35 @@ class FaceService:
         return self._embedding_cache
 
     def _build_faiss_index(self, embeddings_matrix, student_list):
-        """Build FAISS index for fast similarity search"""
+        """Build FAISS index for fast similarity search - optimized for speed"""
         try:
             n_embeddings, dim = embeddings_matrix.shape
             
-            # Choose index type based on dataset size
-            if n_embeddings < 1000:
-                # For small datasets, use exact search (Flat index)
+            # Choose index type based on dataset size - optimized for speed
+            if n_embeddings < 500:
+                # For small datasets, use exact search (Flat index) - fastest
                 index = faiss.IndexFlatIP(dim)  # Inner Product (cosine similarity for normalized vectors)
                 current_app.logger.info(f"Using FAISS Flat index for {n_embeddings} students")
-            elif n_embeddings < 10000:
-                # For medium datasets, use IVF (Inverted File Index)
-                nlist = min(100, n_embeddings // 10)  # Number of clusters
+            elif n_embeddings < 5000:
+                # For medium datasets, use IVF (Inverted File Index) - balanced speed/accuracy
+                nlist = min(50, max(10, n_embeddings // 20))  # Fewer clusters = faster search
                 quantizer = faiss.IndexFlatIP(dim)
                 index = faiss.IndexIVFFlat(quantizer, dim, nlist, faiss.METRIC_INNER_PRODUCT)
                 index.train(embeddings_matrix)
                 current_app.logger.info(f"Using FAISS IVF index with {nlist} clusters for {n_embeddings} students")
             else:
-                # For large datasets, use HNSW (Hierarchical Navigable Small World)
-                index = faiss.IndexHNSWFlat(dim, 32, faiss.METRIC_INNER_PRODUCT)
+                # For large datasets, use HNSW (Hierarchical Navigable Small World) - fast approximate search
+                index = faiss.IndexHNSWFlat(dim, 16, faiss.METRIC_INNER_PRODUCT)  # Reduced M from 32 to 16 for speed
                 current_app.logger.info(f"Using FAISS HNSW index for {n_embeddings} students")
             
             # Add embeddings to index (embeddings should already be normalized)
             index.add(embeddings_matrix)
             
-            # Set search parameters for IVF
+            # Optimize search parameters for speed
             if isinstance(index, faiss.IndexIVFFlat):
-                index.nprobe = min(10, nlist)  # Number of clusters to search
+                index.nprobe = min(5, nlist)  # Reduced from 10 to 5 for faster search
+            elif isinstance(index, faiss.IndexHNSWFlat):
+                index.hnsw.efSearch = 16  # Lower = faster (default is 16, but being explicit)
             
             self._faiss_index = index
             self._faiss_student_list = student_list
@@ -349,12 +357,20 @@ class FaceService:
             else:
                 img = image_data
             
-            # Resize image if needed - optimized for faster processing
-            max_size = current_app.config.get('MAX_IMAGE_SIZE', 800)
+            # Aggressive image optimization for speed
+            max_size = current_app.config.get('MAX_IMAGE_SIZE', 640)  # Reduced from 800 to 640
             h, w = img.shape[:2]
+            
+            # Always resize to a reasonable size for faster processing
             if max(h, w) > max_size:
                 scale = max_size / max(h, w)
-                img = cv2.resize(img, (int(w * scale), int(h * scale)), interpolation=cv2.INTER_AREA)
+                new_w, new_h = int(w * scale), int(h * scale)
+                # Use INTER_LINEAR for faster resizing (still good quality)
+                img = cv2.resize(img, (new_w, new_h), interpolation=cv2.INTER_LINEAR)
+            
+            # Additional optimization: reduce to 8-bit if not already
+            if img.dtype != np.uint8:
+                img = img.astype(np.uint8)
             
             # BGR to RGB for insightface
             img_rgb = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)

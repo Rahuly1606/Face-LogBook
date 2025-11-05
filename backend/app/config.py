@@ -32,11 +32,11 @@ class Config:
     JWT_SECRET_KEY = os.getenv('JWT_SECRET_KEY', 'jwt_secret_dev_key')
     JWT_ACCESS_TOKEN_EXPIRES = int(os.getenv('JWT_ACCESS_EXPIRES', 3600))  # 1 hour default
     
-    # Face recognition settings
-    FACE_MATCH_THRESHOLD = float(os.getenv('MATCH_THRESHOLD', 0.60))
+    # Face recognition settings - optimized for speed and accuracy
+    FACE_MATCH_THRESHOLD = float(os.getenv('MATCH_THRESHOLD', 0.55))  # Lowered from 0.60 for better detection
     FACE_DETECTOR_BACKEND = os.getenv('FACE_DETECTOR_BACKEND', 'retinaface')
     FACE_MODEL_PATH = os.getenv('INSIGHTFACE_MODEL_ROOT', 'models')
-    MAX_IMAGE_SIZE = int(os.getenv('MAX_IMAGE_SIZE', 800))  # Optimized from 2048 to 800 for faster processing
+    MAX_IMAGE_SIZE = int(os.getenv('MAX_IMAGE_SIZE', 640))  # Reduced from 800 to 640 for faster processing
     
     # Attendance settings
     DEBOUNCE_SECONDS = int(os.getenv('DEBOUNCE_SECONDS', 30))
