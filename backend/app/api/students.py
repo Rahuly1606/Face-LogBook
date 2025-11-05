@@ -74,7 +74,12 @@ def register_student():
             if file and allowed_file(file.filename):
                 # Generate a unique filename with UUID
                 filename = f"{student_id}_{str(uuid.uuid4())}.jpg"
-                filepath = os.path.join(current_app.config['UPLOAD_FOLDER'], filename)
+                upload_folder = current_app.config['UPLOAD_FOLDER']
+                
+                # Ensure upload folder exists
+                os.makedirs(upload_folder, exist_ok=True)
+                
+                filepath = os.path.join(upload_folder, filename)
                 
                 # Save the file
                 file.save(filepath)
@@ -111,7 +116,12 @@ def register_student():
                 
                 # Generate a unique filename with UUID
                 filename = f"{student_id}_{str(uuid.uuid4())}.jpg"
-                filepath = os.path.join(current_app.config['UPLOAD_FOLDER'], filename)
+                upload_folder = current_app.config['UPLOAD_FOLDER']
+                
+                # Ensure upload folder exists
+                os.makedirs(upload_folder, exist_ok=True)
+                
+                filepath = os.path.join(upload_folder, filename)
                 
                 # Copy the temp file to uploads
                 import shutil

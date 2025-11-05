@@ -26,6 +26,13 @@ def create_app(config_name='dev'):
     # Set application start time for uptime tracking
     app.start_time = time.time()
     
+    # Create uploads directory if it doesn't exist
+    upload_folder = app.config.get('UPLOAD_FOLDER', 'uploads')
+    if not os.path.isabs(upload_folder):
+        upload_folder = os.path.join(app.root_path, '..', upload_folder)
+    os.makedirs(upload_folder, exist_ok=True)
+    app.logger.info(f"Upload folder ensured at: {upload_folder}")
+    
     # Set open attendance endpoints in development
     if config_name == 'dev':
         app.config['OPEN_ATTENDANCE_ENDPOINTS'] = True
