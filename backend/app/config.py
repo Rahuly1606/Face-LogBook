@@ -11,15 +11,21 @@ class Config:
     TESTING = False
     SQLALCHEMY_TRACK_MODIFICATIONS = False
     
-    # SQLAlchemy connect args for SSL (used with Aiven)
-    SQLALCHEMY_ENGINE_OPTIONS = {}
+    # SQLAlchemy engine options for connection pooling and thread safety
+    SQLALCHEMY_ENGINE_OPTIONS = {
+        'pool_pre_ping': True,  # Verify connections before using them
+        'pool_recycle': 3600,   # Recycle connections after 1 hour
+        'pool_size': 10,        # Connection pool size
+        'max_overflow': 20,     # Max overflow connections
+        'connect_args': {
+            'connect_timeout': 10
+        }
+    }
+    
+    # Add SSL configuration if using Aiven
     if os.getenv('AIVEN_CA_PATH'):
-        SQLALCHEMY_ENGINE_OPTIONS = {
-            'connect_args': {
-                'ssl': {
-                    'ca': os.getenv('AIVEN_CA_PATH')
-                }
-            }
+        SQLALCHEMY_ENGINE_OPTIONS['connect_args']['ssl'] = {
+            'ca': os.getenv('AIVEN_CA_PATH')
         }
     
     # JWT Settings

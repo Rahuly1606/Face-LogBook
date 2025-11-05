@@ -273,7 +273,9 @@ class FaceService:
             best_idx = int(indices[0][0])
             
             if best_score >= threshold:
-                return self._faiss_student_list[best_idx], best_score
+                # Return student_id instead of Student object to avoid session issues
+                student = self._faiss_student_list[best_idx]
+                return student.student_id, best_score
             return None, best_score
             
         except Exception as e:
@@ -296,7 +298,9 @@ class FaceService:
         best_score = similarities[best_idx]
         
         if best_score >= threshold:
-            return student_list[best_idx], float(best_score)
+            # Return student_id instead of Student object to avoid session issues
+            student = student_list[best_idx]
+            return student.student_id, float(best_score)
         return None, float(best_score)
     
     def process_image_for_attendance(self, image_data):
@@ -382,15 +386,21 @@ class FaceService:
                 try:
                     embedding = face.embedding
                     bbox = face.bbox.astype(int)  # Get bounding box for each face
-                    student, score = self.match_face(embedding, threshold)
+                    student_id, score = self.match_face(embedding, threshold)
                     
-                    if student:
-                        recognized.append({
-                            "student_id": student.student_id,
-                            "name": student.name,
-                            "score": float(score),
-                            "bbox": bbox.tolist()  # Add bounding box information
-                        })
+                    if student_id:
+                        # Fetch student within this request's session
+                        student = Student.query.get(student_id)
+                        if student:
+                            recognized.append({
+                                "student_id": student.student_id,
+                                "name": student.name,
+                                "score": float(score),
+                                "bbox": bbox.tolist()  # Add bounding box information
+                            })
+                        else:
+                            current_app.logger.warning(f"Student {student_id} not found in database")
+                            unrecognized += 1
                     else:
                         unrecognized += 1
                         # Add information about unrecognized face
