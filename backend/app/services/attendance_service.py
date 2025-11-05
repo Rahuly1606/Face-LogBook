@@ -262,12 +262,21 @@ class AttendanceService:
         for student in all_students:
             attendance = attendance_lookup.get(student.student_id)
             
+            # Get group name if student has a group
+            group_name = None
+            if student.group_id:
+                from app.models.group import Group
+                group = Group.query.get(student.group_id)
+                if group:
+                    group_name = group.name
+            
             if attendance:
                 # Use existing record
                 result.append({
                     "id": attendance.id,
                     "student_id": attendance.student_id,
                     "name": student.name,
+                    "group_name": group_name,
                     "in_time": AttendanceService.format_datetime_ist(attendance.in_time),
                     "out_time": AttendanceService.format_datetime_ist(attendance.out_time),
                     "status": attendance.status,
@@ -288,6 +297,7 @@ class AttendanceService:
                     "id": new_attendance.id,
                     "student_id": new_attendance.student_id,
                     "name": student.name,
+                    "group_name": group_name,
                     "in_time": None,
                     "out_time": None,
                     "status": 'absent',
@@ -330,12 +340,21 @@ class AttendanceService:
         for student in all_students:
             attendance = attendance_lookup.get(student.student_id)
             
+            # Get group name if student has a group
+            group_name = None
+            if student.group_id:
+                from app.models.group import Group
+                group = Group.query.get(student.group_id)
+                if group:
+                    group_name = group.name
+            
             if attendance:
                 # Use existing record
                 result.append({
                     "id": attendance.id,
                     "student_id": attendance.student_id,
                     "name": student.name,
+                    "group_name": group_name,
                     "in_time": AttendanceService.format_datetime_ist(attendance.in_time),
                     "out_time": AttendanceService.format_datetime_ist(attendance.out_time),
                     "date": attendance.date.isoformat(),
@@ -356,6 +375,7 @@ class AttendanceService:
                     "id": new_attendance.id,
                     "student_id": new_attendance.student_id,
                     "name": student.name,
+                    "group_name": group_name,
                     "in_time": None,
                     "out_time": None,
                     "date": target_date.isoformat(),
@@ -481,12 +501,21 @@ class AttendanceService:
         for student in all_students:
             attendance = attendance_lookup.get(student.student_id)
             
+            # Get group name if student has a group
+            group_name = None
+            if student.group_id:
+                from app.models.group import Group
+                group = Group.query.get(student.group_id)
+                if group:
+                    group_name = group.name
+            
             if attendance:
                 # Use existing record
                 result.append({
                     "id": attendance.id,
                     "student_id": attendance.student_id,
                     "name": student.name,
+                    "group_name": group_name,
                     "in_time": AttendanceService.format_datetime_ist(attendance.in_time),
                     "out_time": AttendanceService.format_datetime_ist(attendance.out_time),
                     "date": attendance.date.isoformat(),
@@ -507,6 +536,7 @@ class AttendanceService:
                     "id": new_attendance.id,
                     "student_id": new_attendance.student_id,
                     "name": student.name,
+                    "group_name": group_name,
                     "in_time": None,
                     "out_time": None,
                     "date": target_date.isoformat(),

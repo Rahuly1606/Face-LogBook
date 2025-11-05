@@ -2,71 +2,110 @@ import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { BrowserRouter, Routes, Route, Navigate, useLocation } from "react-router-dom";
-import { AppProvider } from "./context/AppContext";
-import Layout from "./components/Layout";
-import AdminDashboard from "./pages/AdminDashboard";
-import RegisterStudent from "./pages/RegisterStudent";
+import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
+import { AuthProvider, useAuth } from "./contexts/AuthContext";
+import { AppLayout } from "./components/layout/AppLayout";
+import Dashboard from "./pages/Dashboard";
 import ManageStudents from "./pages/ManageStudents";
-import ManageGroups from "./pages/ManageGroups";
+import RegisterStudent from "./pages/RegisterStudent";
+import Groups from "./pages/Groups";
 import LiveAttendance from "./pages/LiveAttendance";
 import UploadAttendance from "./pages/UploadAttendance";
 import AttendanceLogs from "./pages/AttendanceLogs";
 import Login from "./pages/Login";
 import NotFound from "./pages/NotFound";
-import GroupsPage from "./pages/GroupsPage";
-import GroupWorkspace from "./pages/GroupWorkspace";
-import Diagnostics from "./pages/Diagnostics";
-import About from "./pages/About";
-import PublicAbout from "./pages/PublicAbout";
-import AuthCheck from "./components/AuthCheck";
 
 const queryClient = new QueryClient();
 
-// Application routes
-const AppRoutes = () => {
-  return (
-    <Routes>
-      {/* Public routes */}
-      <Route path="/login" element={<Login />} />
-      <Route path="/public-about" element={<PublicAbout />} />
+function ProtectedRoute({ children }: { children: React.ReactNode }) {
+  const { isAuthenticated, isLoading } = useAuth();
 
-      {/* Protected application routes inside layout */}
-      <Route element={<AuthCheck><Layout /></AuthCheck>}>
-        {/* Default redirect after login */}
-        <Route path="/" element={<Navigate to="/admin-dashboard" replace />} />
+  if (isLoading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-accent"></div>
+      </div>
+    );
+  }
 
-        {/* All app functionality is protected */}
-        <Route path="/admin-dashboard" element={<AdminDashboard />} />
-        <Route path="/admin/register" element={<RegisterStudent />} />
-        <Route path="/admin/students" element={<ManageStudents />} />
-        <Route path="/admin/groups" element={<ManageGroups />} />
-        <Route path="/groups" element={<GroupsPage />} />
-        <Route path="/groups/:groupId" element={<GroupWorkspace />} />
-        <Route path="/attendance/live" element={<LiveAttendance />} />
-        <Route path="/attendance/upload" element={<UploadAttendance />} />
-        <Route path="/attendance/logs" element={<AttendanceLogs />} />
-        <Route path="/about" element={<About />} />
-        <Route path="/diagnostics" element={<Diagnostics />} />
-      </Route>
+  if (!isAuthenticated) {
+    return <Navigate to="/login" replace />;
+  }
 
-      {/* Not found */}
-      <Route path="*" element={<NotFound />} />
-    </Routes>
-  );
-};
+  return <AppLayout>{children}</AppLayout>;
+}
 
 const App = () => (
   <QueryClientProvider client={queryClient}>
-    <AppProvider>
+    <AuthProvider>
       <TooltipProvider>
         <Toaster />
         <Sonner />
         <BrowserRouter>
-          <AppRoutes />
+          <Routes>
+            <Route path="/login" element={<Login />} />
+            <Route
+              path="/"
+              element={
+                <ProtectedRoute>
+                  <Dashboard />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/students"
+              element={
+                <ProtectedRoute>
+                  <ManageStudents />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/register"
+              element={
+                <ProtectedRoute>
+                  <RegisterStudent />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/groups"
+              element={
+                <ProtectedRoute>
+                  <Groups />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/attendance/live"
+              element={
+                <ProtectedRoute>
+                  <LiveAttendance />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/attendance/upload"
+              element={
+                <ProtectedRoute>
+                  <UploadAttendance />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/attendance/logs"
+              element={
+                <ProtectedRoute>
+                  <AttendanceLogs />
+                </ProtectedRoute>
+              }
+            />
+            {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
+            <Route path="*" element={<NotFound />} />
+          </Routes>
         </BrowserRouter>
       </TooltipProvider>
-    </AppProvider>
+    </AuthProvider>
   </QueryClientProvider>
 );
 

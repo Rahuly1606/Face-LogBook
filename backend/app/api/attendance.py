@@ -46,13 +46,24 @@ def process_live_attendance():
     # Process the image
     result = face_service.process_image_for_attendance(image_data)
     
-    # Process attendance for recognized faces
+    # Process attendance for recognized faces and add student group info
+    detected_faces = []
     for i, person in enumerate(result['recognized']):
         action = AttendanceService.process_attendance(person['student_id'])
         
-        # Get the student record
+        # Get the student record with group info
         student = Student.query.get(person['student_id'])
         student_name = student.name if student else "Student"
+        group_name = student.group.name if student and student.group else None
+        
+        # Create detected face object
+        face_data = {
+            'student_id': person['student_id'],
+            'name': student_name,
+            'confidence': person['score'],
+            'group_name': group_name
+        }
+        detected_faces.append(face_data)
         
         # Set appropriate greeting message based on action
         if action == "checkin":
@@ -74,6 +85,12 @@ def process_live_attendance():
                 # Student already checked in
                 result['recognized'][i]['action'] = "checkin"
                 result['recognized'][i]['greeting_message'] = f"Welcome, {student_name}!"
+    
+    # Add frontend-compatible fields
+    result['success'] = True
+    result['detected_faces'] = detected_faces
+    result['total_detected'] = result.get('total_faces', len(detected_faces))
+    result['message'] = f"Detected {result['total_detected']} face(s), recognized {len(detected_faces)}"
     
     return jsonify(result), 200
 
@@ -226,6 +243,7 @@ def get_attendance_logs_by_group(group_id):
                 "id": record.id,
                 "student_id": record.student_id,
                 "name": name,
+                "group_name": group.name,  # Add group name to each record
                 "date": record.date.isoformat(),
                 "in_time": AttendanceService.format_datetime_ist(record.in_time),
                 "out_time": AttendanceService.format_datetime_ist(record.out_time),

@@ -1,115 +1,96 @@
-import { useState, useEffect } from 'react';
-import { useNavigate, useLocation } from 'react-router-dom';
-import { useToast } from '../hooks/use-toast';
-import { Button } from '../components/ui/button';
-import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '../components/ui/card';
-import { Input } from '../components/ui/input';
-import { Label } from '../components/ui/label';
-import { useApp } from '../context/AppContext';
-import { Camera, Loader2 } from 'lucide-react';
+import { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { useAuth } from '@/contexts/AuthContext';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Card } from '@/components/ui/card';
+import { toast } from 'sonner';
 
-const Login = () => {
+export default function Login() {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [isLoading, setIsLoading] = useState(false);
-  const { login, isAuthenticated } = useApp();
-  const { toast } = useToast();
+  const { login } = useAuth();
   const navigate = useNavigate();
-  const location = useLocation();
-  
-  const from = location.state?.from?.pathname || '/';
-
-  useEffect(() => {
-    if (isAuthenticated) {
-      navigate(from, { replace: true });
-    }
-  }, [isAuthenticated, navigate, from]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!username || !password) {
-      toast({
-        title: 'Invalid Input',
-        description: 'Please enter both username and password.',
-        variant: 'destructive',
-      });
-      return;
-    }
-    
     setIsLoading(true);
+
     try {
       await login(username, password);
-      toast({
-        title: 'Login Successful',
-        description: 'Welcome back to FaceAttend!',
-      });
-      navigate(from, { replace: true });
+      toast.success('Welcome back!');
+      navigate('/');
     } catch (error) {
-      toast({
-        title: 'Login Failed',
-        description: 'Invalid username or password. Please try again.',
-        variant: 'destructive',
-      });
+      toast.error(error instanceof Error ? error.message : 'Login failed');
     } finally {
       setIsLoading(false);
     }
   };
 
   return (
-    <div className="flex items-center justify-center min-h-screen bg-gradient-to-br from-slate-50 to-slate-200 dark:from-slate-900 dark:to-slate-800 p-4">
-      <Card className="w-full max-w-md shadow-2xl">
-        <CardHeader className="space-y-2 text-center">
-            <div className="mx-auto p-3 rounded-lg bg-primary text-primary-foreground w-fit">
-                <Camera className="h-8 w-8"/>
-            </div>
-          <CardTitle className="text-3xl font-bold">FaceAttend</CardTitle>
-          <CardDescription>
-            {from !== '/' 
-              ? 'Please log in to continue.'
-              : 'Enter your credentials to access the admin dashboard.'}
-          </CardDescription>
-        </CardHeader>
-        <form onSubmit={handleSubmit}>
-          <CardContent className="space-y-4">
+    <div className="min-h-screen flex items-center justify-center p-4">
+      <div className="w-full max-w-md space-y-6">
+        {/* Logo and Title */}
+        <div className="text-center space-y-2">
+          <div className="w-16 h-16 rounded-2xl bg-primary flex items-center justify-center mx-auto mb-4">
+            <span className="text-primary-foreground font-bold text-2xl">FA</span>
+          </div>
+          <h1 className="text-3xl font-bold">FaceAttend</h1>
+          <p className="text-muted-foreground">Sign in to your account</p>
+        </div>
+
+        {/* Login Form */}
+        <Card className="p-8 bg-card-light border-0 shadow-xl">
+          <form onSubmit={handleSubmit} className="space-y-6">
             <div className="space-y-2">
               <Label htmlFor="username">Username</Label>
               <Input
                 id="username"
                 type="text"
-                placeholder="admin"
                 value={username}
                 onChange={(e) => setUsername(e.target.value)}
+                placeholder="Enter your username"
+                required
                 disabled={isLoading}
-                autoComplete="username"
               />
             </div>
+
             <div className="space-y-2">
               <Label htmlFor="password">Password</Label>
               <Input
                 id="password"
                 type="password"
-                placeholder="••••••••"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
+                placeholder="Enter your password"
+                required
                 disabled={isLoading}
-                autoComplete="current-password"
               />
             </div>
-          </CardContent>
-          <CardFooter>
-            <Button 
-              type="submit" 
-              className="w-full" 
+
+            <Button
+              type="submit"
+              className="w-full bg-accent text-accent-foreground hover:bg-accent-glow font-semibold"
               disabled={isLoading}
             >
-              {isLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-              {isLoading ? 'Logging in...' : 'Login'}
+              {isLoading ? 'Signing in...' : 'Sign In'}
             </Button>
-          </CardFooter>
-        </form>
-      </Card>
+          </form>
+
+          <div className="mt-6 pt-6 border-t border-border">
+            <p className="text-center text-sm text-muted-foreground">
+              Demo credentials: admin / admin123
+            </p>
+          </div>
+        </Card>
+
+        {/* Footer */}
+        <p className="text-center text-xs text-muted-foreground">
+          Powered by face recognition technology
+        </p>
+      </div>
     </div>
   );
-};
-
-export default Login;
+}

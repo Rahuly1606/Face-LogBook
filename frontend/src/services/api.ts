@@ -1,223 +1,412 @@
-import axios, { AxiosRequestConfig, AxiosResponse, AxiosError } from 'axios';
-import { getAdminToken } from '../utils/authToken';
+import { api } from '@/lib/api';
 
-// Get the API base URL from environment variables
-const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost:5000';
-const API_VERSION = '/api/v1';
-const API_URL = `${API_BASE}${API_VERSION}`;
+// ============= TYPES =============
+export interface Student {
+    id?: number;
+    student_id: string;
+    name: string;
+    group_id?: number;
+    group_name?: string;
+    photo_url?: string;
+    created_at?: string;
+    updated_at?: string;
+}
 
-console.log('API configured with:', {
-    base: API_BASE,
-    version: API_VERSION,
-    fullUrl: API_URL
-});
+export interface Group {
+    id: number;
+    name: string;
+    code: string;
+    created_at?: string;
+    updated_at?: string;
+}
 
-// Create axios instance with proper configuration
-const apiClient = axios.create({
-    baseURL: API_URL,
-    timeout: 20000, // 20 seconds max timeout (reduced from 60s)
-    withCredentials: true, // Important for CORS with credentials
-});
+export interface AttendanceRecord {
+    id: number;
+    student_id: string;
+    student_name?: string;
+    name?: string; // From /attendance/today endpoint
+    group_id?: number;
+    group_name?: string;
+    timestamp?: string;
+    in_time?: string; // From /attendance/today endpoint
+    out_time?: string; // From /attendance/today endpoint
+    date: string;
+    status?: string; // present, absent, late
+    confidence?: number;
+    photo_url?: string;
+}
 
-// Request interceptor to add authorization headers
-apiClient.interceptors.request.use(
-    (config) => {
-        // Add JWT Authorization header if available (from login flow)
-        try {
-            const userStr = localStorage.getItem('user');
-            if (userStr) {
-                const user = JSON.parse(userStr);
-                const bearerToken = user?.token || user?.access_token;
-                if (bearerToken) {
-                    config.headers['Authorization'] = `Bearer ${bearerToken}`;
-                }
-            }
-        } catch (e) {
-            // ignore parse errors
-        }
+export interface RegisterStudentData {
+    student_id: string;
+    name: string;
+    image?: File;
+    drive_link?: string;
+    group_id?: number;
+}
 
-        // Add legacy admin token header for compatibility
-        const adminToken = getAdminToken();
-        if (adminToken) {
-            config.headers['X-ADMIN-TOKEN'] = adminToken;
-            console.log('Added admin token to request:', adminToken.substring(0, 5) + '...');
-        } else {
-            console.warn('No admin token found in localStorage');
-        }
+export interface UpdateStudentData {
+    student_id?: string;
+    name?: string;
+    image?: File;
+    drive_link?: string;
+    group_id?: number;
+}
 
-        // Only add Content-Type: application/json for non-FormData payloads
-        if (config.data && !(config.data instanceof FormData) && !config.headers['Content-Type']) {
-            config.headers['Content-Type'] = 'application/json';
-        }
+export interface LiveAttendanceResponse {
+    success: boolean;
+    detected_faces: Array<{
+        student_id: string;
+        name: string;
+        confidence: number;
+        group_name?: string;
+    }>;
+    message?: string;
+    total_detected?: number;
+}
 
-        // Log request info (in development only)
-        if (import.meta.env.DEV) {
-            console.log(`Request: ${config.method?.toUpperCase()} ${config.url}`, {
-                baseURL: config.baseURL,
-                headers: config.headers,
-                data: config.data
-            });
-        }
+export interface UploadAttendanceResponse {
+    success: boolean;
+    message: string;
+    detected_count: number;
+    students: Array<{
+        student_id: string;
+        name: string;
+        confidence: number;
+    }>;
+}
 
-        return config;
-    },
-    (error) => {
-        return Promise.reject(error);
-    }
-);
+export interface DashboardStats {
+    total_students: number;
+    total_groups: number;
+    today_attendance: number;
+    attendance_rate: number;
+}
 
-// Utility for handling retries
-const retry = async (fn: () => Promise<any>, retries = 2, delay = 1000, backoff = 2) => {
-    try {
-        return await fn();
-    } catch (error) {
-        if (retries <= 0) {
-            throw error;
-        }
-
-        // If backend is likely sleeping, wait longer
-        if (!(error as AxiosError).response) {
-            console.log(`Backend might be waking up. Retrying in ${delay}ms...`);
-        } else {
-            console.log(`Request failed. Retrying in ${delay}ms...`);
-        }
-
-        await new Promise(resolve => setTimeout(resolve, delay));
-        return retry(fn, retries - 1, delay * backoff);
-    }
-};
-
-// Response interceptor for error handling
-apiClient.interceptors.response.use(
-    (response) => {
-        // Log response in development
-        if (import.meta.env.DEV) {
-            console.log(`Response: ${response.status} ${response.config.url}`, {
-                data: response.data,
-                headers: response.headers
-            });
-        }
+// ============= STUDENT APIs =============
+export const studentApi = {
+    async getAll(): Promise<{ students: Student[] }> {
+        const response = await api.get<{ students: Student[] }>('/students');
         return response;
     },
-    async (error: AxiosError) => {
-        const config = error.config as AxiosRequestConfig & { _retry?: boolean, _isRetryRequest?: boolean };
 
-        // Automatically retry network errors (likely backend waking up)
-        // But only retry GET requests or specific important endpoints like login
-        const isIdempotent = !config.method || config.method.toLowerCase() === 'get';
-        const isImportantEndpoint = config.url?.includes('/auth/login') || config.url?.includes('/auth/refresh');
-        const shouldRetry = (isIdempotent || isImportantEndpoint) && !config._retry;
+    async getById(id: string): Promise<{ student: Student } | null> {
+        try {
+            const response = await api.get<{ student: Student }>(`/students/${id}`);
+            return response;
+        } catch (error) {
+            console.error('Error fetching student:', error);
+            return null;
+        }
+    },
 
-        if (!error.response && shouldRetry) {
-            config._retry = true;
-            console.log('Network error detected. Backend might be waking up - attempting retry...');
+    async getByGroup(groupId: number): Promise<{ students: Student[] }> {
+        const response = await api.get<{ students: Student[] }>(`/groups/${groupId}/students`);
+        return response;
+    },
 
-            // Display a message to the user that we're trying to wake up the backend
-            const wakeupEvent = new CustomEvent('api:backend-waking', {
-                detail: { message: 'Connecting to backend service, this might take a moment...' }
-            });
-            window.dispatchEvent(wakeupEvent);
+    async register(data: RegisterStudentData) {
+        const formData = new FormData();
+        formData.append('student_id', data.student_id);
+        formData.append('name', data.name);
 
-            try {
-                // Try to wake up backend with a lightweight ping first
-                await fetch(`${API_BASE}/api/v1/health/ping`, {
-                    method: 'GET',
-                    headers: { 'Accept': 'application/json' },
-                });
-
-                // Now retry the original request
-                return await retry(() => apiClient(config), 2, 1500, 1.5);
-            } catch (retryError) {
-                console.error('Retry failed after multiple attempts', retryError);
-            }
+        if (data.image) {
+            formData.append('image', data.image);
+        }
+        if (data.drive_link) {
+            formData.append('drive_link', data.drive_link);
+        }
+        if (data.group_id) {
+            formData.append('group_id', data.group_id.toString());
         }
 
-        if (error.response) {
-            // The request was made and the server responded with a status code
-            // that falls out of the range of 2xx
-            console.error('API Error:', {
-                status: error.response.status,
-                data: error.response.data,
-                headers: error.response.headers,
-                config: error.config
-            });
+        const response = await fetch(`${import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000'}/api/v1/students/register`, {
+            method: 'POST',
+            headers: {
+                'Authorization': `Bearer ${localStorage.getItem('faceattend_auth_token')}`,
+            },
+            body: formData,
+        });
 
-            // Extract error message from response
-            const message =
-                (error.response.data as any)?.message ||
-                (error.response.data as any)?.detail ||
-                (error.response.data as any)?.error ||
-                'An error occurred';
-
-            // Enhance error with more details
-            const apiError = new Error(message);
-            (apiError as any).status = error.response.status;
-            (apiError as any).data = error.response.data;
-
-            return Promise.reject(apiError);
-        } else if (error.request) {
-            // The request was made but no response was received
-            console.error('Network Error:', error.request);
-
-            // Create network error with helpful message
-            const networkError = new Error(
-                `Cannot reach backend at ${API_BASE}. The server may be waking up - try again in a minute or check server status.`
-            );
-            (networkError as any).isNetworkError = true;
-            (networkError as any).isBackendSleeping = true;
-
-            return Promise.reject(networkError);
-        } else {
-            // Something happened in setting up the request that triggered an Error
-            console.error('Request Error:', error.message);
-            return Promise.reject(error);
+        if (!response.ok) {
+            const error = await response.json();
+            throw new Error(error.message || error.error || 'Failed to register student');
         }
-    }
-);
 
-// Convenience methods for API calls
-const api = {
-    // Basic CRUD operations
-    get: <T = any>(url: string, config?: AxiosRequestConfig): Promise<AxiosResponse<T>> =>
-        apiClient.get<T>(url, config),
+        return response.json();
+    },
 
-    post: <T = any>(url: string, data?: any, config?: AxiosRequestConfig): Promise<AxiosResponse<T>> =>
-        apiClient.post<T>(url, data, config),
+    async update(id: string, data: UpdateStudentData) {
+        const formData = new FormData();
 
-    put: <T = any>(url: string, data?: any, config?: AxiosRequestConfig): Promise<AxiosResponse<T>> =>
-        apiClient.put<T>(url, data, config),
+        if (data.student_id) formData.append('student_id', data.student_id);
+        if (data.name) formData.append('name', data.name);
+        if (data.image) formData.append('image', data.image);
+        if (data.drive_link) formData.append('drive_link', data.drive_link);
+        if (data.group_id) formData.append('group_id', data.group_id.toString());
 
-    delete: <T = any>(url: string, config?: AxiosRequestConfig): Promise<AxiosResponse<T>> =>
-        apiClient.delete<T>(url, config),
+        const response = await fetch(`${import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000'}/api/v1/students/${id}`, {
+            method: 'PUT',
+            headers: {
+                'Authorization': `Bearer ${localStorage.getItem('faceattend_auth_token')}`,
+            },
+            body: formData,
+        });
 
-    // File upload helper
-    uploadFile: <T = any>(url: string, file: File, additionalData?: Record<string, any>): Promise<AxiosResponse<T>> => {
+        if (!response.ok) {
+            const error = await response.json();
+            throw new Error(error.message || 'Failed to update student');
+        }
+
+        return response.json();
+    },
+
+    async delete(id: string) {
+        return api.delete(`/students/${id}`);
+    },
+
+    async bulkDelete(ids: string[]) {
+        return api.post('/students/bulk-delete', { ids });
+    },
+};
+
+// ============= GROUP APIs =============
+export const groupApi = {
+    async getAll(): Promise<Group[]> {
+        const response = await api.get<{ groups: Group[] }>('/groups');
+        return response.groups || [];
+    },
+
+    async getById(id: number): Promise<Group | null> {
+        try {
+            const response = await api.get<{ group: Group }>(`/groups/${id}`);
+            return response.group;
+        } catch (error) {
+            console.error('Error fetching group:', error);
+            return null;
+        }
+    },
+
+    async create(data: { name: string; code: string }): Promise<Group> {
+        const response = await api.post<{ group: Group }>('/groups', data);
+        return response.group;
+    },
+
+    async update(id: number, data: { name?: string; code?: string }): Promise<Group> {
+        const response = await api.put<{ group: Group }>(`/groups/${id}`, data);
+        return response.group;
+    },
+
+    async delete(id: number): Promise<boolean> {
+        try {
+            await api.delete(`/groups/${id}`);
+            return true;
+        } catch (error) {
+            console.error('Error deleting group:', error);
+            return false;
+        }
+    },
+};
+
+// ============= ATTENDANCE APIs =============
+export const attendanceApi = {
+    async submitLive(imageBlob: Blob): Promise<LiveAttendanceResponse> {
+        const formData = new FormData();
+        formData.append('image', imageBlob, 'live_capture.jpg');
+
+        const response = await fetch(`${import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000'}/api/v1/attendance/live`, {
+            method: 'POST',
+            headers: {
+                'Authorization': `Bearer ${localStorage.getItem('faceattend_auth_token')}`,
+            },
+            body: formData,
+        });
+
+        if (!response.ok) {
+            const error = await response.json();
+            throw new Error(error.message || 'Failed to submit live attendance');
+        }
+
+        return response.json();
+    },
+
+    async uploadPhoto(image: File): Promise<UploadAttendanceResponse> {
+        const formData = new FormData();
+        formData.append('image', image);
+
+        const response = await fetch(`${import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000'}/api/v1/attendance/upload`, {
+            method: 'POST',
+            headers: {
+                'Authorization': `Bearer ${localStorage.getItem('faceattend_auth_token')}`,
+            },
+            body: formData,
+        });
+
+        if (!response.ok) {
+            const error = await response.json();
+            throw new Error(error.message || 'Failed to upload attendance photo');
+        }
+
+        return response.json();
+    },
+
+    async getToday(): Promise<{ attendance: AttendanceRecord[] }> {
+        return api.get<{ attendance: AttendanceRecord[] }>('/attendance/today');
+    },
+
+    async getByDate(date: string): Promise<{ attendance: AttendanceRecord[] }> {
+        return api.get<{ attendance: AttendanceRecord[] }>(`/attendance/logs?date=${date}`);
+    },
+
+    async getByDateRange(startDate: string, endDate: string): Promise<{ attendance: AttendanceRecord[] }> {
+        // Backend doesn't support date range, so we'll just get by start date
+        return api.get<{ attendance: AttendanceRecord[] }>(`/attendance/logs?date=${startDate}`);
+    },
+
+    async getByGroup(groupId: number): Promise<{ attendance: AttendanceRecord[] }> {
+        return api.get<{ attendance: AttendanceRecord[] }>(`/attendance/logs/${groupId}`);
+    },
+
+    async getByStudent(studentId: string): Promise<{ attendance: AttendanceRecord[] }> {
+        return api.get<{ attendance: AttendanceRecord[] }>(`/students/${studentId}/attendance`);
+    },
+};
+
+// ============= DASHBOARD APIs =============
+export const dashboardApi = {
+    async getStats(): Promise<DashboardStats> {
+        try {
+            const response = await api.get<DashboardStats>('/dashboard/stats');
+            return response;
+        } catch (error) {
+            console.error('Error fetching dashboard stats:', error);
+            // Return mock data as fallback
+            return {
+                total_students: 0,
+                total_groups: 0,
+                today_attendance: 0,
+                attendance_rate: 0,
+            };
+        }
+    },
+};
+
+// ============= BULK IMPORT APIs =============
+export interface BulkImportSuccess {
+    student_id: string;
+    name: string;
+    message: string;
+}
+
+export interface BulkImportFailure {
+    student_id?: string;
+    name?: string;
+    row?: number;
+    message: string;
+}
+
+export interface BulkImportResult {
+    success?: boolean;
+    message?: string;
+    successes: BulkImportSuccess[];
+    failures: BulkImportFailure[];
+}
+
+export interface ImportJob {
+    id: number;
+    group_id: number;
+    status: 'pending' | 'processing' | 'completed' | 'failed';
+    total_records: number;
+    processed_records: number;
+    successful_records: number;
+    failed_records: number;
+    error_message?: string;
+    created_at: string;
+    started_at?: string;
+    completed_at?: string;
+    progress_percentage: number;
+}
+
+export const bulkImportApi = {
+    async validateImport(groupId: number, file: File): Promise<BulkImportResult> {
+        const formData = new FormData();
+        formData.append('file', file);
+        formData.append('dry_run', 'true');
+
+        const response = await fetch(`${import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000'}/api/v1/groups/${groupId}/students/bulk`, {
+            method: 'POST',
+            headers: {
+                'Authorization': `Bearer ${localStorage.getItem('faceattend_auth_token')}`,
+            },
+            body: formData,
+        });
+
+        if (!response.ok) {
+            const error = await response.json();
+            throw new Error(error.message || 'Validation failed');
+        }
+
+        return response.json();
+    },
+
+    async bulkImport(groupId: number, file: File): Promise<BulkImportResult> {
         const formData = new FormData();
         formData.append('file', file);
 
-        if (additionalData) {
-            Object.entries(additionalData).forEach(([key, value]) => {
-                formData.append(key, String(value));
-            });
+        const response = await fetch(`${import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000'}/api/v1/groups/${groupId}/students/bulk`, {
+            method: 'POST',
+            headers: {
+                'Authorization': `Bearer ${localStorage.getItem('faceattend_auth_token')}`,
+            },
+            body: formData,
+        });
+
+        if (!response.ok) {
+            const error = await response.json();
+            throw new Error(error.message || 'Import failed');
         }
 
-        return apiClient.post<T>(url, formData, {
-            headers: {
-                'Content-Type': 'multipart/form-data',
-            },
-        });
+        return response.json();
     },
 
-    // Raw axios instance for advanced usage
-    client: apiClient,
+    async startAsyncImport(groupId: number, file: File): Promise<{ success: boolean; job_id: number; total_records: number; message: string }> {
+        const formData = new FormData();
+        formData.append('file', file);
 
-    // Configuration information (useful for debugging)
-    config: {
-        baseUrl: API_BASE,
-        apiUrl: API_URL,
-        version: API_VERSION
-    }
+        const response = await fetch(`${import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000'}/api/v1/groups/${groupId}/students/bulk-async`, {
+            method: 'POST',
+            headers: {
+                'Authorization': `Bearer ${localStorage.getItem('faceattend_auth_token')}`,
+            },
+            body: formData,
+        });
+
+        if (!response.ok) {
+            const error = await response.json();
+            throw new Error(error.message || 'Failed to start import');
+        }
+
+        return response.json();
+    },
+
+    async getJobStatus(jobId: number): Promise<ImportJob> {
+        return api.get<ImportJob>(`/groups/import-jobs/${jobId}`);
+    },
+
+    async getAllJobs(groupId?: number, status?: string): Promise<{ jobs: ImportJob[] }> {
+        const params = new URLSearchParams();
+        if (groupId) params.append('group_id', groupId.toString());
+        if (status) params.append('status', status);
+
+        return api.get<{ jobs: ImportJob[] }>(`/groups/import-jobs?${params.toString()}`);
+    },
+
+    async deleteJob(jobId: number): Promise<boolean> {
+        try {
+            await api.delete(`/groups/import-jobs/${jobId}`);
+            return true;
+        } catch (error) {
+            console.error(`Error deleting import job ${jobId}:`, error);
+            return false;
+        }
+    },
 };
-
-export default api;
-export { API_URL, API_BASE, API_VERSION };
