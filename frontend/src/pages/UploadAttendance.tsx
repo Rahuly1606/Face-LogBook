@@ -185,30 +185,36 @@ export default function UploadAttendance() {
                             <div className="space-y-4">
                                 <div className="p-4 rounded-lg bg-success/10 border border-success/20">
                                     <div className="text-center">
-                                        <div className="text-3xl font-bold text-success">{results.detected_count}</div>
+                                        <div className="text-3xl font-bold text-success">{results.detected_count || 0}</div>
                                         <div className="text-sm text-muted-foreground">Students Detected</div>
                                     </div>
                                 </div>
 
                                 <div className="space-y-2 max-h-96 overflow-y-auto">
-                                    {results.students.map((student, index) => (
-                                        <div
-                                            key={index}
-                                            className="p-3 rounded-lg bg-background border border-border"
-                                        >
-                                            <div className="flex items-start justify-between">
-                                                <div className="flex-1">
-                                                    <h3 className="font-semibold text-sm">{student.name}</h3>
-                                                    <p className="text-xs text-muted-foreground">ID: {student.student_id}</p>
-                                                </div>
-                                                <div className="text-right">
-                                                    <div className="text-xs font-medium text-success">
-                                                        {(student.confidence * 100).toFixed(1)}%
+                                    {results.students && results.students.length > 0 ? (
+                                        results.students.map((student, index) => (
+                                            <div
+                                                key={index}
+                                                className="p-3 rounded-lg bg-background border border-border"
+                                            >
+                                                <div className="flex items-start justify-between">
+                                                    <div className="flex-1">
+                                                        <h3 className="font-semibold text-sm">{student.name}</h3>
+                                                        <p className="text-xs text-muted-foreground">ID: {student.student_id}</p>
+                                                    </div>
+                                                    <div className="text-right">
+                                                        <div className="text-xs font-medium text-success">
+                                                            {(student.confidence * 100).toFixed(1)}%
+                                                        </div>
                                                     </div>
                                                 </div>
                                             </div>
+                                        ))
+                                    ) : (
+                                        <div className="text-center py-8 text-muted-foreground">
+                                            <p>No students detected in this image</p>
                                         </div>
-                                    ))}
+                                    )}
                                 </div>
                             </div>
                         )}

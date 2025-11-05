@@ -136,7 +136,25 @@ def process_group_photo():
                 result['recognized'][i]['action'] = "checkin"
                 result['recognized'][i]['greeting_message'] = f"Welcome, {student_name}!"
     
-    return jsonify(result), 200
+    # Transform response to match frontend expected format
+    students = []
+    for person in result['recognized']:
+        students.append({
+            'student_id': person['student_id'],
+            'name': person['name'],
+            'confidence': person.get('score', 0.0)  # Map 'score' to 'confidence'
+        })
+    
+    response = {
+        'success': True,
+        'message': f"Detected {len(students)} student(s)",
+        'detected_count': len(students),
+        'students': students,
+        'unrecognized_count': result.get('unrecognized_count', 0),
+        'processing_time_ms': result.get('processing_time_ms', 0)
+    }
+    
+    return jsonify(response), 200
 
 @attendance_bp.route('/today', methods=['GET'])
 @admin_required()
