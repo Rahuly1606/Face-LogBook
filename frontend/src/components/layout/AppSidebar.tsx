@@ -42,13 +42,13 @@ export function AppSidebar() {
           {!isCollapsed ? (
             <div className="flex items-center gap-2">
               <div className="w-8 h-8 rounded-lg bg-sidebar-primary flex items-center justify-center">
-                <span className="text-sidebar-primary-foreground font-bold text-sm">FA</span>
+                <span className="text-sidebar-primary-foreground font-bold text-sm">FL</span>
               </div>
-              <span className="text-lg font-bold text-sidebar-foreground">FaceAttend</span>
+              <span className="text-lg font-bold text-sidebar-foreground">FaceLogBook</span>
             </div>
           ) : (
             <div className="w-8 h-8 rounded-lg bg-sidebar-primary flex items-center justify-center mx-auto">
-              <span className="text-sidebar-primary-foreground font-bold text-sm">FA</span>
+              <span className="text-sidebar-primary-foreground font-bold text-sm">FL</span>
             </div>
           )}
         </div>

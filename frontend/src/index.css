@@ -8,25 +8,30 @@ All colors MUST be HSL.
 
 @layer base {
   :root {
-    /* Base colors from FaceAttend palette */
-    --background: 60 16% 96%;  /* #F5F6F2 */
-    --foreground: 0 0% 4%;     /* #0B0B0B */
-    
+    /* Base colors from FaceLogBook palette */
+    --background: 60 16% 96%;
+    /* #F5F6F2 */
+    --foreground: 0 0% 4%;
+    /* #0B0B0B */
+
     /* Card system - dark cards on light background */
-    --card: 0 0% 7%;           /* #111111 - cardDark */
+    --card: 0 0% 7%;
+    /* #111111 - cardDark */
     --card-foreground: 60 16% 96%;
     --card-light: 60 16% 96%;
     --card-light-foreground: 0 0% 4%;
-    
+
     /* Accent - vibrant yellow */
-    --accent: 62 91% 64%;      /* #E9F460 */
+    --accent: 62 91% 64%;
+    /* #E9F460 */
     --accent-foreground: 0 0% 4%;
     --accent-glow: 62 91% 70%;
-    
+
     /* Success green */
-    --success: 141 61% 45%;    /* #21C45A */
+    --success: 141 61% 45%;
+    /* #21C45A */
     --success-foreground: 0 0% 100%;
-    
+
     /* Gray scale */
     --gray-50: 60 16% 96%;
     --gray-100: 60 10% 89%;
@@ -38,46 +43,46 @@ All colors MUST be HSL.
     --gray-700: 0 0% 17%;
     --gray-800: 0 0% 10%;
     --gray-900: 0 0% 4%;
-    
+
     /* UI elements */
     --primary: 0 0% 7%;
     --primary-foreground: 60 16% 96%;
-    
+
     --secondary: 60 10% 89%;
     --secondary-foreground: 0 0% 4%;
-    
+
     --muted: 60 10% 89%;
     --muted-foreground: 0 0% 27%;
-    
+
     --popover: 60 16% 96%;
     --popover-foreground: 0 0% 4%;
-    
+
     --destructive: 0 84% 60%;
     --destructive-foreground: 0 0% 100%;
-    
+
     --border: 60 9% 80%;
     --input: 60 9% 80%;
     --ring: 62 91% 64%;
-    
+
     --radius: 0.75rem;
-    
+
     /* Gradients */
     --gradient-accent: linear-gradient(135deg, hsl(62 91% 64%), hsl(62 91% 74%));
     --gradient-dark: linear-gradient(135deg, hsl(0 0% 7%), hsl(0 0% 10%));
     --gradient-subtle: linear-gradient(180deg, hsl(60 16% 96%), hsl(60 10% 93%));
-    
+
     /* Shadows */
     --shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.05);
     --shadow-md: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
     --shadow-lg: 0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1);
     --shadow-xl: 0 20px 25px -5px rgb(0 0 0 / 0.1), 0 8px 10px -6px rgb(0 0 0 / 0.1);
     --shadow-glow: 0 0 20px hsl(62 91% 64% / 0.3);
-    
+
     /* Animations */
     --transition-base: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
     --transition-smooth: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
     --transition-slow: all 0.5s cubic-bezier(0.4, 0, 0.2, 1);
-    
+
     /* Sidebar */
     --sidebar-background: 0 0% 7%;
     --sidebar-foreground: 60 16% 96%;
@@ -99,19 +104,24 @@ All colors MUST be HSL.
     @apply bg-background text-foreground antialiased;
     font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
   }
-  
-  h1, h2, h3, h4, h5, h6 {
+
+  h1,
+  h2,
+  h3,
+  h4,
+  h5,
+  h6 {
     @apply font-semibold tracking-tight;
   }
-  
+
   h1 {
     @apply text-4xl lg:text-5xl;
   }
-  
+
   h2 {
     @apply text-3xl lg:text-4xl;
   }
-  
+
   h3 {
     @apply text-2xl lg:text-3xl;
   }
@@ -123,13 +133,13 @@ All colors MUST be HSL.
     backdrop-filter: blur(10px);
     -webkit-backdrop-filter: blur(10px);
   }
-  
+
   .glass-dark {
     background: rgba(17, 17, 17, 0.8);
     backdrop-filter: blur(10px);
     -webkit-backdrop-filter: blur(10px);
   }
-  
+
   .text-balance {
     text-wrap: balance;
   }
