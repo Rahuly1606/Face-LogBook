@@ -18,15 +18,18 @@ face_service = FaceService()
 @attendance_bp.route('/live', methods=['POST'])
 @admin_required()
 def process_live_attendance():
-    """Process a single frame for attendance"""
+    """Process a single frame for attendance with section-based validation"""
     
-    # Get image data (either form data or base64 JSON)
+    # Get image data and section/group ID
+    selected_group_id = None
+    
     if request.content_type and request.content_type.startswith('multipart/form-data'):
         if 'image' not in request.files:
             return jsonify({"success": False, "message": "No image file provided"}), 400
         
         file = request.files['image']
         image_data = file.read()
+        selected_group_id = request.form.get('group_id', type=int)
     else:
         # Expect JSON with base64 image
         data = request.get_json()
@@ -40,8 +43,18 @@ def process_live_attendance():
                 image_base64 = image_base64.split('base64,')[1]
             
             image_data = base64.b64decode(image_base64)
+            selected_group_id = data.get('group_id', type=int)
         except Exception as e:
             return jsonify({"success": False, "message": f"Invalid base64 image: {str(e)}"}), 400
+    
+    # Validate that a section is selected
+    if not selected_group_id:
+        return jsonify({
+            "success": False,
+            "message": "Please select a section before taking attendance",
+            "detected_faces": [],
+            "total_detected": 0
+        }), 400
     
     # Check if face service is initialized
     if not face_service.initialized or face_service.model is None:
@@ -70,110 +83,158 @@ def process_live_attendance():
             "unrecognized_count": 0
         }), 500
     
-    # Process attendance for recognized faces and add student group info
+    # Process attendance for recognized faces with section-based validation
     detected_faces = []
+    wrong_section_students = []
+    
     for i, person in enumerate(result['recognized']):
-        action = AttendanceService.process_attendance(person['student_id'])
-        
         # Get the student record with group info
         student = Student.query.get(person['student_id'])
-        student_name = student.name if student else "Student"
-        group_name = student.group.name if student and student.group else None
-        
-        # Create detected face object
-        face_data = {
-            'student_id': person['student_id'],
-            'name': student_name,
-            'confidence': person['score'],
-            'group_name': group_name
-        }
-        detected_faces.append(face_data)
-        
-        # Set appropriate greeting message based on action
-        if action == "checkin":
-            result['recognized'][i]['action'] = "checkin"
-            result['recognized'][i]['greeting_message'] = f"Welcome, {student_name}!"
-        elif action == "checkout" or action == "checkout_update":
-            result['recognized'][i]['action'] = "checkout"
-            result['recognized'][i]['goodbye_message'] = f"Goodbye, {student_name}!"
-        elif action == "debounced":
-            # Check if the student is checked in or out to determine message
-            today = AttendanceService.get_ist_today()
-            attendance = Attendance.query.filter_by(student_id=person['student_id'], date=today).first()
+        if not student:
+            continue
             
-            if attendance and attendance.out_time:
-                # Student already checked out
-                result['recognized'][i]['action'] = "checkout"
-                result['recognized'][i]['goodbye_message'] = f"Goodbye, {student_name}!"
-            else:
-                # Student already checked in
+        student_name = student.name
+        student_group_id = student.group_id
+        group_name = student.group.name if student.group else "No Section"
+        
+        # Check if student belongs to selected section
+        if student_group_id == selected_group_id:
+            # ✅ Student belongs to selected section - mark attendance
+            action = AttendanceService.process_attendance(person['student_id'])
+            
+            # Create detected face object
+            face_data = {
+                'student_id': person['student_id'],
+                'name': student_name,
+                'confidence': person['score'],
+                'group_name': group_name,
+                'status': 'correct_section'
+            }
+            detected_faces.append(face_data)
+            
+            # Set appropriate greeting message based on action
+            if action == "checkin":
                 result['recognized'][i]['action'] = "checkin"
                 result['recognized'][i]['greeting_message'] = f"Welcome, {student_name}!"
+            elif action == "checkout" or action == "checkout_update":
+                result['recognized'][i]['action'] = "checkout"
+                result['recognized'][i]['goodbye_message'] = f"Goodbye, {student_name}!"
+        else:
+            # ⚠️ Student belongs to different section - don't mark attendance
+            face_data = {
+                'student_id': person['student_id'],
+                'name': student_name,
+                'confidence': person['score'],
+                'group_name': group_name,
+                'status': 'wrong_section',
+                'message': f"Student belongs to {group_name}"
+            }
+            wrong_section_students.append(face_data)
     
-    # Add frontend-compatible fields
+    # Add frontend-compatible fields with section validation info
     result['success'] = True
     result['detected_faces'] = detected_faces
-    result['total_detected'] = result.get('total_faces', len(detected_faces))
-    result['message'] = f"Detected {result['total_detected']} face(s), recognized {len(detected_faces)}"
+    result['wrong_section_students'] = wrong_section_students
+    result['unrecognized_count'] = result.get('unrecognized_count', 0)
+    result['total_detected'] = len(detected_faces) + len(wrong_section_students) + result['unrecognized_count']
+    
+    # Build message
+    messages = []
+    if detected_faces:
+        messages.append(f"{len(detected_faces)} from selected section")
+    if wrong_section_students:
+        messages.append(f"{len(wrong_section_students)} from other sections")
+    if result['unrecognized_count'] > 0:
+        messages.append(f"{result['unrecognized_count']} unrecognized")
+    
+    result['message'] = f"Detected {result['total_detected']} face(s): " + ", ".join(messages) if messages else "No faces detected"
     
     return jsonify(result), 200
 
 @attendance_bp.route('/upload', methods=['POST'])
 @admin_required()
 def process_group_photo():
-    """Process a group photo for attendance"""
+    """Process a group photo for attendance with section-based validation"""
     if 'image' not in request.files:
         return jsonify({"success": False, "message": "No image file provided"}), 400
     
     file = request.files['image']
     image_data = file.read()
     
+    # Get selected group/section ID
+    selected_group_id = request.form.get('group_id', type=int)
+    
+    # Validate that a section is selected
+    if not selected_group_id:
+        return jsonify({
+            "success": False,
+            "message": "Please select a section before uploading attendance photo"
+        }), 400
+    
     # Process the image
     result = face_service.process_image_for_attendance(image_data)
     
-    # Process attendance for recognized faces
+    # Process attendance for recognized faces with section-based validation
+    correct_section_students = []
+    wrong_section_students = []
+    
     for i, person in enumerate(result['recognized']):
-        action = AttendanceService.process_attendance(person['student_id'])
-        
         # Get the student record
         student = Student.query.get(person['student_id'])
-        student_name = student.name if student else "Student"
-        
-        # Set appropriate greeting message based on action
-        if action == "checkin":
-            result['recognized'][i]['action'] = "checkin"
-            result['recognized'][i]['greeting_message'] = f"Welcome, {student_name}!"
-        elif action == "checkout" or action == "checkout_update":
-            result['recognized'][i]['action'] = "checkout"
-            result['recognized'][i]['goodbye_message'] = f"Goodbye, {student_name}!"
-        elif action == "debounced":
-            # Check if the student is checked in or out to determine message
-            today = AttendanceService.get_ist_today()
-            attendance = Attendance.query.filter_by(student_id=person['student_id'], date=today).first()
+        if not student:
+            continue
             
-            if attendance and attendance.out_time:
-                # Student already checked out
-                result['recognized'][i]['action'] = "checkout"
-                result['recognized'][i]['goodbye_message'] = f"Goodbye, {student_name}!"
-            else:
-                # Student already checked in
-                result['recognized'][i]['action'] = "checkin"
-                result['recognized'][i]['greeting_message'] = f"Welcome, {student_name}!"
+        student_name = student.name
+        student_group_id = student.group_id
+        group_name = student.group.name if student.group else "No Section"
+        
+        # Check if student belongs to selected section
+        if student_group_id == selected_group_id:
+            # ✅ Student belongs to selected section - mark attendance
+            action = AttendanceService.process_attendance(person['student_id'])
+            
+            correct_section_students.append({
+                'student_id': person['student_id'],
+                'name': student_name,
+                'confidence': person['score'],
+                'group_name': group_name,
+                'status': 'correct_section'
+            })
+        else:
+            # ⚠️ Student belongs to different section - don't mark attendance
+            wrong_section_students.append({
+                'student_id': person['student_id'],
+                'name': student_name,
+                'confidence': person['score'],
+                'group_name': group_name,
+                'status': 'wrong_section',
+                'message': f"Student belongs to {group_name}"
+            })
     
     # Transform response to match frontend expected format
     students = []
-    for person in result['recognized']:
+    for person in correct_section_students:
         students.append({
             'student_id': person['student_id'],
             'name': person['name'],
-            'confidence': person.get('score', 0.0)  # Map 'score' to 'confidence'
+            'confidence': person.get('confidence', 0.0)
         })
+    
+    # Build detailed message
+    messages = []
+    if correct_section_students:
+        messages.append(f"{len(correct_section_students)} from selected section")
+    if wrong_section_students:
+        messages.append(f"{len(wrong_section_students)} from other sections")
+    if result.get('unrecognized_count', 0) > 0:
+        messages.append(f"{result['unrecognized_count']} unrecognized")
     
     response = {
         'success': True,
-        'message': f"Detected {len(students)} student(s)",
+        'message': "Detected: " + ", ".join(messages) if messages else "No students detected",
         'detected_count': len(students),
         'students': students,
+        'wrong_section_students': wrong_section_students,
         'unrecognized_count': result.get('unrecognized_count', 0),
         'processing_time_ms': result.get('processing_time_ms', 0)
     }
