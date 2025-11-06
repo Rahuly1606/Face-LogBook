@@ -55,6 +55,20 @@ def register_student():
         student_id = request.form['student_id']
         name = request.form['name']
         
+        # Get group_id if provided
+        group_id = request.form.get('group_id')
+        if group_id:
+            try:
+                group_id = int(group_id)
+                # Verify group exists
+                group = Group.query.get(group_id)
+                if not group:
+                    return jsonify({"error": f"Group with ID {group_id} not found"}), 404
+            except ValueError:
+                return jsonify({"error": "Invalid group ID format"}), 400
+        else:
+            group_id = None
+        
         # Check if student already exists
         existing_student = Student.query.filter_by(student_id=student_id).first()
         if existing_student:
@@ -64,7 +78,7 @@ def register_student():
         new_student = Student(
             student_id=student_id,
             name=name,
-            group_id=None,  # No group for direct registration
+            group_id=group_id,
             photo_path=None
         )
         

@@ -59,9 +59,19 @@ export interface LiveAttendanceResponse {
         name: string;
         confidence: number;
         group_name?: string;
+        status?: string;
+    }>;
+    wrong_section_students?: Array<{
+        student_id: string;
+        name: string;
+        confidence: number;
+        group_name?: string;
+        status?: string;
+        message?: string;
     }>;
     message?: string;
     total_detected?: number;
+    unrecognized_count?: number;
 }
 
 export interface UploadAttendanceResponse {
@@ -73,6 +83,14 @@ export interface UploadAttendanceResponse {
         name: string;
         confidence: number;
     }>;
+    wrong_section_students?: Array<{
+        student_id: string;
+        name: string;
+        confidence: number;
+        group_name?: string;
+        message?: string;
+    }>;
+    unrecognized_count?: number;
 }
 
 export interface DashboardStats {
@@ -209,9 +227,12 @@ export const groupApi = {
 
 // ============= ATTENDANCE APIs =============
 export const attendanceApi = {
-    async submitLive(imageBlob: Blob): Promise<LiveAttendanceResponse> {
+    async submitLive(imageBlob: Blob, groupId?: string): Promise<LiveAttendanceResponse> {
         const formData = new FormData();
         formData.append('image', imageBlob, 'live_capture.jpg');
+        if (groupId) {
+            formData.append('group_id', groupId);
+        }
 
         const response = await fetch(`${import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000'}/api/v1/attendance/live`, {
             method: 'POST',
@@ -229,9 +250,12 @@ export const attendanceApi = {
         return response.json();
     },
 
-    async uploadPhoto(image: File): Promise<UploadAttendanceResponse> {
+    async uploadPhoto(image: File, groupId?: string): Promise<UploadAttendanceResponse> {
         const formData = new FormData();
         formData.append('image', image);
+        if (groupId) {
+            formData.append('group_id', groupId);
+        }
 
         const response = await fetch(`${import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000'}/api/v1/attendance/upload`, {
             method: 'POST',
