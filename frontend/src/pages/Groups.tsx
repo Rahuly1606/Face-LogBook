@@ -149,8 +149,8 @@ export default function Groups() {
 
                 <div className="flex items-center justify-between pt-4 border-t border-border">
                   <div>
-                    <p className="text-sm text-muted-foreground font-medium">Group ID</p>
-                    <p className="font-mono text-base text-foreground font-semibold mt-1">{group.id}</p>
+                    <p className="text-sm text-muted-foreground font-medium">Students</p>
+                    <p className="font-mono text-base text-foreground font-semibold mt-1">{group.student_count || 0}</p>
                   </div>
                   <Button
                     size="sm"
