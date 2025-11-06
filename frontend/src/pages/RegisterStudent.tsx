@@ -6,7 +6,7 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useToast } from '@/hooks/use-toast';
-import { Upload, UserPlus, Loader2, Camera, X } from 'lucide-react';
+import { Upload, UserPlus, Loader2, Camera, X, RefreshCw } from 'lucide-react';
 import { studentApi, groupApi, Group } from '@/services/api';
 import BulkImport from '@/components/BulkImport';
 
@@ -17,6 +17,7 @@ export default function RegisterStudent() {
     const [imagePreview, setImagePreview] = useState<string>('');
     const [showCamera, setShowCamera] = useState(false);
     const [stream, setStream] = useState<MediaStream | null>(null);
+    const [facingMode, setFacingMode] = useState<'user' | 'environment'>('user');
     const videoRef = useRef<HTMLVideoElement>(null);
     const canvasRef = useRef<HTMLCanvasElement>(null);
     const [formData, setFormData] = useState({
@@ -57,13 +58,19 @@ export default function RegisterStudent() {
         }
     };
 
-    const startCamera = async () => {
+    const startCamera = async (mode: 'user' | 'environment' = facingMode) => {
         try {
+            // Stop existing stream if any
+            if (stream) {
+                stream.getTracks().forEach(track => track.stop());
+            }
+
             const mediaStream = await navigator.mediaDevices.getUserMedia({
-                video: { width: 640, height: 480, facingMode: 'user' }
+                video: { width: 640, height: 480, facingMode: mode }
             });
             setStream(mediaStream);
             setShowCamera(true);
+            setFacingMode(mode);
 
             setTimeout(() => {
                 if (videoRef.current) {
@@ -77,6 +84,15 @@ export default function RegisterStudent() {
                 variant: 'destructive',
             });
         }
+    };
+
+    const rotateCamera = async () => {
+        const newMode = facingMode === 'user' ? 'environment' : 'user';
+        await startCamera(newMode);
+        toast({
+            title: 'Camera Rotated',
+            description: `Switched to ${newMode === 'user' ? 'front' : 'back'} camera`,
+        });
     };
 
     const stopCamera = () => {
@@ -277,7 +293,7 @@ export default function RegisterStudent() {
                                                     type="button"
                                                     variant="outline"
                                                     className="w-full text-black border-black hover:bg-black/10"
-                                                    onClick={startCamera}
+                                                    onClick={() => startCamera()}
                                                 >
                                                     <Camera className="mr-2 h-4 w-4" />
                                                     Capture from Camera
@@ -301,6 +317,15 @@ export default function RegisterStudent() {
                                                     >
                                                         <Camera className="mr-2 h-4 w-4" />
                                                         Capture Photo
+                                                    </Button>
+                                                    <Button
+                                                        type="button"
+                                                        variant="outline"
+                                                        onClick={rotateCamera}
+                                                        className="text-black border-black hover:bg-black/10"
+                                                        title="Rotate Camera"
+                                                    >
+                                                        <RefreshCw className="h-4 w-4" />
                                                     </Button>
                                                     <Button
                                                         type="button"
