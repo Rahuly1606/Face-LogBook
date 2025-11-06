@@ -1,9 +1,27 @@
-# FaceLogBook - AI-Enhanced Attendance Management System
+# 📚 FaceLogBook - AI-Enhanced Attendance Management System
 ## Self Learning Project Report
 
 ---
 
-## 1. Declaration
+# 📋 Table of Contents
+
+1. [Declaration](#1-declaration)
+2. [Abstract](#2-abstract)
+3. [Objectives](#3-objectives)
+4. [Problem Statement](#4-problem-statement)
+5. [Learning Resources](#5-learning-resources)
+6. [Methodology / Implementation](#6-methodology--implementation)
+7. [Tools and Technologies Used](#7-tools-and-technologies-used)
+8. [Results / Output](#8-results--output)
+9. [Challenges Faced](#9-challenges-faced)
+10. [Learning Outcomes and CO Mapping](#10-learning-outcomes-and-co-mapping)
+11. [Achievements and Proof of Outcomes](#11-achievements-and-proof-of-outcomes)
+12. [Summary of Self Learning](#12-summary-of-self-learning)
+13. [Appendix](#13-appendix)
+
+---
+
+# 1️⃣ Declaration
 
 **Project Title:** FaceLogBook - AI-Enhanced Attendance Management System
 
@@ -23,7 +41,7 @@ We have given due credit to all sources of information and references used in th
 
 ---
 
-## 2. Abstract
+# 2️⃣ Abstract
 
 FaceLogBook is a cutting-edge, AI-powered attendance management system that leverages facial recognition technology to automate and streamline attendance tracking in educational institutions. The system addresses the inefficiencies and inaccuracies of traditional manual attendance methods by providing a reliable, fast, and contactless solution.
 
@@ -45,7 +63,7 @@ The system has been successfully deployed and tested with over 100+ students, de
 
 ---
 
-## 3. Objectives
+# 3️⃣ Objectives
 
 ### Primary Objectives:
 
@@ -93,7 +111,7 @@ The system has been successfully deployed and tested with over 100+ students, de
 
 ---
 
-## 4. Problem Statement
+# 4️⃣ Problem Statement
 
 ### Background:
 
@@ -145,7 +163,7 @@ FaceLogBook addresses these challenges by providing:
 
 ---
 
-## 5. Learning Resources
+# 5️⃣ Learning Resources
 
 ### Online Courses and Tutorials:
 
@@ -218,7 +236,7 @@ FaceLogBook addresses these challenges by providing:
 
 ---
 
-## 6. Methodology / Implementation
+# 6️⃣ Methodology / Implementation
 
 ### System Architecture:
 
@@ -410,7 +428,7 @@ FaceLogBook addresses these challenges by providing:
 
 ---
 
-## 7. Tools and Technologies Used
+# 7️⃣ Tools and Technologies Used
 
 ### Frontend Technologies:
 
@@ -498,7 +516,7 @@ FaceLogBook addresses these challenges by providing:
 
 ---
 
-## 8. Results / Output
+# 8️⃣ Results / Output
 
 ### System Performance Metrics:
 
@@ -621,7 +639,7 @@ Total Processing: 95ms
 
 ---
 
-## 9. Challenges Faced
+# 9️⃣ Challenges Faced
 
 ### Technical Challenges:
 
@@ -792,7 +810,7 @@ Total Processing: 95ms
 
 ---
 
-## 10. Learning Outcomes and CO Mapping
+# 🔟 Learning Outcomes and CO Mapping
 
 ### Course Outcomes Mapping:
 
@@ -958,7 +976,7 @@ Total Processing: 95ms
 
 ---
 
-## 11. Achievements and Proof of Outcomes
+# 1️⃣1️⃣ Achievements and Proof of Outcomes
 
 ### Project Achievements:
 
@@ -1097,7 +1115,7 @@ Total Processing: 95ms
 
 ---
 
-## 12. Summary of Self Learning
+# 1️⃣2️⃣ Summary of Self Learning
 
 ### Self-Learning Journey:
 
@@ -1325,7 +1343,7 @@ This self-learning project has exceeded initial expectations, resulting in a pro
 
 ---
 
-## 13. Appendix
+# 1️⃣3️⃣ Appendix
 
 ### A. System Screenshots
 
