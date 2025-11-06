@@ -413,7 +413,7 @@ export default function BulkImport({ groupId: propGroupId, onSuccess }: BulkImpo
                                 {Array.isArray(groups) && groups.length > 0 ? (
                                     groups.map((group) => (
                                         <SelectItem key={group.id} value={group.id.toString()}>
-                                            {group.name} ({group.code})
+                                            {group.name} ({group.id})
                                         </SelectItem>
                                     ))
                                 ) : (

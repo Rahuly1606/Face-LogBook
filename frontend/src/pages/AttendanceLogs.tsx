@@ -158,7 +158,7 @@ export default function AttendanceLogs() {
                                 <SelectItem value="all">All Groups</SelectItem>
                                 {groups.map((group) => (
                                     <SelectItem key={group.id} value={group.id.toString()}>
-                                        {group.name}
+                                        {group.name} ({group.id})
                                     </SelectItem>
                                 ))}
                             </SelectContent>
@@ -243,10 +243,10 @@ export default function AttendanceLogs() {
                                             <TableCell className="text-foreground">{record.date}</TableCell>
                                             <TableCell>
                                                 <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${status === 'present'
-                                                        ? 'bg-green-100 text-green-800 border border-green-200'
-                                                        : status === 'absent'
-                                                            ? 'bg-red-100 text-red-800 border border-red-200'
-                                                            : 'bg-yellow-100 text-yellow-800 border border-yellow-200'
+                                                    ? 'bg-green-100 text-green-800 border border-green-200'
+                                                    : status === 'absent'
+                                                        ? 'bg-red-100 text-red-800 border border-red-200'
+                                                        : 'bg-yellow-100 text-yellow-800 border border-yellow-200'
                                                     }`}>
                                                     {status.charAt(0).toUpperCase() + status.slice(1)}
                                                 </span>

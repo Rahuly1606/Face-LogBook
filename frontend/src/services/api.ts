@@ -15,7 +15,7 @@ export interface Student {
 export interface Group {
     id: number;
     name: string;
-    code: string;
+    student_count?: number;
     created_at?: string;
     updated_at?: string;
 }
@@ -204,12 +204,12 @@ export const groupApi = {
         }
     },
 
-    async create(data: { name: string; code: string }): Promise<Group> {
+    async create(data: { name: string }): Promise<Group> {
         const response = await api.post<{ group: Group }>('/groups', data);
         return response.group;
     },
 
-    async update(id: number, data: { name?: string; code?: string }): Promise<Group> {
+    async update(id: number, data: { name?: string }): Promise<Group> {
         const response = await api.put<{ group: Group }>(`/groups/${id}`, data);
         return response.group;
     },

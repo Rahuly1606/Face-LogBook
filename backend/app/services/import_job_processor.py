@@ -253,12 +253,32 @@ class ImportJobProcessor:
                     else:
                         face_encoding = None
                     
-                    # Create student
-                    current_app.logger.info(f"Creating student {student_id} in group {job.group_id}")
+                    # Create student - verify group exists first
+                    from app.models.group import Group
+                    group = Group.query.get(job.group_id)
+                    if not group:
+                        current_app.logger.error(f"Group {job.group_id} not found for job {job.id}")
+                        job.add_failure({
+                            'row': row_num,
+                            'student_id': student_id,
+                            'name': name,
+                            'message': f'Group with ID {job.group_id} not found'
+                        })
+                        db.session.commit()
+                        # Clean up the saved file
+                        try:
+                            import os
+                            if os.path.exists(filepath):
+                                os.remove(filepath)
+                        except:
+                            pass
+                        continue
+                    
+                    current_app.logger.info(f"Creating student {student_id} in group {job.group_id} (groups.id={group.id})")
                     student = Student(
                         student_id=student_id,
                         name=name,
-                        group_id=job.group_id,
+                        group_id=group.id,  # Use group.id explicitly to ensure it references groups.id
                         photo_path=filepath
                     )
                     

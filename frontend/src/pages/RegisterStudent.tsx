@@ -222,7 +222,7 @@ export default function RegisterStudent() {
                                                 <SelectItem value="none">No Group</SelectItem>
                                                 {groups.map((group) => (
                                                     <SelectItem key={group.id} value={group.id.toString()}>
-                                                        {group.name}
+                                                        {group.name} ({group.id})
                                                     </SelectItem>
                                                 ))}
                                             </SelectContent>

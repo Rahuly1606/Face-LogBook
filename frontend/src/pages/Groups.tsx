@@ -21,7 +21,7 @@ export default function Groups() {
   const [loading, setLoading] = useState(true);
   const [groups, setGroups] = useState<Group[]>([]);
   const [showCreateDialog, setShowCreateDialog] = useState(false);
-  const [newGroup, setNewGroup] = useState({ name: '', code: '' });
+  const [newGroup, setNewGroup] = useState({ name: '' });
   const [creating, setCreating] = useState(false);
 
   useEffect(() => {
@@ -45,10 +45,10 @@ export default function Groups() {
   };
 
   const handleCreateGroup = async () => {
-    if (!newGroup.name || !newGroup.code) {
+    if (!newGroup.name) {
       toast({
         title: 'Validation Error',
-        description: 'Please provide both group name and code',
+        description: 'Please provide a group name',
         variant: 'destructive',
       });
       return;
@@ -62,7 +62,7 @@ export default function Groups() {
         description: 'Group created successfully',
       });
       setShowCreateDialog(false);
-      setNewGroup({ name: '', code: '' });
+      setNewGroup({ name: '' });
       loadGroups();
     } catch (error: any) {
       toast({
@@ -139,7 +139,7 @@ export default function Groups() {
                   <div className="flex-1">
                     <h3 className="font-semibold text-xl text-foreground mb-2">{group.name}</h3>
                     <Badge variant="secondary" className="bg-accent/20 text-black font-semibold text-sm px-3 py-1">
-                      {group.code}
+                      ID: {group.id}
                     </Badge>
                   </div>
                   <div className="p-2 rounded-lg bg-accent/20">
@@ -149,8 +149,8 @@ export default function Groups() {
 
                 <div className="flex items-center justify-between pt-4 border-t border-border">
                   <div>
-                    <p className="text-sm text-muted-foreground font-medium">Group Code</p>
-                    <p className="font-mono text-base text-foreground font-semibold mt-1">{group.code}</p>
+                    <p className="text-sm text-muted-foreground font-medium">Group ID</p>
+                    <p className="font-mono text-base text-foreground font-semibold mt-1">{group.id}</p>
                   </div>
                   <Button
                     size="sm"
@@ -184,15 +184,6 @@ export default function Groups() {
                 placeholder="e.g., Computer Science Year 1"
                 value={newGroup.name}
                 onChange={(e) => setNewGroup({ ...newGroup, name: e.target.value })}
-              />
-            </div>
-            <div>
-              <Label htmlFor="group-code">Group Code</Label>
-              <Input
-                id="group-code"
-                placeholder="e.g., CS-Y1"
-                value={newGroup.code}
-                onChange={(e) => setNewGroup({ ...newGroup, code: e.target.value })}
               />
             </div>
           </div>

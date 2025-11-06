@@ -146,7 +146,7 @@ export default function UploadAttendance() {
                         <SelectContent>
                             {groups.map((group) => (
                                 <SelectItem key={group.id} value={String(group.id)}>
-                                    {group.name}
+                                    {group.name} ({group.id})
                                 </SelectItem>
                             ))}
                         </SelectContent>
