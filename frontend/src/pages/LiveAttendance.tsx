@@ -2,8 +2,9 @@ import { useState, useRef, useCallback, useEffect } from 'react';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/hooks/use-toast';
-import { Camera, CameraOff, Loader2, Check, Users, Play, Pause } from 'lucide-react';
-import { attendanceApi } from '@/services/api';
+import { Camera, CameraOff, Loader2, Check, Users, Play, Pause, BookOpen, Clock } from 'lucide-react';
+import { attendanceApi, groupApi } from '@/services/api';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 
 export default function LiveAttendance() {
     const { toast } = useToast();
@@ -15,11 +16,25 @@ export default function LiveAttendance() {
     const [videoReady, setVideoReady] = useState(false);
     const [continuousMode, setContinuousMode] = useState(false);
     const [loading, setLoading] = useState(false);
-    const [detectedFaces, setDetectedFaces] = useState<Array<{
+
+    // Group/Section selection state
+    const [groups, setGroups] = useState<Array<{ id: number; name: string }>>([]);
+    const [selectedGroupId, setSelectedGroupId] = useState<string>('');
+    const [loadingGroups, setLoadingGroups] = useState(false);
+
+    // Queue system: Keep max 5 students with name and time
+    const [detectedQueue, setDetectedQueue] = useState<Array<{
+        name: string;
+        time: string;
+        status: 'in' | 'out';
+    }>>([]);
+
+    const [wrongSectionStudents, setWrongSectionStudents] = useState<Array<{
         student_id: string;
         name: string;
         confidence: number;
         group_name?: string;
+        message?: string;
     }>>([]);
     const [presentStudents, setPresentStudents] = useState<Array<{
         student_id: string;
@@ -34,7 +49,34 @@ export default function LiveAttendance() {
         lastUpdate: null as Date | null,
     });
 
+    const loadGroups = async () => {
+        setLoadingGroups(true);
+        try {
+            const groups = await groupApi.getAll();
+            setGroups(groups || []);
+        } catch (error: any) {
+            console.error('Failed to load groups:', error);
+            toast({
+                title: 'Error',
+                description: 'Failed to load sections/groups',
+                variant: 'destructive',
+            });
+        } finally {
+            setLoadingGroups(false);
+        }
+    };
+
     const startCamera = async () => {
+        // Validate group selection before starting camera
+        if (!selectedGroupId) {
+            toast({
+                title: 'Section Required',
+                description: 'Please select a section/group before starting the camera',
+                variant: 'destructive',
+            });
+            return;
+        }
+
         try {
             toast({
                 title: 'Camera Starting',
@@ -177,8 +219,17 @@ export default function LiveAttendance() {
             return;
         }
 
+        if (!selectedGroupId) {
+            toast({
+                title: 'Section Required',
+                description: 'Please select a section/group',
+                variant: 'destructive',
+            });
+            return;
+        }
+
         setLoading(true);
-        setDetectedFaces([]);
+        setWrongSectionStudents([]);
 
         try {
             const blob = await captureFrame();
@@ -187,41 +238,72 @@ export default function LiveAttendance() {
             }
 
             console.log('Captured blob size:', blob.size);
-            const result = await attendanceApi.submitLive(blob);
+            const result = await attendanceApi.submitLive(blob, selectedGroupId);
 
-            if (result.success && result.detected_faces) {
-                setDetectedFaces(result.detected_faces);
+            // Handle detected faces from correct section
+            const correctFaces = result.detected_faces || [];
+            const wrongFaces = result.wrong_section_students || [];
+            const unrecognizedCount = result.unrecognized_count || 0;
 
-                // Update live stats
-                const total = result.total_detected || result.detected_faces.length;
-                const recognized = result.detected_faces.length;
-                const unrecognized = total - recognized;
-
-                setLiveStats({
-                    totalInFrame: total,
-                    recognizedCount: recognized,
-                    unrecognizedCount: unrecognized,
-                    lastUpdate: new Date(),
+            // Add new students to queue (max 5, FIFO)
+            if (correctFaces.length > 0) {
+                const currentTime = new Date().toLocaleTimeString('en-US', {
+                    hour: '2-digit',
+                    minute: '2-digit',
+                    second: '2-digit',
+                    hour12: true
                 });
 
-                toast({
-                    title: 'Success',
-                    description: `Detected ${total} face(s) - ${recognized} recognized`,
+                const newEntries = correctFaces.map(face => ({
+                    name: face.name,
+                    time: currentTime,
+                    status: 'in' as const  // For now, all are "In-Time"
+                }));
+
+                setDetectedQueue(prev => {
+                    // Add new entries at the beginning (most recent first)
+                    const updated = [...newEntries, ...prev];
+                    // Keep only the latest 5 entries
+                    return updated.slice(0, 5);
                 });
-                // Refresh present students list
-                loadPresentStudents();
-            } else {
-                setLiveStats({
-                    totalInFrame: 0,
-                    recognizedCount: 0,
-                    unrecognizedCount: 0,
-                    lastUpdate: new Date(),
-                });
+            }
+
+            setWrongSectionStudents(wrongFaces);
+
+            // Update live stats
+            const total = correctFaces.length + wrongFaces.length + unrecognizedCount;
+            const recognized = correctFaces.length;
+
+            setLiveStats({
+                totalInFrame: total,
+                recognizedCount: recognized,
+                unrecognizedCount: unrecognizedCount,
+                lastUpdate: new Date(),
+            });
+
+            // Show appropriate toast message
+            if (total === 0) {
                 toast({
                     title: 'No Faces Detected',
                     description: result.message || 'No faces were detected in the image',
                     variant: 'destructive',
                 });
+            } else if (wrongFaces.length > 0) {
+                toast({
+                    title: 'Section Mismatch',
+                    description: `${recognized} from selected section, ${wrongFaces.length} from other sections`,
+                    variant: 'default',
+                });
+            } else {
+                toast({
+                    title: 'Success',
+                    description: `Detected ${total} face(s) - ${recognized} recognized`,
+                });
+            }
+
+            // Refresh present students list if any attendance was marked
+            if (correctFaces.length > 0) {
+                loadPresentStudents();
             }
         } catch (error: any) {
             console.error('Capture error:', error);
@@ -270,6 +352,7 @@ export default function LiveAttendance() {
     };
 
     useEffect(() => {
+        loadGroups();
         loadPresentStudents();
         return () => {
             stopCamera();
@@ -283,6 +366,33 @@ export default function LiveAttendance() {
                 <h1 className="text-3xl font-bold">Live Attendance</h1>
                 <p className="text-muted-foreground mt-1">Capture attendance using live camera feed</p>
             </div>
+
+            {/* Section/Group Selection */}
+            <Card className="p-4 bg-card-light border-0">
+                <div className="flex items-center gap-4">
+                    <div className="flex items-center gap-2 flex-shrink-0">
+                        <BookOpen className="h-5 w-5 text-accent" />
+                        <label className="font-medium">Select Section:</label>
+                    </div>
+                    <Select value={selectedGroupId} onValueChange={setSelectedGroupId} disabled={loadingGroups || capturing}>
+                        <SelectTrigger className="w-full max-w-xs">
+                            <SelectValue placeholder={loadingGroups ? "Loading sections..." : "Choose a section/group"} />
+                        </SelectTrigger>
+                        <SelectContent>
+                            {groups.map((group) => (
+                                <SelectItem key={group.id} value={String(group.id)}>
+                                    {group.name}
+                                </SelectItem>
+                            ))}
+                        </SelectContent>
+                    </Select>
+                    {selectedGroupId && (
+                        <span className="text-sm text-muted-foreground">
+                            Selected: {groups.find(g => String(g.id) === selectedGroupId)?.name}
+                        </span>
+                    )}
+                </div>
+            </Card>
 
             {/* Live Stats */}
             <div className="grid gap-2 grid-cols-2 lg:grid-cols-4">
@@ -352,11 +462,12 @@ export default function LiveAttendance() {
                             {!capturing ? (
                                 <Button
                                     onClick={startCamera}
+                                    disabled={!selectedGroupId}
                                     size="sm"
-                                    className="w-full sm:flex-1 bg-accent hover:bg-accent/90 text-black font-medium"
+                                    className="w-full sm:flex-1 bg-accent hover:bg-accent/90 text-black font-medium disabled:opacity-50 disabled:cursor-not-allowed"
                                 >
                                     <Camera className="mr-2 h-3.5 w-3.5" />
-                                    <span className="text-sm">Start Camera</span>
+                                    <span className="text-sm">{!selectedGroupId ? 'Select Section First' : 'Start Camera'}</span>
                                 </Button>
                             ) : (
                                 <>
@@ -421,92 +532,134 @@ export default function LiveAttendance() {
                 </div>
 
                 {/* Detection Results & Present Students */}
-                <div className="space-y-4 sm:space-y-6">
-                    {/* Last Detection */}
-                    <Card className="p-4 sm:p-6 bg-card-light border-0">
-                        <div className="flex items-center gap-2 mb-4">
-                            <Check className="h-5 w-5" />
-                            <h2 className="text-lg font-semibold">Last Detection</h2>
+                <div className="space-y-3">
+                    {/* Attendance Queue - Max 5 Students */}
+                    <Card className="p-3 bg-card-light border-0">
+                        <div className="flex items-center justify-between mb-2">
+                            <div className="flex items-center gap-1.5">
+                                <Check className="h-4 w-4" />
+                                <h2 className="text-sm font-semibold">Attendance Queue</h2>
+                            </div>
+                            <span className="text-xs text-muted-foreground">Last 5</span>
                         </div>
 
-                        {detectedFaces.length === 0 ? (
-                            <div className="text-center py-8 text-muted-foreground">
-                                <Users className="w-12 h-12 mx-auto mb-2 opacity-50" />
-                                <p>No faces detected yet</p>
-                                <p className="text-sm mt-1">Capture an image to see results</p>
+                        {detectedQueue.length === 0 ? (
+                            <div className="text-center py-6 text-muted-foreground">
+                                <Users className="w-8 h-8 mx-auto mb-2 opacity-50" />
+                                <p className="text-xs">No attendance marked yet</p>
                             </div>
                         ) : (
-                            <div className="space-y-3">
-                                {detectedFaces.slice(0, 5).map((face, index) => (
+                            <div className="space-y-1.5">
+                                {detectedQueue.map((entry, index) => (
                                     <div
-                                        key={index}
-                                        className="p-4 rounded-lg bg-background border border-border"
+                                        key={`${entry.name}-${entry.time}-${index}`}
+                                        className="p-2 rounded bg-green-50 dark:bg-green-950/20 border border-green-200 dark:border-green-900"
                                     >
-                                        <div className="flex items-start justify-between">
-                                            <div className="flex-1">
-                                                <h3 className="font-semibold text-foreground">{face.name}</h3>
-                                                <p className="text-sm text-muted-foreground">ID: {face.student_id}</p>
-                                                {face.group_name && (
-                                                    <p className="text-xs text-muted-foreground mt-1">Group: {face.group_name}</p>
-                                                )}
+                                        <div className="flex items-center justify-between gap-2">
+                                            <div className="flex-1 min-w-0">
+                                                <h3 className="font-medium text-sm text-green-900 dark:text-green-100 truncate">
+                                                    {entry.name}
+                                                </h3>
                                             </div>
-                                            <div className="text-right">
-                                                <div className="text-sm font-medium text-success">
-                                                    {(face.confidence * 100).toFixed(1)}%
-                                                </div>
-                                                <div className="text-xs text-muted-foreground">confidence</div>
+                                            <div className="flex items-center gap-1.5 flex-shrink-0">
+                                                <span className="text-xs text-green-700 dark:text-green-400">
+                                                    {entry.time}
+                                                </span>
+                                                <span className={`text-xs px-1.5 py-0.5 rounded-full font-medium ${entry.status === 'in'
+                                                    ? 'bg-green-200 dark:bg-green-900 text-green-800 dark:text-green-200'
+                                                    : 'bg-orange-200 dark:bg-orange-900 text-orange-800 dark:text-orange-200'
+                                                    }`}>
+                                                    {entry.status === 'in' ? 'In' : 'Out'}
+                                                </span>
                                             </div>
                                         </div>
                                     </div>
                                 ))}
-                                {detectedFaces.length > 5 && (
-                                    <p className="text-xs text-center text-muted-foreground pt-2">
-                                        +{detectedFaces.length - 5} more detected
-                                    </p>
-                                )}
                             </div>
                         )}
                     </Card>
 
+                    {/* Wrong Section Students Warning - Compact View */}
+                    {wrongSectionStudents.length > 0 && (
+                        <Card className="p-2.5 bg-yellow-50 dark:bg-yellow-950/20 border-yellow-200 dark:border-yellow-900">
+                            <div className="flex items-center justify-between mb-2">
+                                <div className="flex items-center gap-1.5">
+                                    <Users className="h-3.5 w-3.5 text-yellow-600 dark:text-yellow-500" />
+                                    <h3 className="text-xs font-semibold text-yellow-800 dark:text-yellow-300">Wrong Section</h3>
+                                </div>
+                                <span className="text-xs text-yellow-600 dark:text-yellow-500">
+                                    {wrongSectionStudents.length}
+                                </span>
+                            </div>
+                            <div className="space-y-1 max-h-32 overflow-y-auto">
+                                {wrongSectionStudents.map((student, index) => (
+                                    <div
+                                        key={index}
+                                        className="p-1.5 rounded bg-white dark:bg-yellow-950/30 border border-yellow-300 dark:border-yellow-800"
+                                    >
+                                        <div className="flex items-center justify-between gap-1">
+                                            <h4 className="font-medium text-xs text-yellow-900 dark:text-yellow-200 truncate">
+                                                {student.name}
+                                            </h4>
+                                            {student.group_name && (
+                                                <span className="text-xs text-yellow-600 dark:text-yellow-500 flex-shrink-0">
+                                                    → {student.group_name}
+                                                </span>
+                                            )}
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                            <p className="text-xs text-yellow-700 dark:text-yellow-400 mt-1.5 text-center">
+                                ⚠️ Not marked
+                            </p>
+                        </Card>
+                    )}
+
                     {/* Recent Present Students */}
-                    <Card className="p-4 sm:p-6 bg-card-light border-0">
-                        <div className="flex items-center justify-between mb-4">
-                            <div className="flex items-center gap-2">
-                                <Users className="h-4 w-4 sm:h-5 sm:w-5" />
-                                <h2 className="text-base sm:text-lg font-semibold">Recent Present</h2>
+                    <Card className="p-3 bg-card-light border-0">
+                        <div className="flex items-center justify-between mb-2">
+                            <div className="flex items-center gap-1.5">
+                                <Users className="h-4 w-4" />
+                                <h2 className="text-sm font-semibold">Recent Present</h2>
                             </div>
                             <Button
                                 variant="ghost"
                                 size="sm"
                                 onClick={loadPresentStudents}
-                                className="text-xs sm:text-sm"
+                                className="text-xs h-7 px-2"
                             >
                                 Refresh
                             </Button>
                         </div>
 
                         {presentStudents.length === 0 ? (
-                            <div className="text-center py-8 text-muted-foreground">
-                                <Users className="w-12 h-12 mx-auto mb-2 opacity-50" />
-                                <p>No students present yet</p>
+                            <div className="text-center py-6 text-muted-foreground">
+                                <Users className="w-8 h-8 mx-auto mb-2 opacity-50" />
+                                <p className="text-xs">No students present yet</p>
                             </div>
                         ) : (
                             <>
-                                <div className="space-y-2 max-h-96 overflow-y-auto">
+                                <div className="space-y-1.5 max-h-80 overflow-y-auto">
                                     {presentStudents.slice(0, 5).map((student) => (
                                         <div
                                             key={student.student_id}
-                                            className="p-3 rounded-lg bg-background border border-border hover:border-accent/50 transition-colors"
+                                            className="p-2 rounded bg-background border border-border"
                                         >
-                                            <div className="flex items-center justify-between">
-                                                <div className="flex-1">
-                                                    <h3 className="font-medium text-foreground">{student.name}</h3>
-                                                    <p className="text-xs text-muted-foreground">ID: {student.student_id}</p>
+                                            <div className="flex items-center justify-between gap-2">
+                                                <div className="flex-1 min-w-0">
+                                                    <h3 className="font-medium text-sm text-foreground truncate">{student.name}</h3>
                                                 </div>
-                                                <div className="text-right">
-                                                    <div className="text-xs text-success font-medium">Present</div>
+                                                <div className="flex items-center gap-1.5 flex-shrink-0">
                                                     <div className="text-xs text-muted-foreground">
-                                                        {student.in_time ? new Date(student.in_time).toLocaleTimeString() : 'N/A'}
+                                                        {student.in_time ? new Date(student.in_time).toLocaleTimeString('en-US', {
+                                                            hour: '2-digit',
+                                                            minute: '2-digit',
+                                                            hour12: true
+                                                        }) : 'N/A'}
+                                                    </div>
+                                                    <div className="text-xs px-1.5 py-0.5 rounded-full bg-green-100 dark:bg-green-900 text-green-700 dark:text-green-300 font-medium">
+                                                        ✓
                                                     </div>
                                                 </div>
                                             </div>
@@ -514,8 +667,8 @@ export default function LiveAttendance() {
                                     ))}
                                 </div>
                                 {presentStudents.length > 5 && (
-                                    <p className="text-xs text-center text-muted-foreground pt-3 border-t border-border mt-3">
-                                        +{presentStudents.length - 5} more students present today
+                                    <p className="text-xs text-center text-muted-foreground pt-2 border-t border-border mt-2">
+                                        +{presentStudents.length - 5} more
                                     </p>
                                 )}
                             </>
