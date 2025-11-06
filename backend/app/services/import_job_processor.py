@@ -148,6 +148,7 @@ class ImportJobProcessor:
                         continue
                     
                     # Download image from Drive
+                    temp_filepath = None
                     try:
                         temp_filepath = drive_service.download_file(drive_link)
                     except Exception as e:
@@ -164,11 +165,12 @@ class ImportJobProcessor:
                     img = cv2.imread(temp_filepath)
                     
                     if img is None:
-                        # Clean up temp file
+                        # Clean up temp file with retry logic
                         try:
                             import os
                             import time
-                            time.sleep(0.1)  # Brief delay to ensure file is released
+                            # Give Windows time to release file handles
+                            time.sleep(0.2)
                             os.remove(temp_filepath)
                         except Exception as cleanup_err:
                             current_app.logger.warning(f"Could not delete temp file: {str(cleanup_err)}")
@@ -193,6 +195,14 @@ class ImportJobProcessor:
                         shutil.copy(temp_filepath, filepath)
                     except Exception as copy_err:
                         current_app.logger.error(f"Error copying file: {str(copy_err)}")
+                        # Clean up temp file before continuing
+                        try:
+                            import time
+                            time.sleep(0.2)
+                            if os.path.exists(temp_filepath):
+                                os.remove(temp_filepath)
+                        except:
+                            pass
                         job.add_failure({
                             'row': row_num,
                             'student_id': student_id,
@@ -204,17 +214,22 @@ class ImportJobProcessor:
                     
                     # Clean up temp file with retry logic
                     import time
-                    max_retries = 3
+                    max_retries = 5
+                    cleanup_delay = 0.3
                     for retry in range(max_retries):
                         try:
-                            time.sleep(0.1)  # Brief delay
-                            os.remove(temp_filepath)
+                            time.sleep(cleanup_delay)
+                            if os.path.exists(temp_filepath):
+                                os.remove(temp_filepath)
                             break
-                        except Exception as cleanup_err:
+                        except PermissionError as cleanup_err:
                             if retry == max_retries - 1:
                                 current_app.logger.warning(f"Could not delete temp file after {max_retries} attempts: {str(cleanup_err)}")
                             else:
-                                time.sleep(0.2)  # Wait longer before retry
+                                cleanup_delay *= 1.5  # Exponential backoff
+                        except Exception as cleanup_err:
+                            current_app.logger.warning(f"Error deleting temp file: {str(cleanup_err)}")
+                            break
                     
                     # Detect and encode face
                     if face_service_initialized:

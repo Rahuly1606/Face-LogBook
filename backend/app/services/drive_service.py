@@ -114,7 +114,9 @@ class DriveService:
             raise ValueError("Invalid file ID")
         
         if not dest_path:
-            _, dest_path = tempfile.mkstemp(suffix='.jpg')
+            # Create temp file and immediately close the file descriptor to avoid Windows locking issues
+            fd, dest_path = tempfile.mkstemp(suffix='.jpg')
+            os.close(fd)  # Close the file descriptor immediately
         
         retry_count = 0
         while retry_count < max_retries:
@@ -132,7 +134,11 @@ class DriveService:
                         img.verify()
                     return dest_path
                 except Exception as e:
-                    os.remove(dest_path)
+                    if os.path.exists(dest_path):
+                        try:
+                            os.remove(dest_path)
+                        except OSError:
+                            pass  # Ignore if file can't be removed
                     raise ValueError(f"Downloaded file is not a valid image: {str(e)}")
             
             except HttpError as e:
