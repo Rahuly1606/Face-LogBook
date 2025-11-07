@@ -37,7 +37,7 @@ export default function Login() {
           <div className="w-16 h-16 rounded-2xl bg-primary flex items-center justify-center mx-auto mb-4">
             <span className="text-primary-foreground font-bold text-2xl">FA</span>
           </div>
-          <h1 className="text-3xl font-bold">FaceAttend</h1>
+          <h1 className="text-3xl font-bold">FaceLogBook</h1>
           <p className="text-muted-foreground">Sign in to your account</p>
         </div>
 
