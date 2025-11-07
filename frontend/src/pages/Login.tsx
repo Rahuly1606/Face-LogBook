@@ -80,9 +80,7 @@ export default function Login() {
           </form>
 
           <div className="mt-6 pt-6 border-t border-border">
-            <p className="text-center text-sm text-muted-foreground">
-              Demo credentials: admin / admin123
-            </p>
+       
           </div>
         </Card>
 
