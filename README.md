@@ -733,7 +733,7 @@ FACE_DETECTOR_BACKEND = 'retinaface'  # Default
 
 ## 🌐 Live Demo
 
-**Frontend**: [https://face-logbook.vercel.app](https://face-logbook.vercel.app)
+**Frontend**: [https://face-log-book.vercel.app](FaceLogBook)
 
 **Test Credentials** (Demo only):
 ```
@@ -829,8 +829,8 @@ FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.
 ## 👥 Team
 
 **Developers:**
-- [Rahul Y](https://github.com/Rahuly1606) - Project Lead & Full-Stack Developer
-- Alex R - Co-Developer
+- [Rahul](https://github.com/Rahuly1606) - Project Lead & Full-Stack Developer
+- [Rishitha](https://github.com/vrishitha47) - Co-Developer
 
 ---
 
