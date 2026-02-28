@@ -58,6 +58,7 @@ export interface LiveAttendanceResponse {
         student_id: string;
         name: string;
         confidence: number;
+        confidence_tier?: string;
         group_name?: string;
         status?: string;
     }>;
@@ -73,7 +74,7 @@ export interface LiveAttendanceResponse {
         id: string;
         bbox?: number[];
         score?: number;
-        image_base64?: string | null;
+        image_url?: string | null;
     }>;
     message?: string;
     total_detected?: number;

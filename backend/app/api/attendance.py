@@ -9,13 +9,14 @@ from app.utils.auth import require_admin, admin_required
 from app.models.group import Group
 from app.models.attendance import Attendance
 from app.models.student import Student
-from app import db
+from app import db, limiter
 import pytz
 
 attendance_bp = Blueprint('attendance', __name__)
 face_service = FaceService()
 
 @attendance_bp.route('/live', methods=['POST'])
+@limiter.limit("20 per minute")
 @admin_required()
 def process_live_attendance():
     """Process a single frame for attendance with section-based validation"""

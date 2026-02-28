@@ -1,4 +1,7 @@
 import os
+import base64  # noqa: F401  (kept for potential external use)
+import threading
+import uuid
 import cv2
 import numpy as np
 import insightface
@@ -32,6 +35,8 @@ class FaceService:
             cls._instance._faiss_index = None
             cls._instance._faiss_student_list = None
             cls._instance._use_faiss = FAISS_AVAILABLE
+            cls._instance._lock = threading.Lock()
+            cls._instance._recent_recognitions = {}  # student_id -> last-seen timestamp (spam guard)
         return cls._instance
     
     def __init__(self):
@@ -70,7 +75,7 @@ class FaceService:
                 )
                 # Optimized detection size: smaller = faster, but still accurate
                 # 256x256 is a good balance between speed and accuracy
-                self.model.prepare(ctx_id=0, det_size=(256, 256), det_thresh=0.5)
+                self.model.prepare(ctx_id=0, det_size=(320, 320), det_thresh=0.45)
                 self.initialized = True
                 current_app.logger.info("Face recognition model successfully initialized with optimized settings")
                 return True
@@ -140,58 +145,67 @@ class FaceService:
             return None, None
     
     def _get_cached_embeddings(self):
-        """Get cached student embeddings or rebuild cache if expired"""
+        """Get cached student embeddings or rebuild cache if expired (thread-safe)."""
         current_time = time.time()
-        
-        # Check if cache is valid
+
+        # Fast path — read without acquiring the lock
         if self._embedding_cache is not None and (current_time - self._cache_timestamp) < self._cache_ttl:
             return self._embedding_cache
-        
-        # Rebuild cache
-        students = Student.query.all()
-        if not students:
-            self._embedding_cache = ([], [])
+
+        with self._lock:
+            # Double-checked: another thread may have rebuilt while we waited
+            current_time = time.time()
+            if self._embedding_cache is not None and (current_time - self._cache_timestamp) < self._cache_ttl:
+                return self._embedding_cache
+
+            # Rebuild cache
+            students = Student.query.all()
+            if not students:
+                self._embedding_cache = ([], [])
+                self._cache_timestamp = current_time
+                if self._use_faiss:
+                    self._faiss_index = None
+                    self._faiss_student_list = None
+                return self._embedding_cache
+
+            embeddings_list = []
+            # Store plain student_id strings — NOT ORM objects.
+            # ORM objects become detached after the session closes (end of the
+            # request that built the cache), causing "Instance not bound to Session"
+            # errors on every subsequent request that hits the still-valid cache.
+            student_id_list = []
+
+            for student in students:
+                stored_embedding = student.get_embedding()
+                if stored_embedding is not None:
+                    embeddings_list.append(stored_embedding)
+                    student_id_list.append(student.student_id)  # plain string, session-independent
+
+            # Convert to numpy; L2-normalise so inner product == cosine similarity
+            if embeddings_list:
+                embeddings_matrix = np.vstack(embeddings_list).astype('float32')
+                norms = np.linalg.norm(embeddings_matrix, axis=1, keepdims=True)
+                norms = np.where(norms == 0, 1.0, norms)  # guard against zero-norm rows
+                embeddings_matrix = (embeddings_matrix / norms).astype('float32')
+                self._embedding_cache = (embeddings_matrix, student_id_list)
+
+                # Build FAISS index if available
+                if self._use_faiss and len(embeddings_list) > 0:
+                    self._build_faiss_index(embeddings_matrix, student_id_list)
+            else:
+                self._embedding_cache = ([], [])
+                if self._use_faiss:
+                    self._faiss_index = None
+                    self._faiss_student_list = None
+
             self._cache_timestamp = current_time
+
             if self._use_faiss:
-                self._faiss_index = None
-                self._faiss_student_list = None
+                current_app.logger.info(f"Rebuilt FAISS index with {len(student_id_list)} students")
+            else:
+                current_app.logger.info(f"Rebuilt embedding cache with {len(student_id_list)} students (NumPy)")
+
             return self._embedding_cache
-        
-        embeddings_list = []
-        # Store plain student_id strings — NOT ORM objects.
-        # ORM objects become detached after the session closes (end of the request
-        # that built the cache), causing "Instance not bound to Session" errors
-        # on every subsequent request that hits the still-valid 60-s cache.
-        student_id_list = []
-        
-        for student in students:
-            stored_embedding = student.get_embedding()
-            if stored_embedding is not None:
-                embeddings_list.append(stored_embedding)
-                student_id_list.append(student.student_id)  # plain string, session-independent
-        
-        # Convert to numpy array for vectorized operations
-        if embeddings_list:
-            embeddings_matrix = np.vstack(embeddings_list).astype('float32')
-            self._embedding_cache = (embeddings_matrix, student_id_list)
-            
-            # Build FAISS index if available
-            if self._use_faiss and len(embeddings_list) > 0:
-                self._build_faiss_index(embeddings_matrix, student_id_list)
-        else:
-            self._embedding_cache = ([], [])
-            if self._use_faiss:
-                self._faiss_index = None
-                self._faiss_student_list = None
-        
-        self._cache_timestamp = current_time
-        
-        if self._use_faiss:
-            current_app.logger.info(f"Rebuilt FAISS index with {len(student_id_list)} students")
-        else:
-            current_app.logger.info(f"Rebuilt embedding cache with {len(student_id_list)} students (NumPy)")
-        
-        return self._embedding_cache
 
     def _build_faiss_index(self, embeddings_matrix, student_id_list):
         """Build FAISS index for fast similarity search - optimized for speed"""
@@ -315,6 +329,32 @@ class FaceService:
             return student_list[best_idx], float(best_score)
         return None, float(best_score)
     
+    @staticmethod
+    def _get_confidence_tier(score: float) -> str:
+        """Return a human-readable confidence tier for a recognition score."""
+        if score >= 0.80:
+            return "high"
+        elif score >= 0.65:
+            return "medium"
+        else:
+            return "low"
+
+    def _is_spamming(self, student_id: str) -> bool:
+        """Return True if this student was recognised within the spam window."""
+        spam_window = current_app.config.get('RECOGNITION_SPAM_WINDOW', 8)
+        last_seen = self._recent_recognitions.get(student_id, 0)
+        return (time.time() - last_seen) < spam_window
+
+    def _mark_recognized(self, student_id: str):
+        """Record the recognition time for spam detection; prune old entries."""
+        now = time.time()
+        self._recent_recognitions[student_id] = now
+        # Prune entries older than 5 min so the dict doesn't grow unboundedly
+        cutoff = now - 300
+        self._recent_recognitions = {
+            k: v for k, v in self._recent_recognitions.items() if v > cutoff
+        }
+
     def process_image_for_attendance(self, image_data):
         """Process an image for attendance checking"""
         start_time = time.time()
@@ -409,22 +449,29 @@ class FaceService:
                     student_id, score = self.match_face(embedding, threshold)
                     
                     if student_id:
-                        # Fetch student within this request's session
-                        student = Student.query.get(student_id)
+                        # Fetch student within this request's session (db.session.get is the non-deprecated API)
+                        student = db.session.get(Student, student_id)
                         if student:
-                            recognized.append({
-                                "student_id": student.student_id,
-                                "name": student.name,
-                                "score": float(score),
-                                "bbox": bbox.tolist()  # Add bounding box information
-                            })
+                            if self._is_spamming(student.student_id):
+                                current_app.logger.debug(
+                                    f"Spam guard: skipping duplicate recognition for {student.student_id}"
+                                )
+                            else:
+                                self._mark_recognized(student.student_id)
+                                recognized.append({
+                                    "student_id": student.student_id,
+                                    "name": student.name,
+                                    "score": float(score),
+                                    "confidence_tier": self._get_confidence_tier(float(score)),
+                                    "bbox": bbox.tolist()
+                                })
                         else:
                             current_app.logger.warning(f"Student {student_id} not found in database")
                             unrecognized += 1
                     else:
                         unrecognized += 1
-                        # Crop the face and encode it as base64 for the frontend
-                        face_b64 = None
+                        # Crop the face and save to disk; return a URL instead of inline base64
+                        image_url = None
                         try:
                             x1, y1, x2, y2 = bbox
                             pad = 20
@@ -434,17 +481,20 @@ class FaceService:
                             x2c = min(w_img, x2 + pad)
                             y2c = min(h_img, y2 + pad)
                             crop = img[y1c:y2c, x1c:x2c]  # BGR crop
-                            _, buf = cv2.imencode('.jpg', crop, [cv2.IMWRITE_JPEG_QUALITY, 85])
-                            import base64 as _b64
-                            face_b64 = 'data:image/jpeg;base64,' + _b64.b64encode(buf.tobytes()).decode('utf-8')
+                            upload_folder = current_app.config.get('UPLOAD_FOLDER', 'uploads')
+                            unrecognized_dir = os.path.join(upload_folder, 'unrecognized')
+                            os.makedirs(unrecognized_dir, exist_ok=True)
+                            filename = f"unk_{uuid.uuid4().hex[:10]}.jpg"
+                            filepath = os.path.join(unrecognized_dir, filename)
+                            cv2.imwrite(filepath, crop, [cv2.IMWRITE_JPEG_QUALITY, 85])
+                            image_url = f"/uploads/unrecognized/{filename}"
                         except Exception as _e:
                             current_app.logger.warning(f"Could not crop face {i}: {_e}")
-                        # Add information about unrecognized face
                         unrecognized_faces.append({
                             "id": f"unknown_{i}",
                             "bbox": bbox.tolist(),
                             "score": float(score) if score else 0.0,
-                            "image_base64": face_b64,
+                            "image_url": image_url,
                         })
                 except Exception as e:
                     current_app.logger.error(f"Error processing face {i}: {str(e)}")

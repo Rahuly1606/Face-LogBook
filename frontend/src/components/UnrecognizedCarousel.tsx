@@ -5,7 +5,7 @@ import { Button } from '@/components/ui/button';
 
 export interface UnrecognizedFace {
     id: string;
-    image_base64?: string | null;
+    image_url?: string | null;
     score?: number;
 }
 
@@ -101,9 +101,9 @@ export function UnrecognizedCarousel({ faces }: UnrecognizedCarouselProps) {
                         >
                             {/* Face image or placeholder */}
                             <div className="relative w-24 h-24 rounded-xl overflow-hidden border-2 border-orange-300 dark:border-orange-700 bg-orange-100 dark:bg-orange-900/30 flex items-center justify-center">
-                                {current.image_base64 ? (
+                                {current.image_url ? (
                                     <img
-                                        src={current.image_base64}
+                                        src={current.image_url}
                                         alt="Unrecognised face"
                                         className="w-full h-full object-cover"
                                         draggable={false}
@@ -154,8 +154,8 @@ export function UnrecognizedCarousel({ faces }: UnrecognizedCarouselProps) {
                             key={i}
                             onClick={() => { setDirection(i > index ? 1 : -1); setIndex(i); }}
                             className={`w-1.5 h-1.5 rounded-full transition-all duration-200 ${i === index
-                                    ? 'bg-orange-500 w-3'
-                                    : 'bg-orange-300 dark:bg-orange-700'
+                                ? 'bg-orange-500 w-3'
+                                : 'bg-orange-300 dark:bg-orange-700'
                                 }`}
                             aria-label={`Go to face ${i + 1}`}
                         />

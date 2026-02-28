@@ -1,8 +1,10 @@
-from flask import Flask, jsonify, request, make_response
+from flask import Flask, jsonify, request, make_response, send_from_directory
 from flask_cors import CORS
 from flask_sqlalchemy import SQLAlchemy
 from flask_migrate import Migrate
 from flask_jwt_extended import JWTManager
+from flask_limiter import Limiter
+from flask_limiter.util import get_remote_address
 import os
 import time
 from .config import config_by_name
@@ -12,6 +14,7 @@ from .utils.logging_config import configure_logging
 db = SQLAlchemy()
 migrate = Migrate()
 jwt = JWTManager()
+limiter = Limiter(key_func=get_remote_address, default_limits=["500 per day", "120 per minute"])
 
 def create_app(config_name='dev'):
     # Set up Aiven SSL if configured
@@ -31,6 +34,7 @@ def create_app(config_name='dev'):
     if not os.path.isabs(upload_folder):
         upload_folder = os.path.join(app.root_path, '..', upload_folder)
     os.makedirs(upload_folder, exist_ok=True)
+    app.config['UPLOAD_FOLDER'] = upload_folder  # persist the resolved absolute path
     app.logger.info(f"Upload folder ensured at: {upload_folder}")
     
     # Set open attendance endpoints in development
@@ -41,6 +45,7 @@ def create_app(config_name='dev'):
     db.init_app(app)
     migrate.init_app(app, db)
     jwt.init_app(app)
+    limiter.init_app(app)
     
     # Configure CORS - allowing specific origins from config
     allowed_origins = app.config.get('ALLOWED_ORIGINS', 'http://localhost:8080')
@@ -82,7 +87,12 @@ def create_app(config_name='dev'):
             response.headers.set('Access-Control-Allow-Methods', 'GET, PUT, POST, DELETE, OPTIONS')
             response.headers.set('Access-Control-Allow-Credentials', 'true')
         return response, 200
-    
+
+    @app.route('/uploads/<path:filename>')
+    def serve_upload(filename):
+        """Serve files from the uploads directory (e.g. unrecognized face crops)."""
+        return send_from_directory(app.config['UPLOAD_FOLDER'], filename)
+
     # Register blueprints
     from .api.students import student_bp
     from .api.attendance import attendance_bp

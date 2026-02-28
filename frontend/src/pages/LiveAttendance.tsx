@@ -3,39 +3,62 @@ import { AnimatePresence, motion } from 'framer-motion';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/hooks/use-toast';
-import { Camera, CameraOff, Loader2, Check, Users, Play, Pause, BookOpen } from 'lucide-react';
+import { Camera, CameraOff, Loader2, Check, Users, Play, Pause, BookOpen, AlertCircle } from 'lucide-react';
 import { attendanceApi, groupApi } from '@/services/api';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { type OverlayEntry } from '@/components/RecognitionFeed';
 import { UnrecognizedCarousel, type UnrecognizedFace } from '@/components/UnrecognizedCarousel';
+
+// #10 — unified entry type (replaces separate detectedQueue + OverlayEntry)
+interface DetectionEntry {
+    id: string;
+    name: string;
+    time: string;
+    status: 'in' | 'out';
+    confidence_tier?: string;
+}
 
 export default function LiveAttendance() {
     const { toast } = useToast();
     const videoRef = useRef<HTMLVideoElement>(null);
     const canvasRef = useRef<HTMLCanvasElement>(null);
     const intervalRef = useRef<NodeJS.Timeout | null>(null);
+    // #1 — ref-based loading guard; reliable inside setInterval closures
+    const loadingRef = useRef(false);
+    // #3 — track overlay expiry timeouts so they can be cleared on unmount
+    const timeoutRefs = useRef<NodeJS.Timeout[]>([]);
+    // #7 — consecutive-error counter for auto-stop
+    const consecutiveErrorsRef = useRef(0);
+    // #8 — rolling window of capture durations
+    const captureTimesRef = useRef<number[]>([]);
+    // #2 — stream ref so the cleanup effect always sees the current stream
+    const streamRef = useRef<MediaStream | null>(null);
+    // #5 — session tracking
+    const sessionStartRef = useRef<Date | null>(null);
+    const markedDuringSession = useRef<Set<string>>(new Set());
+
     const [stream, setStream] = useState<MediaStream | null>(null);
     const [capturing, setCapturing] = useState(false);
     const [videoReady, setVideoReady] = useState(false);
     const [continuousMode, setContinuousMode] = useState(false);
     const [loading, setLoading] = useState(false);
+    // #8 — average ms per full capture cycle
+    const [captureRate, setCaptureRate] = useState<number | null>(null);
+    // #9 — camera permission denial state
+    const [cameraPermission, setCameraPermission] = useState<'unknown' | 'granted' | 'denied'>('unknown');
+    // #5 — session summary shown after camera stops
+    const [sessionSummary, setSessionSummary] = useState<{
+        duration: number;
+        uniqueStudents: number;
+        startTime: Date;
+    } | null>(null);
 
     // Group/Section selection state
     const [groups, setGroups] = useState<Array<{ id: number; name: string }>>([]);
     const [selectedGroupId, setSelectedGroupId] = useState<string>('');
     const [loadingGroups, setLoadingGroups] = useState(false);
 
-    // Queue system: Keep max 5 students with name and time
-    const [detectedQueue, setDetectedQueue] = useState<Array<{
-        id: string;
-        name: string;
-        time: string;
-        status: 'in' | 'out';
-    }>>([]);
-
-    // Overlay entries shown directly on the camera feed (auto-expire after 4.5 s)
-    const [overlayEntries, setOverlayEntries] = useState<OverlayEntry[]>([]);
-
+    // #10 — single unified list (replaces detectedQueue + overlayEntries)
+    const [detectionEntries, setDetectionEntries] = useState<DetectionEntry[]>([]);
     // Unrecognised faces returned from the last detection cycle
     const [unrecognizedFaces, setUnrecognizedFaces] = useState<UnrecognizedFace[]>([]);
 
@@ -102,7 +125,14 @@ export default function LiveAttendance() {
             });
 
             setStream(mediaStream);
+            streamRef.current = mediaStream; // #2
             setCapturing(true);
+            // #5 — record session start and reset tracking
+            sessionStartRef.current = new Date();
+            markedDuringSession.current.clear();
+            setSessionSummary(null);
+            // #9 — clear any previous denial on successful getUserMedia
+            setCameraPermission('granted');
 
             // Wait for next frame to ensure video element is rendered
             await new Promise(resolve => setTimeout(resolve, 50));
@@ -142,6 +172,10 @@ export default function LiveAttendance() {
             }
         } catch (error: any) {
             console.error('Camera error:', error);
+            // #9 — detect permission denial specifically
+            if (error.name === 'NotAllowedError' || error.name === 'PermissionDeniedError') {
+                setCameraPermission('denied');
+            }
             toast({
                 title: 'Camera Error',
                 description: error.message || 'Could not access camera. Please check permissions.',
@@ -149,20 +183,43 @@ export default function LiveAttendance() {
             });
             setCapturing(false);
             setStream(null);
+            streamRef.current = null;
         }
     };
 
-    const stopCamera = () => {
-        if (stream) {
-            stream.getTracks().forEach((track) => track.stop());
+    // #2 — stable stop functions using refs, safe in cleanup effects
+    const stopContinuousCapture = useCallback(() => {
+        setContinuousMode(false);
+        if (intervalRef.current) {
+            clearInterval(intervalRef.current);
+            intervalRef.current = null;
+        }
+    }, []);
+
+    const stopCamera = useCallback(() => {
+        stopContinuousCapture();
+        const currentStream = streamRef.current;
+        if (currentStream) {
+            currentStream.getTracks().forEach((track) => track.stop());
+            streamRef.current = null;
             setStream(null);
             setCapturing(false);
             setVideoReady(false);
-            if (videoRef.current) {
-                videoRef.current.srcObject = null;
+            if (videoRef.current) videoRef.current.srcObject = null;
+            // #5 — compute and show session summary
+            if (sessionStartRef.current) {
+                const duration = Math.floor(
+                    (Date.now() - sessionStartRef.current.getTime()) / 1000
+                );
+                setSessionSummary({
+                    duration,
+                    uniqueStudents: markedDuringSession.current.size,
+                    startTime: sessionStartRef.current,
+                });
+                sessionStartRef.current = null;
             }
         }
-    };
+    }, [stopContinuousCapture]);
 
     const captureFrame = useCallback(() => {
         if (!videoRef.current || !canvasRef.current) {
@@ -238,52 +295,51 @@ export default function LiveAttendance() {
             return;
         }
 
+        // #1 — synchronous ref guard prevents concurrent calls from stale-closure setInterval
+        if (loadingRef.current) return;
+
+        const captureStart = Date.now(); // #8
+        loadingRef.current = true;       // #1
         setLoading(true);
         setWrongSectionStudents([]);
 
         try {
             const blob = await captureFrame();
-            if (!blob) {
-                throw new Error('Failed to capture frame from camera');
-            }
+            if (!blob) throw new Error('Failed to capture frame from camera');
 
-            console.log('Captured blob size:', blob.size);
             const result = await attendanceApi.submitLive(blob, selectedGroupId);
+            consecutiveErrorsRef.current = 0; // #7 — reset on success
 
             // Handle detected faces from correct section
             const correctFaces = result.detected_faces || [];
             const wrongFaces = result.wrong_section_students || [];
             const unrecognizedCount = result.unrecognized_count || 0;
 
-            // Add new students to queue (max 5, FIFO)
+            // #10 — update single unified detection list; #4 — carry confidence_tier
             if (correctFaces.length > 0) {
                 const currentTime = new Date().toLocaleTimeString('en-US', {
-                    hour: '2-digit',
-                    minute: '2-digit',
-                    second: '2-digit',
-                    hour12: true
+                    hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: true,
                 });
 
-                const newEntries = correctFaces.map(face => ({
+                const newEntries: DetectionEntry[] = correctFaces.map(face => ({
                     id: `${Date.now()}-${face.name}-${Math.random().toString(36).slice(2)}`,
                     name: face.name,
                     time: currentTime,
                     status: 'in' as const,
+                    confidence_tier: face.confidence_tier ?? 'high', // #4
                 }));
 
-                setDetectedQueue(prev => {
-                    // Add new entries at the beginning (most recent first)
-                    const updated = [...newEntries, ...prev];
-                    // Keep only the latest 5 entries
-                    return updated.slice(0, 5);
-                });
+                // #5 — track unique students marked this session via student_id
+                correctFaces.forEach(f => markedDuringSession.current.add(f.student_id));
 
-                // Push to camera overlay and auto-expire each after 4.5 s
-                setOverlayEntries(prev => [...newEntries, ...prev].slice(0, 5));
+                setDetectionEntries(prev => [...newEntries, ...prev].slice(0, 5));
+
+                // #3 — track timeout handles so we can clear them on unmount
                 newEntries.forEach(entry => {
-                    setTimeout(() => {
-                        setOverlayEntries(prev => prev.filter(e => e.id !== entry.id));
+                    const t = setTimeout(() => {
+                        setDetectionEntries(prev => prev.filter(e => e.id !== entry.id));
                     }, 4500);
+                    timeoutRefs.current.push(t);
                 });
             }
 
@@ -291,76 +347,62 @@ export default function LiveAttendance() {
 
             // Update unrecognised faces carousel
             const rawUnrecognized = result.unrecognized_faces || [];
+            const backendOrigin = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000';
             setUnrecognizedFaces(
                 rawUnrecognized.map(f => ({
                     id: f.id,
-                    image_base64: f.image_base64 ?? null,
+                    image_url: f.image_url ? `${backendOrigin}${f.image_url}` : null,
                     score: f.score,
                 }))
             );
 
-            // Update live stats
             const total = correctFaces.length + wrongFaces.length + unrecognizedCount;
             const recognized = correctFaces.length;
+            setLiveStats({ totalInFrame: total, recognizedCount: recognized, unrecognizedCount, lastUpdate: new Date() });
 
-            setLiveStats({
-                totalInFrame: total,
-                recognizedCount: recognized,
-                unrecognizedCount: unrecognizedCount,
-                lastUpdate: new Date(),
-            });
-
-            // Show appropriate toast message
             if (total === 0) {
-                toast({
-                    title: 'No Faces Detected',
-                    description: result.message || 'No faces were detected in the image',
-                    variant: 'destructive',
-                });
+                toast({ title: 'No Faces Detected', description: result.message || 'No faces detected', variant: 'destructive' });
             } else if (wrongFaces.length > 0) {
-                toast({
-                    title: 'Section Mismatch',
-                    description: `${recognized} from selected section, ${wrongFaces.length} from other sections`,
-                    variant: 'default',
-                });
+                toast({ title: 'Section Mismatch', description: `${recognized} correct, ${wrongFaces.length} from other sections` });
             } else {
-                toast({
-                    title: 'Success',
-                    description: `Detected ${total} face(s) - ${recognized} recognized`,
-                });
+                toast({ title: 'Success', description: `Detected ${total} face(s) — ${recognized} recognized` });
             }
 
-            // Refresh present students list if any attendance was marked
-            if (correctFaces.length > 0) {
-                loadPresentStudents();
-            }
+            if (correctFaces.length > 0) loadPresentStudents();
         } catch (error: any) {
             console.error('Capture error:', error);
-            toast({
-                title: 'Error',
-                description: error.message || 'Failed to process attendance',
-                variant: 'destructive',
-            });
+            // #7 — auto-stop live mode after 3 consecutive failures
+            consecutiveErrorsRef.current += 1;
+            if (consecutiveErrorsRef.current >= 3 && continuousMode) {
+                stopContinuousCapture();
+                toast({
+                    title: 'Live Mode Auto-stopped',
+                    description: '3 consecutive errors — check your connection.',
+                    variant: 'destructive',
+                });
+            } else {
+                toast({ title: 'Error', description: error.message || 'Failed to process attendance', variant: 'destructive' });
+            }
         } finally {
             setLoading(false);
+            loadingRef.current = false; // #1
+            // #8 — update rolling average capture duration
+            const elapsed = Date.now() - captureStart;
+            captureTimesRef.current.push(elapsed);
+            if (captureTimesRef.current.length > 5) captureTimesRef.current.shift();
+            setCaptureRate(Math.round(
+                captureTimesRef.current.reduce((a, b) => a + b, 0) / captureTimesRef.current.length
+            ));
         }
     };
 
     const startContinuousCapture = () => {
         setContinuousMode(true);
         intervalRef.current = setInterval(async () => {
-            if (!loading) {
+            if (!loadingRef.current) { // #1 — ref is always fresh inside closures
                 await handleCapture();
             }
-        }, 3000); // Capture every 3 seconds
-    };
-
-    const stopContinuousCapture = () => {
-        setContinuousMode(false);
-        if (intervalRef.current) {
-            clearInterval(intervalRef.current);
-            intervalRef.current = null;
-        }
+        }, 3000);
     };
 
     const loadPresentStudents = async () => {
@@ -380,14 +422,41 @@ export default function LiveAttendance() {
         }
     };
 
+    // #6 — keyboard shortcuts: Space = capture, L = toggle live, Esc = stop camera
+    useEffect(() => {
+        const handler = (e: KeyboardEvent) => {
+            const tag = (e.target as HTMLElement).tagName;
+            if (tag === 'INPUT' || tag === 'SELECT' || tag === 'TEXTAREA') return;
+            if (e.code === 'Space' && capturing && videoReady && !continuousMode && !loading) {
+                e.preventDefault();
+                handleCapture();
+            }
+            if (e.code === 'KeyL' && capturing && videoReady) {
+                e.preventDefault();
+                continuousMode ? stopContinuousCapture() : startContinuousCapture();
+            }
+            if (e.code === 'Escape' && capturing) {
+                stopCamera();
+            }
+        };
+        window.addEventListener('keydown', handler);
+        return () => window.removeEventListener('keydown', handler);
+    }, [capturing, videoReady, continuousMode, loading, stopCamera, stopContinuousCapture]);
+
     useEffect(() => {
         loadGroups();
         loadPresentStudents();
         return () => {
-            stopCamera();
+            // #2 — use stable refs so cleanup always sees current values
             stopContinuousCapture();
+            if (streamRef.current) {
+                streamRef.current.getTracks().forEach(t => t.stop());
+                streamRef.current = null;
+            }
+            // #3 — clear all pending overlay expiry timers
+            timeoutRefs.current.forEach(clearTimeout);
         };
-    }, []);
+    }, [stopContinuousCapture]);
 
     return (
         <div className="space-y-6">
@@ -478,15 +547,39 @@ export default function LiveAttendance() {
                                 />
                             ) : (
                                 <div className="flex items-center justify-center h-full">
-                                    <div className="text-center">
-                                        <CameraOff className="w-12 h-12 sm:w-16 sm:h-16 mx-auto mb-4 text-muted-foreground" />
-                                        <p className="text-sm sm:text-base text-muted-foreground">Camera is off</p>
-                                    </div>
+                                    {cameraPermission === 'denied' ? (
+                                        <div className="text-center px-6">
+                                            <AlertCircle className="w-12 h-12 sm:w-16 sm:h-16 mx-auto mb-3 text-red-400" />
+                                            <p className="text-sm sm:text-base font-semibold text-red-400 mb-1">Camera Permission Denied</p>
+                                            <p className="text-xs text-muted-foreground">Go to browser settings → Site permissions → Allow camera access</p>
+                                        </div>
+                                    ) : (
+                                        <div className="text-center">
+                                            <CameraOff className="w-12 h-12 sm:w-16 sm:h-16 mx-auto mb-4 text-muted-foreground" />
+                                            <p className="text-sm sm:text-base text-muted-foreground">Camera is off</p>
+                                        </div>
+                                    )}
                                 </div>
                             )}
                             <canvas ref={canvasRef} className="hidden" />
                         </div>
 
+                        {/* #6 — keyboard hint bar */}
+                        {capturing && (
+                            <div className="flex items-center justify-between mt-2 mb-1 px-0.5">
+                                <p className="text-[10px] text-muted-foreground">
+                                    ⌨ <kbd className="px-1 py-0.5 rounded bg-muted text-[10px]">Space</kbd> capture ·{' '}
+                                    <kbd className="px-1 py-0.5 rounded bg-muted text-[10px]">L</kbd> live ·{' '}
+                                    <kbd className="px-1 py-0.5 rounded bg-muted text-[10px]">Esc</kbd> stop
+                                </p>
+                                {/* #8 — capture rate indicator */}
+                                {captureRate !== null && continuousMode && (
+                                    <span className="text-[10px] text-muted-foreground tabular-nums">
+                                        ~{captureRate}ms/capture
+                                    </span>
+                                )}
+                            </div>
+                        )}
                         <div className="flex flex-col sm:flex-row gap-2 sm:gap-3 mt-4 sm:mt-6">
                             {!capturing ? (
                                 <Button
@@ -504,6 +597,7 @@ export default function LiveAttendance() {
                                         onClick={handleCapture}
                                         disabled={!videoReady || loading || continuousMode}
                                         size="sm"
+                                        aria-label="Capture frame (Space)"
                                         className="flex-1 bg-accent hover:bg-accent/90 text-black font-medium disabled:opacity-50 disabled:cursor-not-allowed"
                                     >
                                         {!videoReady ? (
@@ -575,7 +669,7 @@ export default function LiveAttendance() {
                                 <h2 className="text-sm font-semibold">Live Detection Feed</h2>
                             </div>
                             <AnimatePresence mode="wait">
-                                {overlayEntries.length > 0 ? (
+                                {detectionEntries.length > 0 ? (
                                     <motion.span
                                         key="live"
                                         initial={{ opacity: 0, scale: 0.7 }}
@@ -616,8 +710,8 @@ export default function LiveAttendance() {
                             </motion.span>
                         </div>
 
-                        {/* Animated name pills */}
-                        {overlayEntries.length === 0 ? (
+                        {/* Animated name pills — #4 confidence tier colours, #10 single list */}
+                        {detectionEntries.length === 0 ? (
                             <motion.div
                                 initial={{ opacity: 0 }}
                                 animate={{ opacity: 1 }}
@@ -629,7 +723,7 @@ export default function LiveAttendance() {
                         ) : (
                             <div className="space-y-0 overflow-hidden">
                                 <AnimatePresence initial={false}>
-                                    {overlayEntries.map((entry) => (
+                                    {detectionEntries.map((entry) => (
                                         <motion.div
                                             key={entry.id}
                                             layout
@@ -646,7 +740,12 @@ export default function LiveAttendance() {
                                             className="pb-1.5 overflow-hidden"
                                         >
                                             <motion.div
-                                                className="flex items-center gap-2.5 p-2.5 rounded-xl bg-gradient-to-r from-green-500 to-emerald-500 text-white border border-green-400/30"
+                                                className={`flex items-center gap-2.5 p-2.5 rounded-xl bg-gradient-to-r text-white ${entry.confidence_tier === 'medium'
+                                                        ? 'from-yellow-500 to-amber-500 border border-yellow-400/30'
+                                                        : entry.confidence_tier === 'low'
+                                                            ? 'from-orange-500 to-red-400 border border-orange-400/30'
+                                                            : 'from-green-500 to-emerald-500 border border-green-400/30'
+                                                    }`}
                                                 initial={{ boxShadow: '0 0 0px rgba(34,197,94,0)' }}
                                                 animate={{ boxShadow: ['0 0 0px rgba(34,197,94,0)', '0 0 18px rgba(34,197,94,0.55)', '0 0 8px rgba(34,197,94,0.2)'] }}
                                                 transition={{ duration: 0.9, times: [0, 0.25, 1] }}
@@ -666,8 +765,10 @@ export default function LiveAttendance() {
                                                     <span className="font-bold text-sm leading-tight truncate">
                                                         {entry.name}
                                                     </span>
-                                                    <span className="text-[10px] text-green-100/80 leading-tight">
-                                                        Marked · {entry.time}
+                                                    <span className="text-[10px] text-white/70 leading-tight">
+                                                        {entry.confidence_tier === 'medium' ? '⚠ Medium match'
+                                                            : entry.confidence_tier === 'low' ? '⚠ Low match'
+                                                                : '✓ High match'} · {entry.time}
                                                     </span>
                                                 </div>
 
@@ -797,6 +898,38 @@ export default function LiveAttendance() {
                     </Card>
                 </div>
             </div>
+            {/* #5 — Session summary card shown after camera stops */}
+            {sessionSummary && (
+                <Card className="p-4 bg-green-50 dark:bg-green-950/20 border border-green-200 dark:border-green-800">
+                    <div className="flex items-start justify-between gap-4">
+                        <div>
+                            <h3 className="font-semibold text-green-800 dark:text-green-300 mb-1">Session Complete</h3>
+                            <p className="text-sm text-green-700 dark:text-green-400">
+                                Attendance marked for{' '}
+                                <strong>{sessionSummary.uniqueStudents}</strong>{' '}
+                                student{sessionSummary.uniqueStudents !== 1 ? 's' : ''} in{' '}
+                                {sessionSummary.duration >= 60
+                                    ? `${Math.floor(sessionSummary.duration / 60)}m ${sessionSummary.duration % 60}s`
+                                    : `${sessionSummary.duration}s`}
+                            </p>
+                            <p className="text-xs text-green-600 dark:text-green-500 mt-0.5">
+                                Started at{' '}
+                                {sessionSummary.startTime.toLocaleTimeString('en-US', {
+                                    hour: '2-digit', minute: '2-digit', hour12: true,
+                                })}
+                            </p>
+                        </div>
+                        <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => setSessionSummary(null)}
+                            className="text-green-700 dark:text-green-400 h-7 px-2 text-xs flex-shrink-0"
+                        >
+                            Dismiss
+                        </Button>
+                    </div>
+                </Card>
+            )}
         </div>
     );
 }

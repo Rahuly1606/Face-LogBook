@@ -36,7 +36,9 @@ def health_check():
         "memory_usage_mb": get_memory_usage(),
         "uptime_seconds": get_uptime(),
     }
-    
+
+    cache_stats = get_face_cache_stats()
+
     return jsonify({
         "status": "ok" if face_service_status["status"] == "ok" and db_status["status"] == "ok" else "degraded",
         "message": "Backend service is running",
@@ -44,6 +46,7 @@ def health_check():
             "face_service": face_service_status,
             "database": db_status
         },
+        "cache": cache_stats,
         "system_info": system_info
     }), 200
 
@@ -129,6 +132,25 @@ def get_memory_usage():
         return None
     except Exception:
         return None
+
+def get_face_cache_stats():
+    """Return face recognition embedding cache statistics."""
+    try:
+        cached_count = len(face_service._faiss_student_list) if face_service._faiss_student_list else 0
+        cache_age = (
+            round(time.time() - face_service._cache_timestamp, 1)
+            if face_service._cache_timestamp
+            else None
+        )
+        return {
+            "cached_students": cached_count,
+            "cache_age_seconds": cache_age,
+            "faiss_active": face_service._faiss_index is not None,
+            "faiss_preferred": getattr(face_service, '_use_faiss', False),
+            "spam_tracked_students": len(getattr(face_service, '_recent_recognitions', {})),
+        }
+    except Exception as e:
+        return {"error": str(e)}
 
 @health_bp.route('/debug/test-image-processing', methods=['POST'])
 @admin_required()
