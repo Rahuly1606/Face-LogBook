@@ -1,10 +1,13 @@
 import { useState, useRef, useCallback, useEffect } from 'react';
+import { AnimatePresence, motion } from 'framer-motion';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/hooks/use-toast';
-import { Camera, CameraOff, Loader2, Check, Users, Play, Pause, BookOpen, Clock } from 'lucide-react';
+import { Camera, CameraOff, Loader2, Check, Users, Play, Pause, BookOpen } from 'lucide-react';
 import { attendanceApi, groupApi } from '@/services/api';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { type OverlayEntry } from '@/components/RecognitionFeed';
+import { UnrecognizedCarousel, type UnrecognizedFace } from '@/components/UnrecognizedCarousel';
 
 export default function LiveAttendance() {
     const { toast } = useToast();
@@ -24,10 +27,17 @@ export default function LiveAttendance() {
 
     // Queue system: Keep max 5 students with name and time
     const [detectedQueue, setDetectedQueue] = useState<Array<{
+        id: string;
         name: string;
         time: string;
         status: 'in' | 'out';
     }>>([]);
+
+    // Overlay entries shown directly on the camera feed (auto-expire after 4.5 s)
+    const [overlayEntries, setOverlayEntries] = useState<OverlayEntry[]>([]);
+
+    // Unrecognised faces returned from the last detection cycle
+    const [unrecognizedFaces, setUnrecognizedFaces] = useState<UnrecognizedFace[]>([]);
 
     const [wrongSectionStudents, setWrongSectionStudents] = useState<Array<{
         student_id: string;
@@ -255,9 +265,10 @@ export default function LiveAttendance() {
                 });
 
                 const newEntries = correctFaces.map(face => ({
+                    id: `${Date.now()}-${face.name}-${Math.random().toString(36).slice(2)}`,
                     name: face.name,
                     time: currentTime,
-                    status: 'in' as const  // For now, all are "In-Time"
+                    status: 'in' as const,
                 }));
 
                 setDetectedQueue(prev => {
@@ -266,9 +277,27 @@ export default function LiveAttendance() {
                     // Keep only the latest 5 entries
                     return updated.slice(0, 5);
                 });
+
+                // Push to camera overlay and auto-expire each after 4.5 s
+                setOverlayEntries(prev => [...newEntries, ...prev].slice(0, 5));
+                newEntries.forEach(entry => {
+                    setTimeout(() => {
+                        setOverlayEntries(prev => prev.filter(e => e.id !== entry.id));
+                    }, 4500);
+                });
             }
 
             setWrongSectionStudents(wrongFaces);
+
+            // Update unrecognised faces carousel
+            const rawUnrecognized = result.unrecognized_faces || [];
+            setUnrecognizedFaces(
+                rawUnrecognized.map(f => ({
+                    id: f.id,
+                    image_base64: f.image_base64 ?? null,
+                    score: f.score,
+                }))
+            );
 
             // Update live stats
             const total = correctFaces.length + wrongFaces.length + unrecognizedCount;
@@ -533,51 +562,143 @@ export default function LiveAttendance() {
 
                 {/* Detection Results & Present Students */}
                 <div className="space-y-3">
-                    {/* Attendance Queue - Max 5 Students */}
+                    {/* Live Recognition Feed with Present Count */}
                     <Card className="p-3 bg-card-light border-0">
-                        <div className="flex items-center justify-between mb-2">
+                        {/* Header: title + live indicator */}
+                        <div className="flex items-center justify-between mb-3">
                             <div className="flex items-center gap-1.5">
-                                <Check className="h-4 w-4" />
-                                <h2 className="text-sm font-semibold">Attendance Queue</h2>
+                                <motion.div
+                                    animate={{ scale: [1, 1.25, 1], opacity: [1, 0.5, 1] }}
+                                    transition={{ repeat: Infinity, duration: 1.6, ease: 'easeInOut' }}
+                                    className="w-2 h-2 rounded-full bg-green-500"
+                                />
+                                <h2 className="text-sm font-semibold">Live Detection Feed</h2>
                             </div>
-                            <span className="text-xs text-muted-foreground">Last 5</span>
+                            <AnimatePresence mode="wait">
+                                {overlayEntries.length > 0 ? (
+                                    <motion.span
+                                        key="live"
+                                        initial={{ opacity: 0, scale: 0.7 }}
+                                        animate={{ opacity: 1, scale: 1 }}
+                                        exit={{ opacity: 0, scale: 0.7 }}
+                                        className="text-[10px] font-bold tracking-widest text-red-500 uppercase flex items-center gap-1"
+                                    >
+                                        LIVE
+                                    </motion.span>
+                                ) : (
+                                    <motion.span
+                                        key="idle"
+                                        initial={{ opacity: 0 }}
+                                        animate={{ opacity: 1 }}
+                                        exit={{ opacity: 0 }}
+                                        className="text-xs text-muted-foreground"
+                                    >
+                                        Waiting…
+                                    </motion.span>
+                                )}
+                            </AnimatePresence>
                         </div>
 
-                        {detectedQueue.length === 0 ? (
-                            <div className="text-center py-6 text-muted-foreground">
-                                <Users className="w-8 h-8 mx-auto mb-2 opacity-50" />
-                                <p className="text-xs">No attendance marked yet</p>
+                        {/* Present students count badge */}
+                        <div className="flex items-center justify-between bg-green-50 dark:bg-green-950/20 border border-green-200 dark:border-green-800 rounded-lg px-3 py-2 mb-3">
+                            <div className="flex items-center gap-2">
+                                <Users className="h-4 w-4 text-green-600 dark:text-green-400" />
+                                <span className="text-xs font-medium text-green-700 dark:text-green-300">Present Today</span>
                             </div>
+                            <motion.span
+                                key={presentStudents.length}
+                                initial={{ scale: 1.4, opacity: 0 }}
+                                animate={{ scale: 1, opacity: 1 }}
+                                transition={{ type: 'spring', stiffness: 500, damping: 20 }}
+                                className="text-lg font-bold text-green-700 dark:text-green-300 leading-none"
+                            >
+                                {presentStudents.length}
+                            </motion.span>
+                        </div>
+
+                        {/* Animated name pills */}
+                        {overlayEntries.length === 0 ? (
+                            <motion.div
+                                initial={{ opacity: 0 }}
+                                animate={{ opacity: 1 }}
+                                className="text-center py-6 text-muted-foreground"
+                            >
+                                <Users className="w-8 h-8 mx-auto mb-2 opacity-40" />
+                                <p className="text-xs">Waiting for detections…</p>
+                            </motion.div>
                         ) : (
-                            <div className="space-y-1.5">
-                                {detectedQueue.map((entry, index) => (
-                                    <div
-                                        key={`${entry.name}-${entry.time}-${index}`}
-                                        className="p-2 rounded bg-green-50 dark:bg-green-950/20 border border-green-200 dark:border-green-900"
-                                    >
-                                        <div className="flex items-center justify-between gap-2">
-                                            <div className="flex-1 min-w-0">
-                                                <h3 className="font-medium text-sm text-green-900 dark:text-green-100 truncate">
-                                                    {entry.name}
-                                                </h3>
-                                            </div>
-                                            <div className="flex items-center gap-1.5 flex-shrink-0">
-                                                <span className="text-xs text-green-700 dark:text-green-400">
-                                                    {entry.time}
-                                                </span>
-                                                <span className={`text-xs px-1.5 py-0.5 rounded-full font-medium ${entry.status === 'in'
-                                                    ? 'bg-green-200 dark:bg-green-900 text-green-800 dark:text-green-200'
-                                                    : 'bg-orange-200 dark:bg-orange-900 text-orange-800 dark:text-orange-200'
-                                                    }`}>
-                                                    {entry.status === 'in' ? 'In' : 'Out'}
-                                                </span>
-                                            </div>
-                                        </div>
-                                    </div>
-                                ))}
+                            <div className="space-y-0 overflow-hidden">
+                                <AnimatePresence initial={false}>
+                                    {overlayEntries.map((entry) => (
+                                        <motion.div
+                                            key={entry.id}
+                                            layout
+                                            initial={{ opacity: 0, x: 40, height: 0 }}
+                                            animate={{ opacity: 1, x: 0, height: 'auto' }}
+                                            exit={{ opacity: 0, x: -20, height: 0, transition: { duration: 0.25 } }}
+                                            transition={{
+                                                type: 'spring',
+                                                stiffness: 420,
+                                                damping: 30,
+                                                opacity: { duration: 0.18 },
+                                                height: { duration: 0.22 },
+                                            }}
+                                            className="pb-1.5 overflow-hidden"
+                                        >
+                                            <motion.div
+                                                className="flex items-center gap-2.5 p-2.5 rounded-xl bg-gradient-to-r from-green-500 to-emerald-500 text-white border border-green-400/30"
+                                                initial={{ boxShadow: '0 0 0px rgba(34,197,94,0)' }}
+                                                animate={{ boxShadow: ['0 0 0px rgba(34,197,94,0)', '0 0 18px rgba(34,197,94,0.55)', '0 0 8px rgba(34,197,94,0.2)'] }}
+                                                transition={{ duration: 0.9, times: [0, 0.25, 1] }}
+                                            >
+                                                {/* Animated check icon */}
+                                                <motion.div
+                                                    initial={{ scale: 0, rotate: -30 }}
+                                                    animate={{ scale: 1, rotate: 0 }}
+                                                    transition={{ type: 'spring', stiffness: 650, damping: 18, delay: 0.1 }}
+                                                    className="w-6 h-6 rounded-full bg-white/20 flex items-center justify-center flex-shrink-0"
+                                                >
+                                                    <Check className="w-3.5 h-3.5 text-white" />
+                                                </motion.div>
+
+                                                {/* Name + sub-label */}
+                                                <div className="flex flex-col min-w-0 flex-1">
+                                                    <span className="font-bold text-sm leading-tight truncate">
+                                                        {entry.name}
+                                                    </span>
+                                                    <span className="text-[10px] text-green-100/80 leading-tight">
+                                                        Marked · {entry.time}
+                                                    </span>
+                                                </div>
+
+                                                {/* Pulsing live dot */}
+                                                <motion.span
+                                                    className="w-2 h-2 rounded-full bg-green-200 flex-shrink-0"
+                                                    animate={{ scale: [1, 1.6, 1], opacity: [1, 0.4, 1] }}
+                                                    transition={{ repeat: Infinity, duration: 1.5, ease: 'easeInOut' }}
+                                                />
+                                            </motion.div>
+                                        </motion.div>
+                                    ))}
+                                </AnimatePresence>
                             </div>
                         )}
                     </Card>
+
+                    {/* Unrecognised Faces Carousel */}
+                    <AnimatePresence>
+                        {unrecognizedFaces.length > 0 && (
+                            <motion.div
+                                key="unrecognized-carousel"
+                                initial={{ opacity: 0, y: 10 }}
+                                animate={{ opacity: 1, y: 0 }}
+                                exit={{ opacity: 0, y: -10 }}
+                                transition={{ duration: 0.3 }}
+                            >
+                                <UnrecognizedCarousel faces={unrecognizedFaces} />
+                            </motion.div>
+                        )}
+                    </AnimatePresence>
 
                     {/* Wrong Section Students Warning - Compact View */}
                     {wrongSectionStudents.length > 0 && (

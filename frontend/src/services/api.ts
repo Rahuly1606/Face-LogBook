@@ -69,6 +69,12 @@ export interface LiveAttendanceResponse {
         status?: string;
         message?: string;
     }>;
+    unrecognized_faces?: Array<{
+        id: string;
+        bbox?: number[];
+        score?: number;
+        image_base64?: string | null;
+    }>;
     message?: string;
     total_detected?: number;
     unrecognized_count?: number;

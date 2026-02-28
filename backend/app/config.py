@@ -13,10 +13,13 @@ class Config:
     
     # SQLAlchemy engine options for connection pooling and thread safety
     SQLALCHEMY_ENGINE_OPTIONS = {
-        'pool_pre_ping': True,  # Verify connections before using them
-        'pool_recycle': 3600,   # Recycle connections after 1 hour
-        'pool_size': 10,        # Connection pool size
-        'max_overflow': 20,     # Max overflow connections
+        'pool_pre_ping': True,   # Verify connections before using them (detects dead connections)
+        'pool_recycle': 280,     # Recycle connections every 280 s — safely under Aiven's
+                                 # default wait_timeout of 300 s, preventing "Lost connection"
+                                 # errors that cause ERR_CONTENT_LENGTH_MISMATCH
+        'pool_size': 10,         # Connection pool size
+        'max_overflow': 20,      # Max overflow connections
+        'pool_timeout': 30,      # Wait up to 30 s for a connection from the pool
         'connect_args': {
             'connect_timeout': 10
         }

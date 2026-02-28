@@ -158,22 +158,26 @@ class FaceService:
             return self._embedding_cache
         
         embeddings_list = []
-        student_list = []
+        # Store plain student_id strings — NOT ORM objects.
+        # ORM objects become detached after the session closes (end of the request
+        # that built the cache), causing "Instance not bound to Session" errors
+        # on every subsequent request that hits the still-valid 60-s cache.
+        student_id_list = []
         
         for student in students:
             stored_embedding = student.get_embedding()
             if stored_embedding is not None:
                 embeddings_list.append(stored_embedding)
-                student_list.append(student)
+                student_id_list.append(student.student_id)  # plain string, session-independent
         
         # Convert to numpy array for vectorized operations
         if embeddings_list:
             embeddings_matrix = np.vstack(embeddings_list).astype('float32')
-            self._embedding_cache = (embeddings_matrix, student_list)
+            self._embedding_cache = (embeddings_matrix, student_id_list)
             
             # Build FAISS index if available
             if self._use_faiss and len(embeddings_list) > 0:
-                self._build_faiss_index(embeddings_matrix, student_list)
+                self._build_faiss_index(embeddings_matrix, student_id_list)
         else:
             self._embedding_cache = ([], [])
             if self._use_faiss:
@@ -183,13 +187,13 @@ class FaceService:
         self._cache_timestamp = current_time
         
         if self._use_faiss:
-            current_app.logger.info(f"Rebuilt FAISS index with {len(student_list)} students")
+            current_app.logger.info(f"Rebuilt FAISS index with {len(student_id_list)} students")
         else:
-            current_app.logger.info(f"Rebuilt embedding cache with {len(student_list)} students (NumPy)")
+            current_app.logger.info(f"Rebuilt embedding cache with {len(student_id_list)} students (NumPy)")
         
         return self._embedding_cache
 
-    def _build_faiss_index(self, embeddings_matrix, student_list):
+    def _build_faiss_index(self, embeddings_matrix, student_id_list):
         """Build FAISS index for fast similarity search - optimized for speed"""
         try:
             n_embeddings, dim = embeddings_matrix.shape
@@ -221,7 +225,9 @@ class FaceService:
                 index.hnsw.efSearch = 16  # Lower = faster (default is 16, but being explicit)
             
             self._faiss_index = index
-            self._faiss_student_list = student_list
+            # Store plain student_id strings (not ORM objects) so the index
+            # is session-independent and safe across requests.
+            self._faiss_student_list = student_id_list
             
         except Exception as e:
             current_app.logger.error(f"Error building FAISS index: {str(e)}")
@@ -281,9 +287,8 @@ class FaceService:
             best_idx = int(indices[0][0])
             
             if best_score >= threshold:
-                # Return student_id instead of Student object to avoid session issues
-                student = self._faiss_student_list[best_idx]
-                return student.student_id, best_score
+                # _faiss_student_list holds plain student_id strings — no ORM access needed
+                return self._faiss_student_list[best_idx], best_score
             return None, best_score
             
         except Exception as e:
@@ -306,9 +311,8 @@ class FaceService:
         best_score = similarities[best_idx]
         
         if best_score >= threshold:
-            # Return student_id instead of Student object to avoid session issues
-            student = student_list[best_idx]
-            return student.student_id, float(best_score)
+            # student_list holds plain student_id strings — no ORM access needed
+            return student_list[best_idx], float(best_score)
         return None, float(best_score)
     
     def process_image_for_attendance(self, image_data):
@@ -419,11 +423,28 @@ class FaceService:
                             unrecognized += 1
                     else:
                         unrecognized += 1
+                        # Crop the face and encode it as base64 for the frontend
+                        face_b64 = None
+                        try:
+                            x1, y1, x2, y2 = bbox
+                            pad = 20
+                            h_img, w_img = img.shape[:2]
+                            x1c = max(0, x1 - pad)
+                            y1c = max(0, y1 - pad)
+                            x2c = min(w_img, x2 + pad)
+                            y2c = min(h_img, y2 + pad)
+                            crop = img[y1c:y2c, x1c:x2c]  # BGR crop
+                            _, buf = cv2.imencode('.jpg', crop, [cv2.IMWRITE_JPEG_QUALITY, 85])
+                            import base64 as _b64
+                            face_b64 = 'data:image/jpeg;base64,' + _b64.b64encode(buf.tobytes()).decode('utf-8')
+                        except Exception as _e:
+                            current_app.logger.warning(f"Could not crop face {i}: {_e}")
                         # Add information about unrecognized face
                         unrecognized_faces.append({
                             "id": f"unknown_{i}",
                             "bbox": bbox.tolist(),
-                            "score": float(score) if score else 0.0
+                            "score": float(score) if score else 0.0,
+                            "image_base64": face_b64,
                         })
                 except Exception as e:
                     current_app.logger.error(f"Error processing face {i}: {str(e)}")

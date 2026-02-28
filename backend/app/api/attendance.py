@@ -136,6 +136,7 @@ def process_live_attendance():
     result['detected_faces'] = detected_faces
     result['wrong_section_students'] = wrong_section_students
     result['unrecognized_count'] = result.get('unrecognized_count', 0)
+    result['unrecognized_faces'] = result.get('unrecognized_faces', [])
     result['total_detected'] = len(detected_faces) + len(wrong_section_students) + result['unrecognized_count']
     
     # Build message
