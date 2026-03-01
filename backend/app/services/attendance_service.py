@@ -1,4 +1,4 @@
-from datetime import datetime, date, timedelta
+from datetime import datetime, date, timedelta, time as dtime
 from app import db
 from app.models.attendance import Attendance
 from app.models.student import Student
@@ -19,6 +19,95 @@ class AttendanceService:
     def get_ist_today():
         """Get today's date in IST"""
         return datetime.now(pytz.timezone('Asia/Kolkata')).date()
+    
+    @staticmethod
+    def check_attendance_window(group_id=None):
+        """
+        Check if current IST time falls within the attendance window.
+        
+        Reads settings from the database first (via Setting model),
+        falling back to Flask config / .env values.
+        
+        Returns a dict:
+          - allowed: bool  (True if attendance can be recorded)
+          - status:  str   ('on_time' | 'late' | 'early' | 'rejected' | 'closed')
+          - message: str   (human-readable description)
+          - window:  dict  (start, end, late_end times for the frontend)
+        """
+        from app.models.setting import Setting
+        
+        now_ist = AttendanceService.get_ist_now()
+        current_time = now_ist.time()
+        
+        # Read from DB → config → hardcoded defaults (group-specific if group_id given)
+        settings = Setting.get_attendance_window_settings(group_id=group_id)
+        window_start_str = settings['window_start']
+        window_end_str   = settings['window_end']
+        late_end_str     = settings['late_end']
+        late_policy      = settings['late_policy']
+        
+        # Parse HH:MM strings into time objects
+        try:
+            window_start = dtime(*map(int, window_start_str.split(':')))
+            window_end   = dtime(*map(int, window_end_str.split(':')))
+            late_end     = dtime(*map(int, late_end_str.split(':')))
+        except (ValueError, TypeError):
+            current_app.logger.error("Invalid attendance window config, defaulting to 09:00-09:10-09:30")
+            window_start = dtime(9, 0)
+            window_end   = dtime(9, 10)
+            late_end     = dtime(9, 30)
+        
+        window_info = {
+            'window_start': window_start_str,
+            'window_end': window_end_str,
+            'late_end': late_end_str,
+            'late_policy': late_policy,
+            'current_time': current_time.strftime('%H:%M:%S'),
+        }
+        
+        # Before window opens
+        if current_time < window_start:
+            return {
+                'allowed': False,
+                'status': 'early',
+                'message': f'Attendance window has not opened yet. It opens at {window_start_str} IST.',
+                'window': window_info,
+            }
+        
+        # Within on-time window  (start <= now < end)
+        if window_start <= current_time < window_end:
+            return {
+                'allowed': True,
+                'status': 'on_time',
+                'message': 'Attendance window is open.',
+                'window': window_info,
+            }
+        
+        # Within late window  (end <= now < late_end)
+        if window_end <= current_time < late_end:
+            if late_policy == 'rejected':
+                return {
+                    'allowed': False,
+                    'status': 'rejected',
+                    'message': f'On-time window closed at {window_end_str} IST. Late entries are not allowed.',
+                    'window': window_info,
+                }
+            else:
+                # late_policy == 'late' (default)
+                return {
+                    'allowed': True,
+                    'status': 'late',
+                    'message': f'You are marking attendance after {window_end_str} IST. It will be recorded as LATE.',
+                    'window': window_info,
+                }
+        
+        # After late window closes
+        return {
+            'allowed': False,
+            'status': 'closed',
+            'message': f'Attendance window closed at {late_end_str} IST. No more entries accepted today.',
+            'window': window_info,
+        }
     
     @staticmethod
     def format_datetime_ist(dt):
@@ -149,13 +238,21 @@ class AttendanceService:
         return len(students)
     
     @staticmethod
-    def process_attendance(student_id):
-        """Process attendance for a student, handling check-in/check-out logic"""
+    def process_attendance(student_id, window_status='on_time'):
+        """Process attendance for a student, handling check-in/check-out logic.
+        
+        Args:
+            student_id: The student's ID
+            window_status: 'on_time' or 'late' — determines the attendance status recorded
+        """
         # Get current time in UTC for storage consistency with camera events
         now_utc = datetime.now(pytz.timezone('UTC'))
         # But still use IST for date-based lookups
         today = now_utc.astimezone(pytz.timezone('Asia/Kolkata')).date()
         debounce_seconds = current_app.config.get('DEBOUNCE_SECONDS', 30)
+        
+        # Decide the status label based on window_status
+        attendance_status = 'late' if window_status == 'late' else 'present'
         
         # Get the student to get their group_id
         student = Student.query.get(student_id)
@@ -189,13 +286,13 @@ class AttendanceService:
                 group_id=group_id,
                 date=today,
                 in_time=now_utc,
-                status='present'
+                status=attendance_status
             )
             db.session.add(attendance)
             action = "checkin"
         elif attendance.status == 'absent':
             # Student was marked absent but is now present
-            attendance.status = 'present'
+            attendance.status = attendance_status
             attendance.in_time = now_utc
             action = "checkin"
         elif attendance.in_time and not attendance.out_time:

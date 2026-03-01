@@ -12,6 +12,7 @@ import Groups from "./pages/Groups";
 import LiveAttendance from "./pages/LiveAttendance";
 import UploadAttendance from "./pages/UploadAttendance";
 import AttendanceLogs from "./pages/AttendanceLogs";
+import Settings from "./pages/Settings";
 import Login from "./pages/Login";
 import NotFound from "./pages/NotFound";
 
@@ -97,6 +98,14 @@ const App = () => (
               element={
                 <ProtectedRoute>
                   <AttendanceLogs />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/settings"
+              element={
+                <ProtectedRoute>
+                  <Settings />
                 </ProtectedRoute>
               }
             />

@@ -45,6 +45,12 @@ class Config:
     DEBOUNCE_SECONDS = int(os.getenv('DEBOUNCE_SECONDS', 30))
     EVENT_DEBOUNCE_SECONDS = int(os.getenv('EVENT_DEBOUNCE_SECONDS', 30))  # Debounce for camera events
     
+    # Attendance time-window settings (IST)
+    ATTENDANCE_WINDOW_START = os.getenv('ATTENDANCE_WINDOW_START', '09:00')  # HH:MM
+    ATTENDANCE_WINDOW_END = os.getenv('ATTENDANCE_WINDOW_END', '09:10')      # HH:MM
+    ATTENDANCE_LATE_END = os.getenv('ATTENDANCE_LATE_END', '09:30')          # HH:MM
+    ATTENDANCE_LATE_POLICY = os.getenv('ATTENDANCE_LATE_POLICY', 'late')     # late | rejected
+    
     # Timezone settings
     TIMEZONE = pytz.timezone('Asia/Kolkata')  # Indian Standard Time
     

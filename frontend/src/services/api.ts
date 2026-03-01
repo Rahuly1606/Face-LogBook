@@ -61,6 +61,7 @@ export interface LiveAttendanceResponse {
         confidence_tier?: string;
         group_name?: string;
         status?: string;
+        attendance_status?: string; // 'on_time' | 'late'
     }>;
     wrong_section_students?: Array<{
         student_id: string;
@@ -79,6 +80,23 @@ export interface LiveAttendanceResponse {
     message?: string;
     total_detected?: number;
     unrecognized_count?: number;
+    window_status?: string;   // 'on_time' | 'late'
+    window?: AttendanceWindow;
+}
+
+export interface AttendanceWindow {
+    window_start: string;
+    window_end: string;
+    late_end: string;
+    late_policy: string;
+    current_time: string;
+}
+
+export interface WindowStatusResponse {
+    allowed: boolean;
+    status: string;  // 'on_time' | 'late' | 'early' | 'rejected' | 'closed'
+    message: string;
+    window: AttendanceWindow;
 }
 
 export interface UploadAttendanceResponse {
@@ -234,6 +252,11 @@ export const groupApi = {
 
 // ============= ATTENDANCE APIs =============
 export const attendanceApi = {
+    async getWindowStatus(groupId?: string): Promise<WindowStatusResponse> {
+        const params = groupId ? `?group_id=${groupId}` : '';
+        return api.get<WindowStatusResponse>(`/attendance/window-status${params}`);
+    },
+
     async submitLive(imageBlob: Blob, groupId?: string): Promise<LiveAttendanceResponse> {
         const formData = new FormData();
         formData.append('image', imageBlob, 'live_capture.jpg');
@@ -289,12 +312,15 @@ export const attendanceApi = {
     },
 
     async getByDateRange(startDate: string, endDate: string): Promise<{ attendance: AttendanceRecord[] }> {
-        // Backend doesn't support date range, so we'll just get by start date
-        return api.get<{ attendance: AttendanceRecord[] }>(`/attendance/logs?date=${startDate}`);
+        return api.get<{ attendance: AttendanceRecord[] }>(`/attendance/logs?date_from=${startDate}&date_to=${endDate}`);
     },
 
-    async getByGroup(groupId: number): Promise<{ attendance: AttendanceRecord[] }> {
-        return api.get<{ attendance: AttendanceRecord[] }>(`/attendance/logs/${groupId}`);
+    async getByGroup(groupId: number, dateFrom?: string, dateTo?: string): Promise<{ attendance: AttendanceRecord[] }> {
+        const params = new URLSearchParams();
+        if (dateFrom) params.set('date_from', dateFrom);
+        if (dateTo) params.set('date_to', dateTo);
+        const qs = params.toString() ? `?${params.toString()}` : '';
+        return api.get<{ attendance: AttendanceRecord[] }>(`/attendance/logs/${groupId}${qs}`);
     },
 
     async getByStudent(studentId: string): Promise<{ attendance: AttendanceRecord[] }> {
@@ -439,5 +465,43 @@ export const bulkImportApi = {
             console.error(`Error deleting import job ${jobId}:`, error);
             return false;
         }
+    },
+};
+
+// ============= SETTINGS APIs =============
+export interface AttendanceWindowSettings {
+    window_start: string;
+    window_end: string;
+    late_end: string;
+    late_policy: string;
+    has_custom?: boolean;
+}
+
+export interface DefaultGroupSettings {
+    default_group_id: string;
+    default_group_name: string | null;
+}
+
+export const settingsApi = {
+    async getAttendanceWindow(groupId?: string): Promise<AttendanceWindowSettings> {
+        const params = groupId ? `?group_id=${groupId}` : '';
+        return api.get<AttendanceWindowSettings & { success: boolean }>(`/settings/attendance-window${params}`);
+    },
+
+    async updateAttendanceWindow(data: Partial<AttendanceWindowSettings>, groupId?: string): Promise<AttendanceWindowSettings & { message: string }> {
+        const params = groupId ? `?group_id=${groupId}` : '';
+        return api.put<AttendanceWindowSettings & { success: boolean; message: string }>(`/settings/attendance-window${params}`, data);
+    },
+
+    async getDefaultGroup(): Promise<DefaultGroupSettings> {
+        return api.get<DefaultGroupSettings & { success: boolean }>('/settings/default-group');
+    },
+
+    async updateDefaultGroup(groupId: string): Promise<DefaultGroupSettings & { message: string }> {
+        return api.put<DefaultGroupSettings & { success: boolean; message: string }>('/settings/default-group', { default_group_id: groupId });
+    },
+
+    async removeGroupWindow(groupId: string): Promise<{ message: string }> {
+        return api.delete<{ success: boolean; message: string }>(`/settings/attendance-window?group_id=${groupId}`);
     },
 };

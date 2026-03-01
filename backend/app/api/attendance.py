@@ -15,11 +15,41 @@ import pytz
 attendance_bp = Blueprint('attendance', __name__)
 face_service = FaceService()
 
+@attendance_bp.route('/window-status', methods=['GET'])
+@admin_required()
+def get_window_status():
+    """Return the current attendance window status (on_time, late, early, rejected, closed)"""
+    group_id = request.args.get('group_id', type=int)
+    window_check = AttendanceService.check_attendance_window(group_id=group_id)
+    return jsonify(window_check), 200
+
 @attendance_bp.route('/live', methods=['POST'])
 @limiter.limit("20 per minute")
 @admin_required()
 def process_live_attendance():
     """Process a single frame for attendance with section-based validation"""
+    
+    # ── Extract group_id early for per-group window lookup ─────────
+    _live_group_id = None
+    if request.content_type and request.content_type.startswith('multipart/form-data'):
+        _live_group_id = request.form.get('group_id', type=int)
+    else:
+        _peek = request.get_json(silent=True) or {}
+        _live_group_id = _peek.get('group_id')
+    
+    # ── Time-window gate ──────────────────────────────────────────
+    window_check = AttendanceService.check_attendance_window(group_id=_live_group_id)
+    if not window_check['allowed']:
+        return jsonify({
+            "success": False,
+            "message": window_check['message'],
+            "window_status": window_check['status'],
+            "window": window_check['window'],
+            "detected_faces": [],
+            "total_detected": 0,
+        }), 403
+    window_status = window_check['status']  # 'on_time' or 'late'
+    # ──────────────────────────────────────────────────────────────
     
     # Get image data and section/group ID
     selected_group_id = None
@@ -101,7 +131,7 @@ def process_live_attendance():
         # Check if student belongs to selected section
         if student_group_id == selected_group_id:
             # ✅ Student belongs to selected section - mark attendance
-            action = AttendanceService.process_attendance(person['student_id'])
+            action = AttendanceService.process_attendance(person['student_id'], window_status=window_status)
             
             # Create detected face object
             face_data = {
@@ -109,14 +139,18 @@ def process_live_attendance():
                 'name': student_name,
                 'confidence': person['score'],
                 'group_name': group_name,
-                'status': 'correct_section'
+                'status': 'correct_section',
+                'attendance_status': window_status,  # on_time or late
             }
             detected_faces.append(face_data)
             
             # Set appropriate greeting message based on action
             if action == "checkin":
                 result['recognized'][i]['action'] = "checkin"
-                result['recognized'][i]['greeting_message'] = f"Welcome, {student_name}!"
+                if window_status == 'late':
+                    result['recognized'][i]['greeting_message'] = f"Welcome, {student_name}! (Marked LATE)"
+                else:
+                    result['recognized'][i]['greeting_message'] = f"Welcome, {student_name}!"
             elif action == "checkout" or action == "checkout_update":
                 result['recognized'][i]['action'] = "checkout"
                 result['recognized'][i]['goodbye_message'] = f"Goodbye, {student_name}!"
@@ -139,6 +173,8 @@ def process_live_attendance():
     result['unrecognized_count'] = result.get('unrecognized_count', 0)
     result['unrecognized_faces'] = result.get('unrecognized_faces', [])
     result['total_detected'] = len(detected_faces) + len(wrong_section_students) + result['unrecognized_count']
+    result['window_status'] = window_status
+    result['window'] = window_check['window']
     
     # Build message
     messages = []
@@ -157,6 +193,22 @@ def process_live_attendance():
 @admin_required()
 def process_group_photo():
     """Process a group photo for attendance with section-based validation"""
+    
+    # ── Extract group_id early for per-group window lookup ─────────
+    _upload_group_id = request.form.get('group_id', type=int) if request.content_type and request.content_type.startswith('multipart/form-data') else None
+    
+    # ── Time-window gate ──────────────────────────────────────────
+    window_check = AttendanceService.check_attendance_window(group_id=_upload_group_id)
+    if not window_check['allowed']:
+        return jsonify({
+            "success": False,
+            "message": window_check['message'],
+            "window_status": window_check['status'],
+            "window": window_check['window'],
+        }), 403
+    window_status = window_check['status']  # 'on_time' or 'late'
+    # ──────────────────────────────────────────────────────────────
+    
     if 'image' not in request.files:
         return jsonify({"success": False, "message": "No image file provided"}), 400
     
@@ -193,14 +245,15 @@ def process_group_photo():
         # Check if student belongs to selected section
         if student_group_id == selected_group_id:
             # ✅ Student belongs to selected section - mark attendance
-            action = AttendanceService.process_attendance(person['student_id'])
+            action = AttendanceService.process_attendance(person['student_id'], window_status=window_status)
             
             correct_section_students.append({
                 'student_id': person['student_id'],
                 'name': student_name,
                 'confidence': person['score'],
                 'group_name': group_name,
-                'status': 'correct_section'
+                'status': 'correct_section',
+                'attendance_status': window_status,
             })
         else:
             # ⚠️ Student belongs to different section - don't mark attendance
@@ -277,19 +330,44 @@ def get_all_students_status():
 @attendance_bp.route('/logs', methods=['GET'])
 @admin_required()
 def get_attendance_logs():
-    """Get attendance logs for a specific date, ensuring all students are listed with absent as default"""
+    """Get attendance logs for a date or date range.
+
+    Query params:
+      - date:      single date (YYYY-MM-DD).  Used when date_from/date_to absent.
+      - date_from:  start of range (YYYY-MM-DD)
+      - date_to:    end of range   (YYYY-MM-DD)
+    """
+    date_from = request.args.get('date_from')
+    date_to = request.args.get('date_to')
     date_str = request.args.get('date')
-    
-    if not date_str:
-        # Default to today if no date provided
-        from datetime import date
-        date_str = date.today().isoformat()
-    
-    try:
-        result = AttendanceService.get_attendance_logs_for_date(date_str)
-        return jsonify(result), 200
-    except ValueError as e:
-        return jsonify({"success": False, "message": str(e)}), 400
+
+    if date_from and date_to:
+        # Date range query
+        try:
+            from_date = date.fromisoformat(date_from)
+            to_date = date.fromisoformat(date_to)
+            all_attendance = []
+            current = from_date
+            seen_ids = set()
+            while current <= to_date:
+                day_result = AttendanceService.get_attendance_logs_for_date(current.isoformat())
+                for rec in day_result.get('attendance', []):
+                    key = (rec['student_id'], rec['date'])
+                    if key not in seen_ids:
+                        seen_ids.add(key)
+                        all_attendance.append(rec)
+                current += __import__('datetime').timedelta(days=1)
+            return jsonify({'attendance': all_attendance}), 200
+        except ValueError as e:
+            return jsonify({"success": False, "message": str(e)}), 400
+    else:
+        if not date_str:
+            date_str = date.today().isoformat()
+        try:
+            result = AttendanceService.get_attendance_logs_for_date(date_str)
+            return jsonify(result), 200
+        except ValueError as e:
+            return jsonify({"success": False, "message": str(e)}), 400
 
 @attendance_bp.route('/reset/daily', methods=['POST'])
 @admin_required()

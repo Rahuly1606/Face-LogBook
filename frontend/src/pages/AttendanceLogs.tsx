@@ -47,7 +47,7 @@ export default function AttendanceLogs() {
         try {
             let result;
             if (filters.groupId && filters.groupId !== 'all') {
-                result = await attendanceApi.getByGroup(parseInt(filters.groupId));
+                result = await attendanceApi.getByGroup(parseInt(filters.groupId), filters.startDate, filters.endDate);
             } else if (filters.startDate === filters.endDate) {
                 result = await attendanceApi.getByDate(filters.startDate);
             } else {
@@ -91,12 +91,13 @@ export default function AttendanceLogs() {
         const headers = ['Student ID', 'Student Name', 'Group', 'Date', 'Status', 'In Time', 'Out Time', 'Confidence'];
         const rows = filteredAttendance.map((record) => {
             const status = record.status || (record.in_time ? 'present' : 'absent');
+            const statusLabel = status === 'present' ? 'On Time' : status === 'late' ? 'Late' : status === 'absent' ? 'Absent' : status.charAt(0).toUpperCase() + status.slice(1);
             return [
                 record.student_id,
                 (record as any).name || record.student_name || 'N/A',
                 record.group_name || 'N/A',
                 record.date,
-                status.charAt(0).toUpperCase() + status.slice(1),
+                statusLabel,
                 record.in_time ? new Date(record.in_time).toLocaleTimeString() : '-',
                 record.out_time ? new Date(record.out_time).toLocaleTimeString() : '-',
                 record.confidence ? `${(record.confidence * 100).toFixed(1)}%` : 'N/A',
@@ -246,9 +247,14 @@ export default function AttendanceLogs() {
                                                     ? 'bg-green-100 text-green-800 border border-green-200'
                                                     : status === 'absent'
                                                         ? 'bg-red-100 text-red-800 border border-red-200'
-                                                        : 'bg-yellow-100 text-yellow-800 border border-yellow-200'
+                                                        : status === 'late'
+                                                            ? 'bg-orange-100 text-orange-800 border border-orange-200'
+                                                            : 'bg-yellow-100 text-yellow-800 border border-yellow-200'
                                                     }`}>
-                                                    {status.charAt(0).toUpperCase() + status.slice(1)}
+                                                    {status === 'present' ? '✅ On Time'
+                                                        : status === 'late' ? '⏰ Late'
+                                                            : status === 'absent' ? '❌ Absent'
+                                                                : status.charAt(0).toUpperCase() + status.slice(1)}
                                                 </span>
                                             </TableCell>
                                             <TableCell className="text-foreground">

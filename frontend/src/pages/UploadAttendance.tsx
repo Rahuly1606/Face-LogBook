@@ -2,8 +2,8 @@ import { useState, useEffect } from 'react';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/hooks/use-toast';
-import { Upload, Loader2, CheckCircle2, Users, Image as ImageIcon, BookOpen } from 'lucide-react';
-import { attendanceApi, groupApi } from '@/services/api';
+import { Upload, Loader2, CheckCircle2, Users, Image as ImageIcon, BookOpen, Clock } from 'lucide-react';
+import { attendanceApi, groupApi, settingsApi, type WindowStatusResponse } from '@/services/api';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 
 export default function UploadAttendance() {
@@ -16,6 +16,18 @@ export default function UploadAttendance() {
     const [groups, setGroups] = useState<Array<{ id: number; name: string }>>([]);
     const [selectedGroupId, setSelectedGroupId] = useState<string>('');
     const [loadingGroups, setLoadingGroups] = useState(false);
+
+    // Attendance window status
+    const [windowStatus, setWindowStatus] = useState<WindowStatusResponse | null>(null);
+
+    const fetchWindowStatus = async (groupId?: string) => {
+        try {
+            const status = await attendanceApi.getWindowStatus(groupId || selectedGroupId || undefined);
+            setWindowStatus(status);
+        } catch (error) {
+            console.error('Failed to fetch window status:', error);
+        }
+    };
 
     const [results, setResults] = useState<{
         success: boolean;
@@ -54,6 +66,15 @@ export default function UploadAttendance() {
         try {
             const groups = await groupApi.getAll();
             setGroups(groups || []);
+            // Pre-select the default group from settings
+            if (!selectedGroupId) {
+                try {
+                    const def = await settingsApi.getDefaultGroup();
+                    if (def.default_group_id && groups.some(g => String(g.id) === def.default_group_id)) {
+                        setSelectedGroupId(def.default_group_id);
+                    }
+                } catch { /* ignore – default group is optional */ }
+            }
         } catch (error: any) {
             console.error('Failed to load groups:', error);
             toast({
@@ -85,6 +106,18 @@ export default function UploadAttendance() {
             return;
         }
 
+        // Validate attendance window is open
+        if (windowStatus && windowStatus.status !== 'on_time' && windowStatus.status !== 'late') {
+            toast({
+                title: '🕐 Attendance Window',
+                description: windowStatus.status === 'early'
+                    ? `Window opens at ${windowStatus.window?.window_start || 'the scheduled time'}. Please wait.`
+                    : 'Attendance window is closed. No entries allowed.',
+                variant: 'destructive',
+            });
+            return;
+        }
+
         setLoading(true);
         try {
             const result = await attendanceApi.uploadPhoto(selectedFile, selectedGroupId);
@@ -105,8 +138,12 @@ export default function UploadAttendance() {
                 });
             }
         } catch (error: any) {
+            // Refresh window status on error (might be window-closed)
+            fetchWindowStatus();
             toast({
-                title: 'Error',
+                title: error.message?.includes('window') || error.message?.includes('Window') || error.message?.includes('IST')
+                    ? '🕐 Attendance Window'
+                    : 'Error',
                 description: error.message || 'Failed to process image',
                 variant: 'destructive',
             });
@@ -123,7 +160,17 @@ export default function UploadAttendance() {
 
     useEffect(() => {
         loadGroups();
+        fetchWindowStatus();
+        const interval = setInterval(() => fetchWindowStatus(), 30000);
+        return () => clearInterval(interval);
     }, []);
+
+    // Re-fetch window status when group changes
+    useEffect(() => {
+        if (selectedGroupId) {
+            fetchWindowStatus(selectedGroupId);
+        }
+    }, [selectedGroupId]);
 
     return (
         <div className="space-y-6">
@@ -158,6 +205,49 @@ export default function UploadAttendance() {
                     )}
                 </div>
             </Card>
+
+            {/* Attendance Window Status Banner */}
+            {windowStatus && (
+                <Card className={`p-4 border-0 ${windowStatus.status === 'on_time'
+                    ? 'bg-green-50 dark:bg-green-950/30 border-l-4 !border-l-green-500'
+                    : windowStatus.status === 'late'
+                        ? 'bg-yellow-50 dark:bg-yellow-950/30 border-l-4 !border-l-yellow-500'
+                        : windowStatus.status === 'early'
+                            ? 'bg-blue-50 dark:bg-blue-950/30 border-l-4 !border-l-blue-500'
+                            : 'bg-red-50 dark:bg-red-950/30 border-l-4 !border-l-red-500'
+                    }`}>
+                    <div className="flex items-center justify-between flex-wrap gap-2">
+                        <div className="flex items-center gap-3">
+                            <Clock className={`h-5 w-5 ${windowStatus.status === 'on_time' ? 'text-green-600' :
+                                windowStatus.status === 'late' ? 'text-yellow-600' :
+                                    windowStatus.status === 'early' ? 'text-blue-600' :
+                                        'text-red-600'
+                                }`} />
+                            <div>
+                                <p className={`font-semibold text-sm ${windowStatus.status === 'on_time' ? 'text-green-700 dark:text-green-400' :
+                                    windowStatus.status === 'late' ? 'text-yellow-700 dark:text-yellow-400' :
+                                        windowStatus.status === 'early' ? 'text-blue-700 dark:text-blue-400' :
+                                            'text-red-700 dark:text-red-400'
+                                    }`}>
+                                    {windowStatus.status === 'on_time' && '✅ Window Open — On Time'}
+                                    {windowStatus.status === 'late' && '⚠️ Late Window — Attendance will be marked as LATE'}
+                                    {windowStatus.status === 'early' && '🕐 Window Not Open Yet'}
+                                    {windowStatus.status === 'rejected' && '🚫 Late Entries Rejected'}
+                                    {windowStatus.status === 'closed' && '🔒 Attendance Window Closed'}
+                                </p>
+                                <p className="text-xs text-muted-foreground mt-0.5">
+                                    {windowStatus.message}
+                                </p>
+                            </div>
+                        </div>
+                        <div className="text-xs text-muted-foreground text-right">
+                            <span className="font-medium">On-time:</span> {windowStatus.window.window_start} – {windowStatus.window.window_end} &nbsp;|&nbsp;
+                            <span className="font-medium">Late until:</span> {windowStatus.window.late_end} &nbsp;|&nbsp;
+                            <span className="font-medium">Now:</span> {windowStatus.window.current_time} IST
+                        </div>
+                    </div>
+                </Card>
+            )}
 
             <div className="grid gap-6 lg:grid-cols-3">
                 {/* Upload Section */}
@@ -208,7 +298,7 @@ export default function UploadAttendance() {
                                     <>
                                         <Button
                                             onClick={handleUpload}
-                                            disabled={loading || !selectedGroupId}
+                                            disabled={loading || !selectedGroupId || (windowStatus != null && windowStatus.status !== 'on_time' && windowStatus.status !== 'late')}
                                             className="flex-1 bg-accent hover:bg-accent/90 text-black disabled:opacity-50 disabled:cursor-not-allowed"
                                         >
                                             {loading ? (
@@ -220,6 +310,16 @@ export default function UploadAttendance() {
                                                 <>
                                                     <Upload className="mr-2 h-4 w-4" />
                                                     Select Section First
+                                                </>
+                                            ) : windowStatus && windowStatus.status === 'early' ? (
+                                                <>
+                                                    <Clock className="mr-2 h-4 w-4" />
+                                                    Window Not Open Yet
+                                                </>
+                                            ) : windowStatus && (windowStatus.status === 'closed' || windowStatus.status === 'rejected') ? (
+                                                <>
+                                                    <Clock className="mr-2 h-4 w-4" />
+                                                    Window Closed
                                                 </>
                                             ) : (
                                                 <>

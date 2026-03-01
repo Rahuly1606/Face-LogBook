@@ -1,4 +1,4 @@
-import { LayoutDashboard, Users, UserPlus, FolderKanban, Video, Upload, History } from 'lucide-react';
+import { LayoutDashboard, Users, UserPlus, FolderKanban, Video, Upload, History, Settings } from 'lucide-react';
 import { NavLink } from 'react-router-dom';
 import {
   Sidebar,
@@ -23,6 +23,10 @@ const attendanceItems = [
   { title: 'Live Attendance', url: '/attendance/live', icon: Video },
   { title: 'Upload Photo', url: '/attendance/upload', icon: Upload },
   { title: 'Attendance Logs', url: '/attendance/logs', icon: History },
+];
+
+const adminItems = [
+  { title: 'Settings', url: '/settings', icon: Settings },
 ];
 
 export function AppSidebar() {
@@ -78,6 +82,25 @@ export function AppSidebar() {
           <SidebarGroupContent>
             <SidebarMenu>
               {attendanceItems.map((item) => (
+                <SidebarMenuItem key={item.title}>
+                  <SidebarMenuButton asChild>
+                    <NavLink to={item.url} className={getNavClass}>
+                      <item.icon className="h-4 w-4" />
+                      {!isCollapsed && <span>{item.title}</span>}
+                    </NavLink>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+              ))}
+            </SidebarMenu>
+          </SidebarGroupContent>
+        </SidebarGroup>
+
+        {/* Admin */}
+        <SidebarGroup>
+          {!isCollapsed && <SidebarGroupLabel>Admin</SidebarGroupLabel>}
+          <SidebarGroupContent>
+            <SidebarMenu>
+              {adminItems.map((item) => (
                 <SidebarMenuItem key={item.title}>
                   <SidebarMenuButton asChild>
                     <NavLink to={item.url} className={getNavClass}>

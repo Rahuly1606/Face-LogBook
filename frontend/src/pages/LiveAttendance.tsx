@@ -3,8 +3,8 @@ import { AnimatePresence, motion } from 'framer-motion';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/hooks/use-toast';
-import { Camera, CameraOff, Loader2, Check, Users, Play, Pause, BookOpen, AlertCircle } from 'lucide-react';
-import { attendanceApi, groupApi } from '@/services/api';
+import { Camera, CameraOff, Loader2, Check, Users, Play, Pause, BookOpen, AlertCircle, Clock } from 'lucide-react';
+import { attendanceApi, groupApi, settingsApi, type WindowStatusResponse } from '@/services/api';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { UnrecognizedCarousel, type UnrecognizedFace } from '@/components/UnrecognizedCarousel';
 
@@ -35,6 +35,8 @@ export default function LiveAttendance() {
     // #5 — session tracking
     const sessionStartRef = useRef<Date | null>(null);
     const markedDuringSession = useRef<Set<string>>(new Set());
+    // Keep selectedGroupId in a ref so polling always reads the latest value
+    const selectedGroupIdRef = useRef<string>('');
 
     const [stream, setStream] = useState<MediaStream | null>(null);
     const [capturing, setCapturing] = useState(false);
@@ -82,11 +84,39 @@ export default function LiveAttendance() {
         lastUpdate: null as Date | null,
     });
 
+    // Attendance window status
+    const [windowStatus, setWindowStatus] = useState<WindowStatusResponse | null>(null);
+    const windowPollRef = useRef<NodeJS.Timeout | null>(null);
+
+    // Keep ref in sync with state
+    useEffect(() => {
+        selectedGroupIdRef.current = selectedGroupId;
+    }, [selectedGroupId]);
+
+    const fetchWindowStatus = async (groupId?: string) => {
+        try {
+            const gid = groupId || selectedGroupIdRef.current || undefined;
+            const status = await attendanceApi.getWindowStatus(gid);
+            setWindowStatus(status);
+        } catch (error) {
+            console.error('Failed to fetch window status:', error);
+        }
+    };
+
     const loadGroups = async () => {
         setLoadingGroups(true);
         try {
             const groups = await groupApi.getAll();
             setGroups(groups || []);
+            // Pre-select the default group from settings
+            if (!selectedGroupId) {
+                try {
+                    const def = await settingsApi.getDefaultGroup();
+                    if (def.default_group_id && groups.some(g => String(g.id) === def.default_group_id)) {
+                        setSelectedGroupId(def.default_group_id);
+                    }
+                } catch { /* ignore – default group is optional */ }
+            }
         } catch (error: any) {
             console.error('Failed to load groups:', error);
             toast({
@@ -105,6 +135,18 @@ export default function LiveAttendance() {
             toast({
                 title: 'Section Required',
                 description: 'Please select a section/group before starting the camera',
+                variant: 'destructive',
+            });
+            return;
+        }
+
+        // Validate attendance window is open
+        if (windowStatus && windowStatus.status !== 'on_time' && windowStatus.status !== 'late') {
+            toast({
+                title: '🕐 Attendance Window',
+                description: windowStatus.status === 'early'
+                    ? `Window opens at ${windowStatus.window?.window_start || 'the scheduled time'}. Please wait.`
+                    : 'Attendance window is closed. No entries allowed.',
                 variant: 'destructive',
             });
             return;
@@ -360,28 +402,42 @@ export default function LiveAttendance() {
             const recognized = correctFaces.length;
             setLiveStats({ totalInFrame: total, recognizedCount: recognized, unrecognizedCount, lastUpdate: new Date() });
 
-            if (total === 0) {
-                toast({ title: 'No Faces Detected', description: result.message || 'No faces detected', variant: 'destructive' });
-            } else if (wrongFaces.length > 0) {
+            if (wrongFaces.length > 0) {
                 toast({ title: 'Section Mismatch', description: `${recognized} correct, ${wrongFaces.length} from other sections` });
-            } else {
-                toast({ title: 'Success', description: `Detected ${total} face(s) — ${recognized} recognized` });
             }
 
             if (correctFaces.length > 0) loadPresentStudents();
+
+            // Refresh window status after each capture
+            fetchWindowStatus();
         } catch (error: any) {
             console.error('Capture error:', error);
-            // #7 — auto-stop live mode after 3 consecutive failures
-            consecutiveErrorsRef.current += 1;
-            if (consecutiveErrorsRef.current >= 3 && continuousMode) {
-                stopContinuousCapture();
+
+            // Handle window-closed / rejected errors (403 from backend)
+            const msg = error.message || '';
+            if (msg.includes('window') || msg.includes('Window') || msg.includes('IST') || msg.includes('not opened') || msg.includes('closed') || msg.includes('not allowed')) {
+                // Auto-stop continuous mode if window closed
+                if (continuousMode) stopContinuousCapture();
+                fetchWindowStatus();
                 toast({
-                    title: 'Live Mode Auto-stopped',
-                    description: '3 consecutive errors — check your connection.',
+                    title: '🕐 Attendance Window',
+                    description: msg,
                     variant: 'destructive',
+                    duration: 6000,
                 });
             } else {
-                toast({ title: 'Error', description: error.message || 'Failed to process attendance', variant: 'destructive' });
+                // #7 — auto-stop live mode after 3 consecutive failures
+                consecutiveErrorsRef.current += 1;
+                if (consecutiveErrorsRef.current >= 3 && continuousMode) {
+                    stopContinuousCapture();
+                    toast({
+                        title: 'Live Mode Auto-stopped',
+                        description: '3 consecutive errors — check your connection.',
+                        variant: 'destructive',
+                    });
+                } else {
+                    toast({ title: 'Error', description: error.message || 'Failed to process attendance', variant: 'destructive' });
+                }
             }
         } finally {
             setLoading(false);
@@ -446,6 +502,9 @@ export default function LiveAttendance() {
     useEffect(() => {
         loadGroups();
         loadPresentStudents();
+        fetchWindowStatus();
+        // Poll window status every 30 seconds
+        windowPollRef.current = setInterval(() => fetchWindowStatus(), 30000);
         return () => {
             // #2 — use stable refs so cleanup always sees current values
             stopContinuousCapture();
@@ -455,8 +514,23 @@ export default function LiveAttendance() {
             }
             // #3 — clear all pending overlay expiry timers
             timeoutRefs.current.forEach(clearTimeout);
+            // Clear window polling
+            if (windowPollRef.current) clearInterval(windowPollRef.current);
         };
     }, [stopContinuousCapture]);
+
+    // Re-fetch window status when group changes & restart polling with new group
+    useEffect(() => {
+        if (selectedGroupId) {
+            fetchWindowStatus(selectedGroupId);
+        }
+        // Restart the polling interval so it uses the updated group
+        if (windowPollRef.current) clearInterval(windowPollRef.current);
+        windowPollRef.current = setInterval(() => fetchWindowStatus(), 30000);
+        return () => {
+            if (windowPollRef.current) clearInterval(windowPollRef.current);
+        };
+    }, [selectedGroupId]);
 
     return (
         <div className="space-y-6">
@@ -491,6 +565,49 @@ export default function LiveAttendance() {
                     )}
                 </div>
             </Card>
+
+            {/* Attendance Window Status Banner */}
+            {windowStatus && (
+                <Card className={`p-4 border-0 ${windowStatus.status === 'on_time'
+                    ? 'bg-green-50 dark:bg-green-950/30 border-l-4 !border-l-green-500'
+                    : windowStatus.status === 'late'
+                        ? 'bg-yellow-50 dark:bg-yellow-950/30 border-l-4 !border-l-yellow-500'
+                        : windowStatus.status === 'early'
+                            ? 'bg-blue-50 dark:bg-blue-950/30 border-l-4 !border-l-blue-500'
+                            : 'bg-red-50 dark:bg-red-950/30 border-l-4 !border-l-red-500'
+                    }`}>
+                    <div className="flex items-center justify-between flex-wrap gap-2">
+                        <div className="flex items-center gap-3">
+                            <Clock className={`h-5 w-5 ${windowStatus.status === 'on_time' ? 'text-green-600' :
+                                windowStatus.status === 'late' ? 'text-yellow-600' :
+                                    windowStatus.status === 'early' ? 'text-blue-600' :
+                                        'text-red-600'
+                                }`} />
+                            <div>
+                                <p className={`font-semibold text-sm ${windowStatus.status === 'on_time' ? 'text-green-700 dark:text-green-400' :
+                                    windowStatus.status === 'late' ? 'text-yellow-700 dark:text-yellow-400' :
+                                        windowStatus.status === 'early' ? 'text-blue-700 dark:text-blue-400' :
+                                            'text-red-700 dark:text-red-400'
+                                    }`}>
+                                    {windowStatus.status === 'on_time' && '✅ Window Open — On Time'}
+                                    {windowStatus.status === 'late' && '⚠️ Late Window — Attendance will be marked as LATE'}
+                                    {windowStatus.status === 'early' && '🕐 Window Not Open Yet'}
+                                    {windowStatus.status === 'rejected' && '🚫 Late Entries Rejected'}
+                                    {windowStatus.status === 'closed' && '🔒 Attendance Window Closed'}
+                                </p>
+                                <p className="text-xs text-muted-foreground mt-0.5">
+                                    {windowStatus.message}
+                                </p>
+                            </div>
+                        </div>
+                        <div className="text-xs text-muted-foreground text-right">
+                            <span className="font-medium">On-time:</span> {windowStatus.window.window_start} – {windowStatus.window.window_end} &nbsp;|&nbsp;
+                            <span className="font-medium">Late until:</span> {windowStatus.window.late_end} &nbsp;|&nbsp;
+                            <span className="font-medium">Now:</span> {windowStatus.window.current_time} IST
+                        </div>
+                    </div>
+                </Card>
+            )}
 
             {/* Live Stats */}
             <div className="grid gap-2 grid-cols-2 lg:grid-cols-4">
@@ -584,12 +701,20 @@ export default function LiveAttendance() {
                             {!capturing ? (
                                 <Button
                                     onClick={startCamera}
-                                    disabled={!selectedGroupId}
+                                    disabled={!selectedGroupId || (windowStatus != null && windowStatus.status !== 'on_time' && windowStatus.status !== 'late')}
                                     size="sm"
                                     className="w-full sm:flex-1 bg-accent hover:bg-accent/90 text-black font-medium disabled:opacity-50 disabled:cursor-not-allowed"
                                 >
                                     <Camera className="mr-2 h-3.5 w-3.5" />
-                                    <span className="text-sm">{!selectedGroupId ? 'Select Section First' : 'Start Camera'}</span>
+                                    <span className="text-sm">
+                                        {!selectedGroupId
+                                            ? 'Select Section First'
+                                            : windowStatus && windowStatus.status === 'early'
+                                                ? 'Window Not Open Yet'
+                                                : windowStatus && (windowStatus.status === 'closed' || windowStatus.status === 'rejected')
+                                                    ? 'Window Closed'
+                                                    : 'Start Camera'}
+                                    </span>
                                 </Button>
                             ) : (
                                 <>
@@ -741,10 +866,10 @@ export default function LiveAttendance() {
                                         >
                                             <motion.div
                                                 className={`flex items-center gap-2.5 p-2.5 rounded-xl bg-gradient-to-r text-white ${entry.confidence_tier === 'medium'
-                                                        ? 'from-yellow-500 to-amber-500 border border-yellow-400/30'
-                                                        : entry.confidence_tier === 'low'
-                                                            ? 'from-orange-500 to-red-400 border border-orange-400/30'
-                                                            : 'from-green-500 to-emerald-500 border border-green-400/30'
+                                                    ? 'from-yellow-500 to-amber-500 border border-yellow-400/30'
+                                                    : entry.confidence_tier === 'low'
+                                                        ? 'from-orange-500 to-red-400 border border-orange-400/30'
+                                                        : 'from-green-500 to-emerald-500 border border-green-400/30'
                                                     }`}
                                                 initial={{ boxShadow: '0 0 0px rgba(34,197,94,0)' }}
                                                 animate={{ boxShadow: ['0 0 0px rgba(34,197,94,0)', '0 0 18px rgba(34,197,94,0.55)', '0 0 8px rgba(34,197,94,0.2)'] }}
