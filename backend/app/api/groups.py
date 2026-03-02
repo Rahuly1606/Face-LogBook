@@ -760,3 +760,119 @@ def delete_import_job(job_id):
         "success": True,
         "message": "Import job deleted"
     }), 200
+
+
+# ============================================================================ #
+# Registration Link endpoints (admin only)                                     #
+# ============================================================================ #
+
+@groups_bp.route('/<int:group_id>/registration-links', methods=['POST'])
+@admin_required()
+def create_registration_link(group_id):
+    """
+    Generate a new self-registration link for a group.
+
+    Request JSON (all optional fields):
+        {
+            "label":       "Semester 1 intake",   // human-readable label
+            "expiry_days": 7                       // default = REGISTRATION_LINK_EXPIRY_DAYS
+        }
+
+    Response:
+        {
+            "success": true,
+            "link": { ...to_dict() },
+            "url":  "https://domain.com/register/<token>"
+        }
+
+    NOTE: The raw token is returned only in this response.  It is stored
+    server-side and cannot be retrieved again.
+    """
+    from app.models.registration_link import RegistrationLink
+    from flask_jwt_extended import get_jwt, verify_jwt_in_request
+
+    group = Group.query.get_or_404(group_id)
+
+    data = request.get_json(silent=True) or {}
+    label = (data.get('label') or '').strip() or None
+    expiry_days = int(
+        data.get('expiry_days') or
+        current_app.config.get('REGISTRATION_LINK_EXPIRY_DAYS', 7)
+    )
+    if not (1 <= expiry_days <= 90):
+        return jsonify({'success': False, 'message': 'expiry_days must be between 1 and 90.'}), 400
+
+    # Attempt to identify the creating user from JWT (optional)
+    created_by = None
+    try:
+        verify_jwt_in_request(optional=True)
+        claims = get_jwt()
+        created_by = claims.get('user_id')
+    except Exception:
+        pass
+
+    link, raw_token = RegistrationLink.generate(
+        group_id=group_id,
+        expiry_days=expiry_days,
+        created_by=created_by,
+        label=label,
+    )
+    db.session.add(link)
+    db.session.commit()
+
+    # Build the public URL the admin can share with students.
+    # FRONTEND_URL env-var allows overriding in production.
+    frontend_url = os.environ.get('FRONTEND_URL', '').rstrip('/')
+    registration_url = f"{frontend_url}/register/{raw_token}" if frontend_url else f"/register/{raw_token}"
+
+    link_dict = link.to_dict(include_token=True)  # token shown once
+
+    current_app.logger.info(
+        f"Registration link created: id={link.id} group={group.name!r} "
+        f"expiry_days={expiry_days} created_by={created_by}"
+    )
+
+    return jsonify({
+        'success': True,
+        'link': link_dict,
+        'url': registration_url,
+    }), 201
+
+
+@groups_bp.route('/<int:group_id>/registration-links', methods=['GET'])
+@admin_required()
+def list_registration_links(group_id):
+    """List all registration links for a group (newest first)."""
+    from app.models.registration_link import RegistrationLink
+
+    Group.query.get_or_404(group_id)  # 404 if group doesn't exist
+
+    links = (
+        RegistrationLink.query
+        .filter_by(group_id=group_id)
+        .order_by(RegistrationLink.created_at.desc())
+        .all()
+    )
+
+    return jsonify({
+        'success': True,
+        'links': [l.to_dict() for l in links],   # tokens NOT included in list
+    }), 200
+
+
+@groups_bp.route('/registration-links/<int:link_id>', methods=['DELETE'])
+@admin_required()
+def deactivate_registration_link(link_id):
+    """Deactivate (revoke) a registration link by ID."""
+    from app.models.registration_link import RegistrationLink
+
+    link = RegistrationLink.query.get_or_404(link_id)
+    if not link.is_active:
+        return jsonify({'success': False, 'message': 'Link is already inactive.'}), 400
+
+    link.deactivate()
+    db.session.commit()
+
+    current_app.logger.info(f"Registration link {link_id} deactivated (group_id={link.group_id})")
+
+    return jsonify({'success': True, 'message': 'Registration link deactivated.'}), 200

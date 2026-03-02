@@ -73,6 +73,15 @@ class Config:
     BULK_IMPORT_TIMEOUT = int(os.getenv('BULK_IMPORT_TIMEOUT', 3600))  # Increased to 60 minutes
     MAX_IMPORT_ROWS = int(os.getenv('MAX_IMPORT_ROWS', 5000))  # Increased from 1000 to 5000
 
+    # ---- Self-registration settings ----
+    # Number of days a generated registration link remains valid
+    REGISTRATION_LINK_EXPIRY_DAYS = int(os.getenv('REGISTRATION_LINK_EXPIRY_DAYS', 7))
+    # Cosine-similarity threshold for duplicate-face detection during self-registration.
+    # Higher = stricter (fewer false positives).  0.60 is a safe production default.
+    SELF_REGISTER_DUPLICATE_THRESHOLD = float(os.getenv('SELF_REGISTER_DUPLICATE_THRESHOLD', 0.60))
+    # Max raw image size (bytes) accepted from self-registration form (5 MB)
+    SELF_REGISTER_MAX_IMAGE_BYTES = int(os.getenv('SELF_REGISTER_MAX_IMAGE_BYTES', 5 * 1024 * 1024))
+
 class DevelopmentConfig(Config):
     """Development configuration."""
     DEBUG = True

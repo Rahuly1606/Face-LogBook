@@ -505,3 +505,57 @@ export const settingsApi = {
         return api.delete<{ success: boolean; message: string }>(`/settings/attendance-window?group_id=${groupId}`);
     },
 };
+
+// ============= REGISTRATION LINK APIs =============
+
+export interface RegistrationLink {
+    id: number;
+    group_id: number;
+    group_name?: string;
+    label?: string | null;
+    expires_at: string;
+    is_active: boolean;
+    is_expired: boolean;
+    created_at?: string;
+    /** Only present immediately after creation */
+    token?: string;
+}
+
+export interface CreateRegistrationLinkData {
+    label?: string;
+    expiry_days?: number;
+}
+
+export interface CreateRegistrationLinkResponse {
+    success: boolean;
+    link: RegistrationLink;
+    /** Full public URL the admin should share with students */
+    url: string;
+}
+
+export const registrationLinkApi = {
+    /** Generate a new registration link for a group (admin only). */
+    async create(
+        groupId: number,
+        data: CreateRegistrationLinkData = {}
+    ): Promise<CreateRegistrationLinkResponse> {
+        return api.post<CreateRegistrationLinkResponse>(
+            `/groups/${groupId}/registration-links`,
+            data
+        );
+    },
+
+    /** List all registration links for a group (admin only). */
+    async list(groupId: number): Promise<{ links: RegistrationLink[] }> {
+        return api.get<{ success: boolean; links: RegistrationLink[] }>(
+            `/groups/${groupId}/registration-links`
+        );
+    },
+
+    /** Deactivate / revoke a registration link (admin only). */
+    async deactivate(linkId: number): Promise<{ success: boolean; message: string }> {
+        return api.delete<{ success: boolean; message: string }>(
+            `/groups/registration-links/${linkId}`
+        );
+    },
+};

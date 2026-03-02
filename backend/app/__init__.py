@@ -53,7 +53,10 @@ def create_app(config_name='dev'):
         allowed_origins = [o.strip() for o in allowed_origins.split(',')]
     
     CORS(app, 
-         resources={r"/api/*": {"origins": allowed_origins}},
+         resources={
+             r"/api/*": {"origins": allowed_origins},
+             r"/public/*": {"origins": "*"},   # public self-registration — no auth required
+         },
          supports_credentials=True,
          allow_headers=["Content-Type", "Authorization", "X-ADMIN-TOKEN"],
          methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"])
@@ -63,7 +66,12 @@ def create_app(config_name='dev'):
     def after_request(response):
         # Ensure CORS headers are added even to error responses
         origin = request.headers.get('Origin')
-        if origin and origin in allowed_origins:
+        # /public/* routes are open to any origin (student self-registration)
+        if request.path.startswith('/public/'):
+            response.headers.set('Access-Control-Allow-Origin', origin or '*')
+            response.headers.set('Access-Control-Allow-Headers', 'Content-Type')
+            response.headers.set('Access-Control-Allow-Methods', 'GET, POST, OPTIONS')
+        elif origin and origin in allowed_origins:
             response.headers.set('Access-Control-Allow-Origin', origin)
             response.headers.set('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-ADMIN-TOKEN')
             response.headers.set('Access-Control-Allow-Methods', 'GET, PUT, POST, DELETE, OPTIONS')
@@ -81,7 +89,13 @@ def create_app(config_name='dev'):
     def options_handler(path):
         response = make_response()
         origin = request.headers.get('Origin')
-        if origin and origin in allowed_origins:
+        full_path = '/' + path
+        if full_path.startswith('/public/'):
+            # Public self-registration endpoints — open CORS
+            response.headers.set('Access-Control-Allow-Origin', origin or '*')
+            response.headers.set('Access-Control-Allow-Headers', 'Content-Type')
+            response.headers.set('Access-Control-Allow-Methods', 'GET, POST, OPTIONS')
+        elif origin and origin in allowed_origins:
             response.headers.set('Access-Control-Allow-Origin', origin)
             response.headers.set('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-ADMIN-TOKEN')
             response.headers.set('Access-Control-Allow-Methods', 'GET, PUT, POST, DELETE, OPTIONS')
@@ -101,6 +115,7 @@ def create_app(config_name='dev'):
     from .api.groups import groups_bp
     from .api.camera_events import camera_events_bp
     from .api.settings import settings_bp
+    from .api.public_register import public_bp
     
     app.register_blueprint(student_bp, url_prefix='/api/v1/students')
     app.register_blueprint(attendance_bp, url_prefix='/api/v1/attendance')
@@ -109,6 +124,7 @@ def create_app(config_name='dev'):
     app.register_blueprint(groups_bp, url_prefix='/api/v1/groups')
     app.register_blueprint(camera_events_bp, url_prefix='/api/v1/camera-events')
     app.register_blueprint(settings_bp, url_prefix='/api/v1/settings')
+    app.register_blueprint(public_bp, url_prefix='/public')
     
     # Global error handler
     @app.errorhandler(Exception)

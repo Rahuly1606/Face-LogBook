@@ -37,4 +37,5 @@ models/models/retinaface/
 *.ntvs*
 *.njsproj
 *.sln
-*.sw?
+*.sw?__pycache__/
+*.pyc

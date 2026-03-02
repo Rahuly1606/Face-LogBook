@@ -15,6 +15,7 @@ import AttendanceLogs from "./pages/AttendanceLogs";
 import Settings from "./pages/Settings";
 import Login from "./pages/Login";
 import NotFound from "./pages/NotFound";
+import SelfRegister from "./pages/SelfRegister";
 
 const queryClient = new QueryClient();
 
@@ -45,6 +46,8 @@ const App = () => (
         <BrowserRouter>
           <Routes>
             <Route path="/login" element={<Login />} />
+            {/* Public self-registration — no auth required */}
+            <Route path="/register/:token" element={<SelfRegister />} />
             <Route
               path="/"
               element={

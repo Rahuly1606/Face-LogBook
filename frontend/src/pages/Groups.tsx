@@ -1,11 +1,11 @@
-import { useState, useEffect } from 'react';
-import { Plus, Users, Loader2, Trash2 } from 'lucide-react';
+﻿import { useState, useEffect } from 'react';
+import { Plus, Users, Loader2, Trash2, Link2, Check, Share2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { groupApi, Group } from '@/services/api';
+import { groupApi, Group, registrationLinkApi } from '@/services/api';
 import { useToast } from '@/hooks/use-toast';
 import {
   Dialog,
@@ -24,6 +24,12 @@ export default function Groups() {
   const [newGroup, setNewGroup] = useState({ name: '' });
   const [creating, setCreating] = useState(false);
 
+  // Per-group link copy/share state
+  const [loadingLinkGroupId, setLoadingLinkGroupId] = useState<number | null>(null);
+  const [copiedLinkGroupId, setCopiedLinkGroupId] = useState<number | null>(null);
+
+  const frontendBase = window.location.origin;
+
   useEffect(() => {
     loadGroups();
   }, []);
@@ -34,11 +40,7 @@ export default function Groups() {
       const data = await groupApi.getAll();
       setGroups(data);
     } catch (error: any) {
-      toast({
-        title: 'Error',
-        description: error.message || 'Failed to load groups',
-        variant: 'destructive',
-      });
+      toast({ title: 'Error', description: error.message || 'Failed to load groups', variant: 'destructive' });
     } finally {
       setLoading(false);
     }
@@ -46,55 +48,69 @@ export default function Groups() {
 
   const handleCreateGroup = async () => {
     if (!newGroup.name) {
-      toast({
-        title: 'Validation Error',
-        description: 'Please provide a group name',
-        variant: 'destructive',
-      });
+      toast({ title: 'Validation Error', description: 'Please provide a group name', variant: 'destructive' });
       return;
     }
-
     setCreating(true);
     try {
       await groupApi.create(newGroup);
-      toast({
-        title: 'Success',
-        description: 'Group created successfully',
-      });
+      toast({ title: 'Success', description: 'Group created successfully' });
       setShowCreateDialog(false);
       setNewGroup({ name: '' });
       loadGroups();
     } catch (error: any) {
-      toast({
-        title: 'Error',
-        description: error.message || 'Failed to create group',
-        variant: 'destructive',
-      });
+      toast({ title: 'Error', description: error.message || 'Failed to create group', variant: 'destructive' });
     } finally {
       setCreating(false);
     }
   };
 
   const handleDeleteGroup = async (id: number, name: string) => {
-    if (!confirm(`Are you sure you want to delete group "${name}"?`)) {
-      return;
-    }
-
+    if (!confirm(`Are you sure you want to delete group "${name}"?`)) return;
     try {
       await groupApi.delete(id);
-      toast({
-        title: 'Success',
-        description: 'Group deleted successfully',
-      });
+      toast({ title: 'Success', description: 'Group deleted successfully' });
       loadGroups();
     } catch (error: any) {
-      toast({
-        title: 'Error',
-        description: error.message || 'Failed to delete group',
-        variant: 'destructive',
-      });
+      toast({ title: 'Error', description: error.message || 'Failed to delete group', variant: 'destructive' });
     }
   };
+
+  // â”€â”€ Link management â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+
+  // One-click: reuse existing active link or create new, then copy / share
+  const handleCopyGroupLink = async (group: Group) => {
+    setLoadingLinkGroupId(group.id);
+    try {
+      let url: string | null = null;
+      try {
+        const { links } = await registrationLinkApi.list(group.id);
+        const active = links.find((l) => l.is_active && !l.is_expired);
+        if (active?.token) url = `${frontendBase}/register/${active.token}`;
+      } catch { /* ignore, will create fresh */ }
+
+      if (!url) {
+        const resp = await registrationLinkApi.create(group.id, { expiry_days: 7 });
+        url = `${frontendBase}/register/${resp.link.token}`;
+      }
+
+      if (navigator.share) {
+        await navigator.share({ title: `Register for ${group.name}`, url });
+      } else {
+        await navigator.clipboard.writeText(url);
+        setCopiedLinkGroupId(group.id);
+        setTimeout(() => setCopiedLinkGroupId(null), 2000);
+        toast({ title: 'Link copied!', description: url });
+      }
+    } catch (error: any) {
+      if (error?.name !== 'AbortError')
+        toast({ title: 'Error', description: error.message || 'Failed to get link', variant: 'destructive' });
+    } finally {
+      setLoadingLinkGroupId(null);
+    }
+  };
+
+  // â”€â”€ Render â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
   return (
     <div className="space-y-6">
@@ -152,14 +168,36 @@ export default function Groups() {
                     <p className="text-sm text-muted-foreground font-medium">Students</p>
                     <p className="font-mono text-base text-foreground font-semibold mt-1">{group.student_count || 0}</p>
                   </div>
-                  <Button
-                    size="sm"
-                    variant="ghost"
-                    onClick={() => handleDeleteGroup(group.id, group.name)}
-                    className="hover:bg-destructive/10"
-                  >
-                    <Trash2 className="h-4 w-4 text-destructive" />
-                  </Button>
+                  <div className="flex items-center gap-1">
+                    {/* Copy / Share registration link */}
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      onClick={() => handleCopyGroupLink(group)}
+                      disabled={loadingLinkGroupId === group.id}
+                      title={navigator.share ? 'Share registration link' : 'Copy registration link'}
+                      className="hover:bg-accent/10"
+                    >
+                      {loadingLinkGroupId === group.id ? (
+                        <Loader2 className="h-4 w-4 animate-spin text-black" />
+                      ) : copiedLinkGroupId === group.id ? (
+                        <Check className="h-4 w-4 text-green-500" />
+                      ) : navigator.share ? (
+                        <Share2 className="h-4 w-4 text-black" />
+                      ) : (
+                        <Link2 className="h-4 w-4 text-accent" />
+                      )}
+                    </Button>
+                    {/* Delete group */}
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      onClick={() => handleDeleteGroup(group.id, group.name)}
+                      className="hover:bg-destructive/10"
+                    >
+                      <Trash2 className="h-4 w-4 text-destructive" />
+                    </Button>
+                  </div>
                 </div>
               </div>
             </Card>
@@ -167,14 +205,12 @@ export default function Groups() {
         </div>
       )}
 
-      {/* Create Group Dialog */}
+      {/* â”€â”€ Create Group Dialog â”€â”€ */}
       <Dialog open={showCreateDialog} onOpenChange={setShowCreateDialog}>
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Create New Group</DialogTitle>
-            <DialogDescription>
-              Add a new group to organize students
-            </DialogDescription>
+            <DialogDescription>Add a new group to organize students</DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-4">
             <div>
@@ -188,22 +224,13 @@ export default function Groups() {
             </div>
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setShowCreateDialog(false)}>
-              Cancel
-            </Button>
+            <Button variant="outline" onClick={() => setShowCreateDialog(false)}>Cancel</Button>
             <Button
               onClick={handleCreateGroup}
               disabled={creating}
               className="bg-accent hover:bg-accent/90 text-black"
             >
-              {creating ? (
-                <>
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  Creating...
-                </>
-              ) : (
-                'Create Group'
-              )}
+              {creating ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Creatingâ€¦</> : 'Create Group'}
             </Button>
           </DialogFooter>
         </DialogContent>

@@ -143,7 +143,63 @@ class FaceService:
         except Exception as e:
             current_app.logger.error(f"Error in face detection and embedding: {str(e)}")
             return None, None
-    
+
+    def detect_face_for_registration(self, image_data):
+        """
+        Detect a face in *image_data* for student self-registration.
+
+        Stricter than detect_and_embed_face:
+          - Requires exactly ONE face in the image.
+          - Returns (embedding_ndarray, None) on success.
+          - Returns (None, error_code) on failure where error_code is one of:
+              'model_unavailable' | 'no_face' | 'multiple_faces'
+
+        The returned embedding is the raw (un-normalised) float32 vector from
+        InsightFace.  Callers should pass it to Student.set_embedding() which
+        handles normalisation before persistence.
+        """
+        if not self.initialized or self.model is None:
+            if not self.initialize():
+                return None, "model_unavailable"
+
+        try:
+            if isinstance(image_data, bytes):
+                np_arr = np.frombuffer(image_data, np.uint8)
+                img = cv2.imdecode(np_arr, cv2.IMREAD_COLOR)
+            else:
+                img = image_data
+
+            if img is None:
+                return None, "no_face"
+
+            # Resize to processing limit
+            max_size = current_app.config.get("MAX_IMAGE_SIZE", 640)
+            h, w = img.shape[:2]
+            if max(h, w) > max_size:
+                scale = max_size / max(h, w)
+                img = cv2.resize(img, (int(w * scale), int(h * scale)))
+
+            img_rgb = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+
+            try:
+                faces = self.model.get(img_rgb)
+            except Exception as e:
+                current_app.logger.error(f"Face detection error during registration: {str(e)}")
+                return None, "no_face"
+
+            if not faces:
+                return None, "no_face"
+
+            if len(faces) > 1:
+                return None, "multiple_faces"
+
+            embedding = faces[0].embedding
+            return embedding, None
+
+        except Exception as e:
+            current_app.logger.error(f"detect_face_for_registration error: {str(e)}")
+            return None, "no_face"
+
     def _get_cached_embeddings(self):
         """Get cached student embeddings or rebuild cache if expired (thread-safe)."""
         current_time = time.time()
