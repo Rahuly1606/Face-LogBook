@@ -111,8 +111,36 @@ def register_student():
             photo_path=None
         )
         
-        # Handle image file if present
-        if 'image' in request.files:
+        # Handle three-pose registration (front, left, right images)
+        pose_embeddings: dict = {}
+        if 'front_image' in request.files and 'left_image' in request.files and 'right_image' in request.files:
+            upload_folder = current_app.config['UPLOAD_FOLDER']
+            os.makedirs(upload_folder, exist_ok=True)
+            pose_files = {
+                'front': request.files['front_image'],
+                'left': request.files['left_image'],
+                'right': request.files['right_image'],
+            }
+            for pose, pfile in pose_files.items():
+                if pfile:
+                    filename = f"{student_id}_{pose}_{str(uuid.uuid4())}.jpg"
+                    filepath = os.path.join(upload_folder, filename)
+                    pfile.save(filepath)
+                    if pose == 'front':
+                        new_student.photo_path = filepath
+                    try:
+                        img = cv2.imread(filepath)
+                        if img is not None:
+                            bbox, embedding = face_service.detect_and_embed_face(img)
+                            if embedding is not None:
+                                pose_embeddings[pose] = embedding
+                                if pose == 'front':
+                                    new_student.set_embedding(embedding)
+                    except Exception as e:
+                        current_app.logger.error(f"Error processing {pose} face: {str(e)}")
+
+        # Handle single image file if present
+        elif 'image' in request.files:
             file = request.files['image']
             if file and allowed_file(file.filename):
                 # Generate a unique filename with UUID
@@ -201,7 +229,17 @@ def register_student():
         # Save the student to the database
         db.session.add(new_student)
         db.session.flush()  # Ensure student exists before adding to junction table
-        
+
+        # Upsert FaceEmbedding rows for three-pose registration
+        if pose_embeddings:
+            from app.models.face_embedding import FaceEmbedding
+            for pose, emb in pose_embeddings.items():
+                fe = FaceEmbedding.query.filter_by(student_id=student_id, pose=pose).first()
+                if fe is None:
+                    fe = FaceEmbedding(student_id=student_id, pose=pose)
+                    db.session.add(fe)
+                fe.set_embedding(emb)
+
         # Add to student_groups junction table if group_id is provided
         if group_id:
             db.session.execute(

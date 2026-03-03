@@ -43,6 +43,20 @@ export interface RegisterStudentData {
     image?: File;
     drive_link?: string;
     group_id?: number;
+    // three-pose (base64 data URLs from PoseCaptureFlow)
+    front_image?: string;
+    left_image?: string;
+    right_image?: string;
+}
+
+function dataURLtoBlob(dataURL: string): Blob {
+    const arr = dataURL.split(',');
+    const mime = arr[0].match(/:(.*?);/)![1];
+    const bstr = atob(arr[1]);
+    let n = bstr.length;
+    const u8arr = new Uint8Array(n);
+    while (n--) { u8arr[n] = bstr.charCodeAt(n); }
+    return new Blob([u8arr], { type: mime });
 }
 
 export interface UpdateStudentData {
@@ -153,7 +167,12 @@ export const studentApi = {
         formData.append('student_id', data.student_id);
         formData.append('name', data.name);
 
-        if (data.image) {
+        if (data.front_image && data.left_image && data.right_image) {
+            // Three-pose registration: convert base64 data URLs to Blobs
+            formData.append('front_image', dataURLtoBlob(data.front_image), 'front.jpg');
+            formData.append('left_image', dataURLtoBlob(data.left_image), 'left.jpg');
+            formData.append('right_image', dataURLtoBlob(data.right_image), 'right.jpg');
+        } else if (data.image) {
             formData.append('image', data.image);
         }
         if (data.drive_link) {

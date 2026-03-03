@@ -596,7 +596,7 @@ export default function PoseCaptureFlow({
                     <Button
                         size="lg"
                         variant="outline"
-                        className="flex-1"
+                        className="flex-1 text-black border-black hover:bg-black/10"
                         onClick={handleRetakeCurrent}
                     >
                         <RotateCcw className="h-4 w-4 mr-2" />
