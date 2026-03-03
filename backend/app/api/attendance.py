@@ -125,20 +125,31 @@ def process_live_attendance():
             continue
             
         student_name = student.name
-        student_group_id = student.group_id
         group_name = student.group.name if student.group else "No Section"
         
-        # Check if student belongs to selected section
-        if student_group_id == selected_group_id:
+        # Check if student belongs to selected section (check both legacy group_id AND junction table)
+        in_selected_group = (
+            student.group_id == selected_group_id or
+            db.session.execute(
+                db.text("SELECT 1 FROM student_groups WHERE student_id = :sid AND group_id = :gid"),
+                {"sid": person['student_id'], "gid": selected_group_id}
+            ).fetchone() is not None
+        )
+        
+        if in_selected_group:
             # ✅ Student belongs to selected section - mark attendance
             action = AttendanceService.process_attendance(person['student_id'], window_status=window_status)
+            
+            # Get current group name for display
+            selected_group = Group.query.get(selected_group_id)
+            display_group_name = selected_group.name if selected_group else group_name
             
             # Create detected face object
             face_data = {
                 'student_id': person['student_id'],
                 'name': student_name,
                 'confidence': person['score'],
-                'group_name': group_name,
+                'group_name': display_group_name,
                 'status': 'correct_section',
                 'attendance_status': window_status,  # on_time or late
             }
@@ -155,14 +166,14 @@ def process_live_attendance():
                 result['recognized'][i]['action'] = "checkout"
                 result['recognized'][i]['goodbye_message'] = f"Goodbye, {student_name}!"
         else:
-            # ⚠️ Student belongs to different section - don't mark attendance
+            # ⚠️ Student not registered in this section - don't mark attendance
             face_data = {
                 'student_id': person['student_id'],
                 'name': student_name,
                 'confidence': person['score'],
                 'group_name': group_name,
                 'status': 'wrong_section',
-                'message': f"Student belongs to {group_name}"
+                'message': f"Student not registered in selected section"
             }
             wrong_section_students.append(face_data)
     
@@ -239,31 +250,42 @@ def process_group_photo():
             continue
             
         student_name = student.name
-        student_group_id = student.group_id
         group_name = student.group.name if student.group else "No Section"
         
-        # Check if student belongs to selected section
-        if student_group_id == selected_group_id:
+        # Check if student belongs to selected section (check both legacy group_id AND junction table)
+        in_selected_group = (
+            student.group_id == selected_group_id or
+            db.session.execute(
+                db.text("SELECT 1 FROM student_groups WHERE student_id = :sid AND group_id = :gid"),
+                {"sid": person['student_id'], "gid": selected_group_id}
+            ).fetchone() is not None
+        )
+        
+        if in_selected_group:
             # ✅ Student belongs to selected section - mark attendance
             action = AttendanceService.process_attendance(person['student_id'], window_status=window_status)
+            
+            # Get current group name for display
+            selected_group = Group.query.get(selected_group_id)
+            display_group_name = selected_group.name if selected_group else group_name
             
             correct_section_students.append({
                 'student_id': person['student_id'],
                 'name': student_name,
                 'confidence': person['score'],
-                'group_name': group_name,
+                'group_name': display_group_name,
                 'status': 'correct_section',
                 'attendance_status': window_status,
             })
         else:
-            # ⚠️ Student belongs to different section - don't mark attendance
+            # ⚠️ Student not registered in this section - don't mark attendance
             wrong_section_students.append({
                 'student_id': person['student_id'],
                 'name': student_name,
                 'confidence': person['score'],
                 'group_name': group_name,
                 'status': 'wrong_section',
-                'message': f"Student belongs to {group_name}"
+                'message': f"Student not registered in selected section"
             })
     
     # Transform response to match frontend expected format
