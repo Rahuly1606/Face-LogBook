@@ -12,7 +12,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Card } from '@/components/ui/card';
-import CameraCapture from '@/components/CameraCapture';
+import PoseCaptureFlow, { type Pose, type PoseCaptureResult } from '@/components/PoseCaptureFlow';
 
 // ─── API helpers (no auth token required) ────────────────────────────────────
 
@@ -28,12 +28,18 @@ async function submitRegistration(
     token: string,
     name: string,
     idNumber: string,
-    imageDataUrl: string
+    images: PoseCaptureResult
 ) {
     const res = await fetch(`${API_BASE}/public/register/${token}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name, id_number: idNumber, image: imageDataUrl }),
+        body: JSON.stringify({
+            name,
+            id_number: idNumber,
+            front_image: images.front,
+            left_image: images.left,
+            right_image: images.right,
+        }),
     });
     const data = await res.json();
     return { ok: res.ok, status: res.status, data };
@@ -59,9 +65,13 @@ interface TokenInfo {
 
 const FACE_ERROR_HINTS: Record<string, string> = {
     no_face:
-        'No face was detected. Make sure your face fills the oval guide, the lighting is good, and there are no obstructions (glasses are fine).',
+        'No face was detected. Make sure your face fills the oval guide, the lighting is good, and there are no obstructions.',
     multiple_faces:
         'Multiple faces were detected. Please make sure you are alone in the frame.',
+    blurry_image:
+        'The photo is too blurry. Hold the camera steady and ensure good lighting.',
+    face_too_small:
+        'Your face is too small in the frame. Move closer to the camera.',
     model_unavailable:
         'Face recognition is temporarily unavailable. Please wait a moment and try again.',
     duplicate_face:
@@ -82,13 +92,18 @@ export default function SelfRegister() {
     // form fields
     const [name, setName] = useState('');
     const [idNumber, setIdNumber] = useState('');
-    const [capturedImage, setCapturedImage] = useState<string | null>(null);
-    const [photoConfirmed, setPhotoConfirmed] = useState(false);
+
+    // 3-pose captured images
+    const [capturedImages, setCapturedImages] = useState<PoseCaptureResult | null>(null);
+    const [posesConfirmed, setPosesConfirmed] = useState(false);
 
     // submission feedback
     const [submitError, setSubmitError] = useState('');
+    // Per-pose errors from server (so PoseCaptureFlow can highlight them)
+    const [poseErrors, setPoseErrors] = useState<Partial<Record<Pose, string>>>({});
     const [successName, setSuccessName] = useState('');
     const [successGroup, setSuccessGroup] = useState('');
+    const [posesRegistered, setPosesRegistered] = useState<string[]>([]);
 
     // Prevent duplicate camera tear-down on StrictMode double-render
     const tokenChecked = useRef(false);
@@ -99,8 +114,6 @@ export default function SelfRegister() {
         if (!token || tokenChecked.current) return;
         tokenChecked.current = true;
 
-        // Client-side guard: if this browser already completed registration for
-        // this token, show "already done" immediately (UX only – not security).
         if (localStorage.getItem(`reg_done_${token}`)) {
             setPageState('already_done');
             return;
@@ -124,30 +137,21 @@ export default function SelfRegister() {
         });
     }, [token]);
 
-    // ── Camera callbacks ────────────────────────────────────────────────────
+    // ── PoseCaptureFlow callbacks ───────────────────────────────────────────
 
-    const handleCapture = (dataUrl: string) => {
-        setCapturedImage(dataUrl);
-        setPhotoConfirmed(false); // user still needs to click "Use Photo" → already done inside CameraCapture
-    };
-
-    const handlePhotoConfirmed = (dataUrl: string) => {
-        setCapturedImage(dataUrl);
-        setPhotoConfirmed(true);
+    const handlePosesComplete = (images: PoseCaptureResult) => {
+        setCapturedImages(images);
+        setPosesConfirmed(true);
+        setPoseErrors({});
         setSubmitError('');
-    };
-
-    const handleClear = () => {
-        setCapturedImage(null);
-        setPhotoConfirmed(false);
     };
 
     // ── Form submission ─────────────────────────────────────────────────────
 
     const handleSubmit = async () => {
         setSubmitError('');
+        setPoseErrors({});
 
-        // Client-side validation
         if (!name.trim() || name.trim().length < 2) {
             setSubmitError('Please enter your full name (at least 2 characters).');
             return;
@@ -156,8 +160,8 @@ export default function SelfRegister() {
             setSubmitError('Please enter your ID number.');
             return;
         }
-        if (!capturedImage || !photoConfirmed) {
-            setSubmitError('Please take a photo and click "Use Photo" to confirm it.');
+        if (!capturedImages || !posesConfirmed) {
+            setSubmitError('Please complete the 3-pose photo capture before submitting.');
             return;
         }
 
@@ -168,18 +172,29 @@ export default function SelfRegister() {
                 token,
                 name.trim(),
                 idNumber.trim(),
-                capturedImage
+                capturedImages
             );
 
             if (ok && data.success) {
-                // Mark as done in localStorage to prevent duplicate submissions
                 localStorage.setItem(`reg_done_${token}`, '1');
                 setSuccessName(data.name || name.trim());
                 setSuccessGroup(data.group_name || tokenInfo?.group_name || '');
+                setPosesRegistered(data.poses_registered || []);
                 setPageState('success');
             } else {
-                const hint = data.error ? FACE_ERROR_HINTS[data.error] : null;
-                setSubmitError(hint || data.message || 'Registration failed. Please try again.');
+                // Check for per-pose errors (server returns { error, pose, message })
+                if (data.pose && (data.error === 'no_face' || data.error === 'multiple_faces' ||
+                    data.error === 'blurry_image' || data.error === 'face_too_small')) {
+                    const poseKey = data.pose as Pose;
+                    const poseMsg = FACE_ERROR_HINTS[data.error] || data.message || 'Please retake this photo.';
+                    setPoseErrors({ [poseKey]: poseMsg });
+                    // Reset confirmation so user must re-confirm all 3 after retake
+                    setPosesConfirmed(false);
+                    setSubmitError('One or more photos failed. Please retake the highlighted photo(s).');
+                } else {
+                    const hint = data.error ? FACE_ERROR_HINTS[data.error] : null;
+                    setSubmitError(hint || data.message || 'Registration failed. Please try again.');
+                }
                 setPageState('form');
             }
         } catch {
@@ -253,9 +268,14 @@ export default function SelfRegister() {
                             <span className="font-semibold text-foreground">{successGroup}</span>.
                         </p>
                     )}
-                    <p className="mt-6 text-xs text-muted-foreground">
-                        You may close this page.
-                    </p>
+                    {posesRegistered.length > 0 && (
+                        <p className="text-xs text-muted-foreground mt-2">
+                            Face registered from {posesRegistered.length} angle
+                            {posesRegistered.length !== 1 ? 's' : ''} (
+                            {posesRegistered.join(', ')}).
+                        </p>
+                    )}
+                    <p className="mt-6 text-xs text-muted-foreground">You may close this page.</p>
                 </Card>
             )}
 
@@ -294,23 +314,30 @@ export default function SelfRegister() {
                         />
                     </div>
 
-                    {/* Camera */}
+                    {/* 3-Pose Camera */}
                     <div className="space-y-2">
                         <Label className="text-black font-medium">
-                            Face Photo <span className="text-destructive">*</span>
+                            Face Photos <span className="text-destructive">*</span>
                         </Label>
                         <p className="text-xs text-muted-foreground">
-                            Position your face inside the oval. Ensure good lighting and look
-                            directly at the camera.
+                            We need 3 photos of your face (front, left, right) for accurate recognition.
+                            Follow the on-screen instructions.
                         </p>
-                        <CameraCapture
-                            onCapture={handlePhotoConfirmed}
-                            onClear={handleClear}
-                            disabled={isSubmitting}
-                        />
-                        {photoConfirmed && (
+                        {!isSubmitting ? (
+                            <PoseCaptureFlow
+                                onComplete={handlePosesComplete}
+                                disabled={isSubmitting}
+                                poseErrors={poseErrors}
+                            />
+                        ) : (
+                            <div className="flex items-center justify-center gap-2 py-8 text-muted-foreground">
+                                <Loader2 className="h-5 w-5 animate-spin" />
+                                <span className="text-sm">Processing your registration…</span>
+                            </div>
+                        )}
+                        {posesConfirmed && !isSubmitting && (
                             <p className="text-xs text-green-500 text-center">
-                                ✓ Photo confirmed
+                                ✓ All 3 photos confirmed — ready to submit
                             </p>
                         )}
                     </div>
@@ -325,7 +352,7 @@ export default function SelfRegister() {
                     {/* Submit */}
                     <Button
                         onClick={handleSubmit}
-                        disabled={isSubmitting}
+                        disabled={isSubmitting || !posesConfirmed}
                         className="w-full bg-accent hover:bg-accent/90 text-black font-semibold"
                         size="lg"
                     >
@@ -340,7 +367,7 @@ export default function SelfRegister() {
                     </Button>
 
                     <p className="text-xs text-muted-foreground text-center">
-                        Your photo and ID are used only for attendance recognition. They are
+                        Your photos and ID are used only for attendance recognition. They are
                         stored securely and never shared.
                     </p>
                 </Card>

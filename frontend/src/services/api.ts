@@ -7,6 +7,7 @@ export interface Student {
     name: string;
     group_id?: number;
     group_name?: string;
+    groups?: Array<{ id: number; name: string }>;
     photo_url?: string;
     created_at?: string;
     updated_at?: string;

@@ -281,11 +281,19 @@ export default function Students() {
                                     <div className="flex-1 min-w-0">
                                         <h3 className="font-semibold text-lg truncate text-foreground">{student.name}</h3>
                                         <p className="text-sm text-muted-foreground truncate">{student.student_id}</p>
-                                        {student.group_name && (
+                                        {(student.groups && student.groups.length > 0) ? (
+                                            <div className="flex flex-wrap gap-1 mt-2">
+                                                {student.groups.map((g) => (
+                                                    <Badge key={g.id} variant="secondary" className="text-xs">
+                                                        {g.name}
+                                                    </Badge>
+                                                ))}
+                                            </div>
+                                        ) : student.group_name ? (
                                             <Badge variant="secondary" className="text-xs mt-2">
                                                 {student.group_name}
                                             </Badge>
-                                        )}
+                                        ) : null}
                                     </div>
                                 </div>
                                 <div className="flex gap-2 mt-4">

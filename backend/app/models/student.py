@@ -23,6 +23,7 @@ class Student(db.Model):
     groups = db.relationship('Group', secondary='student_groups', back_populates='enrolled_students', lazy='subquery', overlaps="group,students")  # New many-to-many relationship
     attendances = db.relationship('Attendance', back_populates='student', cascade='all, delete-orphan')
     camera_events = db.relationship('CameraEvent', back_populates='student', cascade='all, delete-orphan')
+    face_embeddings = db.relationship('FaceEmbedding', back_populates='student', cascade='all, delete-orphan', lazy='dynamic')
     
     def __repr__(self):
         return f"<Student {self.student_id}: {self.name}>"

@@ -16,3 +16,5 @@ from .group import Group
 from .user import User
 from .setting import Setting
 from .registration_link import RegistrationLink
+from .face_embedding import FaceEmbedding
+from .recognition_log import RecognitionLog

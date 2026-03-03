@@ -10,6 +10,8 @@ from datetime import datetime
 import time
 from app import db
 from app.models.student import Student
+from app.models.face_embedding import FaceEmbedding
+from app.models.recognition_log import RecognitionLog
 from flask import current_app
 
 # Try to import FAISS, fallback to numpy if not available
@@ -20,6 +22,11 @@ except ImportError:
     FAISS_AVAILABLE = False
     import warnings
     warnings.warn("FAISS not available, falling back to NumPy for face matching. Install faiss-cpu for better performance.")
+
+# Blur detection threshold — Laplacian variance below this = blurry image
+BLUR_THRESHOLD = 80.0
+# Minimum face bounding box area (pixels²) to accept a detection
+MIN_FACE_AREA = 4000
 
 class FaceService:
     _instance = None
@@ -150,9 +157,12 @@ class FaceService:
 
         Stricter than detect_and_embed_face:
           - Requires exactly ONE face in the image.
+          - Checks image sharpness (rejects blurry photos).
+          - Checks minimum face size (rejects tiny faces too far from camera).
           - Returns (embedding_ndarray, None) on success.
           - Returns (None, error_code) on failure where error_code is one of:
-              'model_unavailable' | 'no_face' | 'multiple_faces'
+              'model_unavailable' | 'no_face' | 'multiple_faces' |
+              'blurry_image'     | 'face_too_small'
 
         The returned embedding is the raw (un-normalised) float32 vector from
         InsightFace.  Callers should pass it to Student.set_embedding() which
@@ -171,6 +181,15 @@ class FaceService:
 
             if img is None:
                 return None, "no_face"
+
+            # ---- Blur / sharpness check ----
+            gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+            laplacian_var = float(cv2.Laplacian(gray, cv2.CV_64F).var())
+            if laplacian_var < BLUR_THRESHOLD:
+                current_app.logger.info(
+                    f"Registration rejected: blurry image (Laplacian={laplacian_var:.1f} < {BLUR_THRESHOLD})"
+                )
+                return None, "blurry_image"
 
             # Resize to processing limit
             max_size = current_app.config.get("MAX_IMAGE_SIZE", 640)
@@ -193,15 +212,85 @@ class FaceService:
             if len(faces) > 1:
                 return None, "multiple_faces"
 
-            embedding = faces[0].embedding
-            return embedding, None
+            # ---- Minimum face size check ----
+            face = faces[0]
+            x1, y1, x2, y2 = face.bbox.astype(int)
+            face_area = (x2 - x1) * (y2 - y1)
+            if face_area < MIN_FACE_AREA:
+                current_app.logger.info(
+                    f"Registration rejected: face too small (area={face_area} < {MIN_FACE_AREA})"
+                )
+                return None, "face_too_small"
+
+            return face.embedding, None
 
         except Exception as e:
             current_app.logger.error(f"detect_face_for_registration error: {str(e)}")
             return None, "no_face"
 
+    def validate_and_embed_pose(self, image_data):
+        """
+        Validate *one* pose image and return its embedding.
+
+        This is a convenience wrapper around detect_face_for_registration that
+        returns a richer dict instead of a 2-tuple, making it easier to use in
+        the 3-pose registration endpoint.
+
+        Returns dict with keys:
+            success (bool)
+            embedding (np.ndarray | None)
+            error_code (str | None)
+            blur_score (float)   — Laplacian variance (higher = sharper)
+        """
+        error_map = {
+            "no_face":         "No face detected. Ensure your face is clearly visible and well-lit.",
+            "multiple_faces":  "Multiple faces detected. Please take the photo alone.",
+            "blurry_image":    f"Image is too blurry (sharpness score below {BLUR_THRESHOLD}). Hold the camera steady.",
+            "face_too_small":  "Your face is too small in the frame. Please move closer to the camera.",
+            "model_unavailable": "Face recognition service is temporarily unavailable. Please try again.",
+        }
+
+        # Calculate blur score independently (even if detection later fails)
+        blur_score = 999.0
+        try:
+            if isinstance(image_data, bytes):
+                np_arr = np.frombuffer(image_data, np.uint8)
+                img = cv2.imdecode(np_arr, cv2.IMREAD_COLOR)
+            else:
+                img = image_data
+            if img is not None:
+                gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+                blur_score = float(cv2.Laplacian(gray, cv2.CV_64F).var())
+        except Exception:
+            pass
+
+        embedding, error_code = self.detect_face_for_registration(image_data)
+        if error_code:
+            return {
+                "success": False,
+                "embedding": None,
+                "error_code": error_code,
+                "error_message": error_map.get(error_code, "Face verification failed."),
+                "blur_score": blur_score,
+            }
+        return {
+            "success": True,
+            "embedding": embedding,
+            "error_code": None,
+            "error_message": None,
+            "blur_score": blur_score,
+        }
+
     def _get_cached_embeddings(self):
-        """Get cached student embeddings or rebuild cache if expired (thread-safe)."""
+        """Get cached face embeddings or rebuild cache if expired (thread-safe).
+
+        The FAISS / NumPy index is built from the ``face_embeddings`` table so
+        that every registered pose for a student contributes its own row.  When
+        FAISS returns the index of the best-matching row we look up the
+        corresponding *student_id* string — which may repeat for students with
+        multiple poses.  The match is always deduplicated to the student's
+        identity, not to an individual pose.
+        """
         current_time = time.time()
 
         # Fast path — read without acquiring the lock
@@ -214,9 +303,34 @@ class FaceService:
             if self._embedding_cache is not None and (current_time - self._cache_timestamp) < self._cache_ttl:
                 return self._embedding_cache
 
-            # Rebuild cache
-            students = Student.query.all()
-            if not students:
+            # ---------- Try the new face_embeddings table first ----------
+            try:
+                fe_rows = FaceEmbedding.query.all()
+            except Exception:
+                fe_rows = []
+
+            if fe_rows:
+                embeddings_list = []
+                student_id_list = []   # parallel to embeddings_list (plain strings)
+                for fe in fe_rows:
+                    emb = fe.get_embedding()
+                    if emb is not None:
+                        embeddings_list.append(emb)
+                        student_id_list.append(fe.student_id)
+                num_source = "face_embeddings"
+            else:
+                # ---------- Fallback: load from Student.embedding column ----------
+                students = Student.query.all()
+                embeddings_list = []
+                student_id_list = []
+                for student in students:
+                    emb = student.get_embedding()
+                    if emb is not None:
+                        embeddings_list.append(emb)
+                        student_id_list.append(student.student_id)
+                num_source = "students (legacy)"
+
+            if not embeddings_list:
                 self._embedding_cache = ([], [])
                 self._cache_timestamp = current_time
                 if self._use_faiss:
@@ -224,42 +338,31 @@ class FaceService:
                     self._faiss_student_list = None
                 return self._embedding_cache
 
-            embeddings_list = []
-            # Store plain student_id strings — NOT ORM objects.
-            # ORM objects become detached after the session closes (end of the
-            # request that built the cache), causing "Instance not bound to Session"
-            # errors on every subsequent request that hits the still-valid cache.
-            student_id_list = []
+            # L2-normalise so inner product == cosine similarity
+            embeddings_matrix = np.vstack(embeddings_list).astype('float32')
+            norms = np.linalg.norm(embeddings_matrix, axis=1, keepdims=True)
+            norms = np.where(norms == 0, 1.0, norms)
+            embeddings_matrix = (embeddings_matrix / norms).astype('float32')
+            self._embedding_cache = (embeddings_matrix, student_id_list)
 
-            for student in students:
-                stored_embedding = student.get_embedding()
-                if stored_embedding is not None:
-                    embeddings_list.append(stored_embedding)
-                    student_id_list.append(student.student_id)  # plain string, session-independent
-
-            # Convert to numpy; L2-normalise so inner product == cosine similarity
-            if embeddings_list:
-                embeddings_matrix = np.vstack(embeddings_list).astype('float32')
-                norms = np.linalg.norm(embeddings_matrix, axis=1, keepdims=True)
-                norms = np.where(norms == 0, 1.0, norms)  # guard against zero-norm rows
-                embeddings_matrix = (embeddings_matrix / norms).astype('float32')
-                self._embedding_cache = (embeddings_matrix, student_id_list)
-
-                # Build FAISS index if available
-                if self._use_faiss and len(embeddings_list) > 0:
-                    self._build_faiss_index(embeddings_matrix, student_id_list)
-            else:
-                self._embedding_cache = ([], [])
-                if self._use_faiss:
-                    self._faiss_index = None
-                    self._faiss_student_list = None
+            # Build FAISS index if available
+            if self._use_faiss:
+                self._build_faiss_index(embeddings_matrix, student_id_list)
 
             self._cache_timestamp = current_time
 
+            n_students = len(set(student_id_list))
+            n_vecs = len(student_id_list)
             if self._use_faiss:
-                current_app.logger.info(f"Rebuilt FAISS index with {len(student_id_list)} students")
+                current_app.logger.info(
+                    f"Rebuilt FAISS index: {n_vecs} vectors for {n_students} students "
+                    f"(source: {num_source})"
+                )
             else:
-                current_app.logger.info(f"Rebuilt embedding cache with {len(student_id_list)} students (NumPy)")
+                current_app.logger.info(
+                    f"Rebuilt NumPy cache: {n_vecs} vectors for {n_students} students "
+                    f"(source: {num_source})"
+                )
 
             return self._embedding_cache
 
@@ -318,72 +421,77 @@ class FaceService:
             current_app.logger.info("Embedding cache invalidated")
 
     def match_face(self, embedding, threshold=None):
-        """Match a face embedding against all students using FAISS or NumPy"""
+        """Match a face embedding against all students.
+
+        Returns:
+            (matched_student_id, best_score, second_best_score)
+
+        ``matched_student_id`` is None when no candidate clears *threshold*.
+        ``second_best_score`` is 0.0 when the index has fewer than 2 vectors.
+        The confidence ratio/margin = best_score − second_best_score.
+        """
         if threshold is None:
             threshold = current_app.config.get('FACE_MATCH_THRESHOLD', 0.60)
-        
+
         # Normalize query embedding for cosine similarity
         query_embedding = embedding / np.linalg.norm(embedding)
         query_embedding = query_embedding.astype('float32')
-        
-        # Try FAISS first if available
+
         if self._use_faiss:
             return self._match_face_faiss(query_embedding, threshold)
         else:
             return self._match_face_numpy(query_embedding, threshold)
-    
+
     def _match_face_faiss(self, query_embedding, threshold):
-        """Match face using FAISS index"""
-        # Get cached embeddings (will build FAISS index if needed)
+        """Match face using FAISS index; returns (student_id|None, best_score, second_score)."""
         embeddings_matrix, student_list = self._get_cached_embeddings()
-        
+
         if len(student_list) == 0:
-            return None, 0.0
-        
-        # Check if FAISS index is available
+            return None, 0.0, 0.0
+
+        # Fallback to NumPy if FAISS index is not ready
         if self._faiss_index is None or self._faiss_student_list is None:
             current_app.logger.warning("FAISS index not available, falling back to NumPy")
             return self._match_face_numpy(query_embedding, threshold)
-        
+
         try:
-            # Search for top match using FAISS
-            # Query shape needs to be (1, dim) for FAISS
             query = query_embedding.reshape(1, -1)
-            
-            # Search for k=1 nearest neighbor
-            distances, indices = self._faiss_index.search(query, 1)
-            
+            k = min(2, len(student_list))  # k=2 for confidence margin
+            distances, indices = self._faiss_index.search(query, k)
+
             best_score = float(distances[0][0])
             best_idx = int(indices[0][0])
-            
-            if best_score >= threshold:
-                # _faiss_student_list holds plain student_id strings — no ORM access needed
-                return self._faiss_student_list[best_idx], best_score
-            return None, best_score
-            
+            second_score = float(distances[0][1]) if k == 2 else 0.0
+
+            matched_id = self._faiss_student_list[best_idx] if best_score >= threshold else None
+            return matched_id, best_score, second_score
+
         except Exception as e:
-            current_app.logger.error(f"Error in FAISS search: {str(e)}, falling back to NumPy")
+            current_app.logger.error(f"FAISS search error: {e}, falling back to NumPy")
             return self._match_face_numpy(query_embedding, threshold)
-    
+
     def _match_face_numpy(self, query_embedding, threshold):
-        """Match face using NumPy (fallback method)"""
-        # Get cached embeddings
+        """Match face using NumPy; returns (student_id|None, best_score, second_score)."""
         embeddings_matrix, student_list = self._get_cached_embeddings()
-        
+
         if len(student_list) == 0:
-            return None, 0.0
-        
-        # Vectorized cosine similarity calculation
+            return None, 0.0, 0.0
+
         similarities = np.dot(embeddings_matrix, query_embedding)
-        
-        # Find best match
-        best_idx = np.argmax(similarities)
-        best_score = similarities[best_idx]
-        
-        if best_score >= threshold:
-            # student_list holds plain student_id strings — no ORM access needed
-            return student_list[best_idx], float(best_score)
-        return None, float(best_score)
+
+        if len(similarities) >= 2:
+            top2_idx = np.argpartition(similarities, -2)[-2:]
+            top2_idx = top2_idx[np.argsort(similarities[top2_idx])[::-1]]
+            best_idx, second_idx = int(top2_idx[0]), int(top2_idx[1])
+            best_score = float(similarities[best_idx])
+            second_score = float(similarities[second_idx])
+        else:
+            best_idx = int(np.argmax(similarities))
+            best_score = float(similarities[best_idx])
+            second_score = 0.0
+
+        matched_id = student_list[best_idx] if best_score >= threshold else None
+        return matched_id, best_score, second_score
     
     @staticmethod
     def _get_confidence_tier(score: float) -> str:
@@ -413,7 +521,7 @@ class FaceService:
 
     def process_image_for_attendance(self, image_data):
         """Process an image for attendance checking"""
-        start_time = time.time()
+        start_time = time.perf_counter()
         
         try:
             # Ensure model is initialized
@@ -484,28 +592,56 @@ class FaceService:
                     "recognized": [],
                     "unrecognized_count": 0,
                     "unrecognized_faces": [],
-                    "processing_time_ms": int((time.time() - start_time) * 1000),
+                    "processing_time_ms": round((time.perf_counter() - start_time) * 1000, 2),
                     "error": True,
                     "error_message": f"Face detection failed: {str(e)}"
                 }
-            
+
             if not faces:
-                processing_time = int((time.time() - start_time) * 1000)  # ms
+                processing_time = round((time.perf_counter() - start_time) * 1000, 2)
                 return {"recognized": [], "unrecognized_count": 0, "unrecognized_faces": [], "processing_time_ms": processing_time}
             
             recognized = []
             unrecognized = 0
             unrecognized_faces = []
             threshold = current_app.config.get('FACE_MATCH_THRESHOLD', 0.60)
+            t_detect_done = time.perf_counter()  # detection finished for all faces
+            detection_time_ms = round((t_detect_done - start_time) * 1000, 2)
             
             for i, face in enumerate(faces):
                 try:
+                    t_embed_start = time.perf_counter()
                     embedding = face.embedding
-                    bbox = face.bbox.astype(int)  # Get bounding box for each face
-                    student_id, score = self.match_face(embedding, threshold)
-                    
+                    bbox = face.bbox.astype(int)
+                    embedding_time_ms = round((time.perf_counter() - t_embed_start) * 1000, 2)
+
+                    t_search_start = time.perf_counter()
+                    student_id, score, second_score = self.match_face(embedding, threshold)
+                    search_time_ms = round((time.perf_counter() - t_search_start) * 1000, 2)
+                    confidence_margin = round(float(score) - float(second_score), 4)
+                    total_face_ms = round((time.perf_counter() - start_time) * 1000, 2)
+
+                    # Write recognition log (best-effort; don't let logging crash attendance)
+                    try:
+                        RecognitionLog.create(
+                            predicted_id=student_id,
+                            similarity_score=float(score),
+                            second_best_score=float(second_score),
+                            detection_ms=detection_time_ms,
+                            embedding_ms=embedding_time_ms,
+                            search_ms=search_time_ms,
+                            total_ms=total_face_ms,
+                            threshold=float(threshold),
+                            result='MATCH' if student_id else 'BELOW_THRESHOLD',
+                            source='live',
+                        )
+                        db.session.commit()
+                    except Exception as log_exc:
+                        db.session.rollback()
+                        current_app.logger.warning(f"RecognitionLog write failed: {log_exc}")
+
                     if student_id:
-                        # Fetch student within this request's session (db.session.get is the non-deprecated API)
+                        # Fetch student within this request's session
                         student = db.session.get(Student, student_id)
                         if student:
                             if self._is_spamming(student.student_id):
@@ -518,8 +654,10 @@ class FaceService:
                                     "student_id": student.student_id,
                                     "name": student.name,
                                     "score": float(score),
+                                    "second_score": float(second_score),
+                                    "confidence_margin": confidence_margin,
                                     "confidence_tier": self._get_confidence_tier(float(score)),
-                                    "bbox": bbox.tolist()
+                                    "bbox": bbox.tolist(),
                                 })
                         else:
                             current_app.logger.warning(f"Student {student_id} not found in database")
@@ -536,7 +674,7 @@ class FaceService:
                             y1c = max(0, y1 - pad)
                             x2c = min(w_img, x2 + pad)
                             y2c = min(h_img, y2 + pad)
-                            crop = img[y1c:y2c, x1c:x2c]  # BGR crop
+                            crop = img[y1c:y2c, x1c:x2c]
                             upload_folder = current_app.config.get('UPLOAD_FOLDER', 'uploads')
                             unrecognized_dir = os.path.join(upload_folder, 'unrecognized')
                             os.makedirs(unrecognized_dir, exist_ok=True)
@@ -556,7 +694,7 @@ class FaceService:
                     current_app.logger.error(f"Error processing face {i}: {str(e)}")
                     unrecognized += 1
             
-            processing_time = int((time.time() - start_time) * 1000)  # ms
+            processing_time = round((time.perf_counter() - start_time) * 1000, 2)  # ms
             
             return {
                 "recognized": recognized,
@@ -572,7 +710,7 @@ class FaceService:
                 "recognized": [],
                 "unrecognized_count": 0,
                 "unrecognized_faces": [],
-                "processing_time_ms": int((time.time() - start_time) * 1000),
+                "processing_time_ms": round((time.perf_counter() - start_time) * 1000, 2),
                 "error": True,
                 "error_message": f"Unexpected error: {str(e)}"
             }

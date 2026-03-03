@@ -116,6 +116,7 @@ def create_app(config_name='dev'):
     from .api.camera_events import camera_events_bp
     from .api.settings import settings_bp
     from .api.public_register import public_bp
+    from .api.metrics import metrics_bp
     
     app.register_blueprint(student_bp, url_prefix='/api/v1/students')
     app.register_blueprint(attendance_bp, url_prefix='/api/v1/attendance')
@@ -125,6 +126,7 @@ def create_app(config_name='dev'):
     app.register_blueprint(camera_events_bp, url_prefix='/api/v1/camera-events')
     app.register_blueprint(settings_bp, url_prefix='/api/v1/settings')
     app.register_blueprint(public_bp, url_prefix='/public')
+    app.register_blueprint(metrics_bp, url_prefix='/api/v1/metrics')
     
     # Global error handler
     @app.errorhandler(Exception)

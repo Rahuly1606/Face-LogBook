@@ -5,6 +5,11 @@ Routes (no authentication required):
     GET  /public/register/<token>   – validate token & return group info
     POST /public/register/<token>   – submit self-registration
 
+Self-registration supports two modes detected automatically:
+  • Single-pose (legacy):  body contains ``image`` key (base64)
+  • Three-pose (preferred): body contains ``front_image``, ``left_image``,
+    ``right_image`` keys (all base64)
+
 Rate-limited via Flask-Limiter (defined in app/__init__.py).
 """
 import base64
@@ -17,6 +22,7 @@ import numpy as np
 from flask import Blueprint, current_app, jsonify, request
 
 from app import db, limiter
+from app.models.face_embedding import FaceEmbedding
 from app.models.group import Group
 from app.models.registration_link import RegistrationLink
 from app.models.student import Student
@@ -140,15 +146,16 @@ def self_register(token: str):
     """
     Process a student self-registration submission.
 
-    Expected JSON body:
-        {
-            "name":      "Full Name",           // required
-            "id_number": "STU12345",            // required, becomes student_id
-            "image":     "data:image/jpeg;base64,/9j/..." // required
-        }
+    Single-pose (legacy) body:
+        { "name": "…", "id_number": "…", "image": "<base64>" }
+
+    Three-pose (preferred) body:
+        { "name": "…", "id_number": "…",
+          "front_image": "<base64>",
+          "left_image":  "<base64>",
+          "right_image": "<base64>" }
 
     Returns HTTP 201 on success; 4xx on validation / business-logic errors.
-    Duplicate-face check uses FAISS with SELF_REGISTER_DUPLICATE_THRESHOLD.
     """
     # ------------------------------------------------------------------ #
     # 1. Token validation                                                  #
@@ -188,33 +195,37 @@ def self_register(token: str):
 
     name = (body.get("name") or "").strip()
     id_number = (body.get("id_number") or "").strip()
-    image_b64 = body.get("image", "")
 
     if not name or len(name) < 2:
         return jsonify({"success": False, "message": "Name must be at least 2 characters."}), 400
     if len(name) > 100:
         return jsonify({"success": False, "message": "Name too long (max 100 characters)."}), 400
-
     if not id_number or len(id_number) < 2:
         return jsonify({"success": False, "message": "ID number must be at least 2 characters."}), 400
     if len(id_number) > 50:
         return jsonify({"success": False, "message": "ID number too long (max 50 characters)."}), 400
 
-    if not image_b64:
-        return jsonify({"success": False, "message": "Photo is required."}), 400
+    # Detect mode
+    three_pose_mode = (
+        body.get("front_image") and body.get("left_image") and body.get("right_image")
+    )
+    if three_pose_mode:
+        pose_keys = {"front": "front_image", "left": "left_image", "right": "right_image"}
+    else:
+        if not body.get("image"):
+            return jsonify({"success": False, "message": "Photo is required."}), 400
+        pose_keys = None  # single-pose
 
     # ------------------------------------------------------------------ #
-    # 3. Duplicate ID check (allow multi-section, but not same section)   #
+    # 3. Duplicate ID / group check                                        #
     # ------------------------------------------------------------------ #
     existing_student = Student.query.filter_by(student_id=id_number).first()
     if existing_student:
-        # Check if student is already in THIS group
-        student_groups = db.session.execute(
+        student_groups_rows = db.session.execute(
             db.text("SELECT group_id FROM student_groups WHERE student_id = :sid"),
-            {"sid": id_number}
+            {"sid": id_number},
         ).fetchall()
-        existing_group_ids = [row[0] for row in student_groups]
-        
+        existing_group_ids = [row[0] for row in student_groups_rows]
         if link.group_id in existing_group_ids:
             return (
                 jsonify(
@@ -226,56 +237,89 @@ def self_register(token: str):
                 ),
                 409,
             )
-        # Student exists but not in this group - will add them to this group later
 
     # ------------------------------------------------------------------ #
-    # 4. Decode & validate image                                           #
-    # ------------------------------------------------------------------ #
-    image_bytes, img_error = _decode_base64_image(image_b64)
-    if img_error:
-        return jsonify({"success": False, "message": img_error}), 400
-
-    # ------------------------------------------------------------------ #
-    # 5. Face detection (single-face enforcement)                          #
+    # 4. Decode images & face validation                                   #
     # ------------------------------------------------------------------ #
     if not _face_service.initialized:
         _face_service.initialize()
 
-    embedding, face_error = _face_service.detect_face_for_registration(image_bytes)
-    if face_error:
-        _FACE_ERROR_MESSAGES = {
-            "no_face": (
-                "No face detected in your photo. "
-                "Please ensure your face is clearly visible, well-lit, and not obscured."
-            ),
-            "multiple_faces": (
-                "Multiple faces detected. "
-                "Please take the photo alone and ensure no other faces are visible."
-            ),
-            "model_unavailable": (
-                "Face recognition service is temporarily unavailable. "
-                "Please try again in a few moments."
-            ),
-        }
-        return (
-            jsonify(
-                {
-                    "success": False,
-                    "error": face_error,
-                    "message": _FACE_ERROR_MESSAGES.get(
-                        face_error, "Face verification failed. Please retake your photo."
+    _FACE_ERROR_MESSAGES = {
+        "no_face": (
+            "No face detected. Ensure your face is clearly visible and well-lit."
+        ),
+        "multiple_faces": (
+            "Multiple faces detected. Please take the photo alone."
+        ),
+        "blurry_image": (
+            "Image is too blurry. Please hold the camera steady and retake."
+        ),
+        "face_too_small": (
+            "Your face is too small in the frame. Move closer to the camera."
+        ),
+        "model_unavailable": (
+            "Face recognition service is temporarily unavailable. Please try again."
+        ),
+    }
+
+    if three_pose_mode:
+        embeddings: dict[str, np.ndarray] = {}
+        for pose, key in pose_keys.items():
+            img_bytes, decode_err = _decode_base64_image(body[key])
+            if decode_err:
+                return jsonify({"success": False, "message": f"{pose.capitalize()} photo: {decode_err}"}), 400
+            result = _face_service.validate_and_embed_pose(img_bytes)
+            if not result["success"]:
+                msg = _FACE_ERROR_MESSAGES.get(
+                    result["error_code"],
+                    result.get("error_message", "Face verification failed."),
+                )
+                return (
+                    jsonify(
+                        {
+                            "success": False,
+                            "error": result["error_code"],
+                            "pose": pose,
+                            "message": f"{pose.capitalize()} photo: {msg}",
+                            "blur_score": result.get("blur_score"),
+                        }
                     ),
-                }
-            ),
-            422,
-        )
+                    422,
+                )
+            embeddings[pose] = result["embedding"]
+        # Use front embedding for legacy duplicate-face check
+        primary_embedding = embeddings["front"]
+        primary_image_bytes, _ = _decode_base64_image(body["front_image"])
+
+    else:
+        # ---- Single-pose (legacy) ----
+        image_bytes, img_error = _decode_base64_image(body.get("image", ""))
+        if img_error:
+            return jsonify({"success": False, "message": img_error}), 400
+        embedding, face_error = _face_service.detect_face_for_registration(image_bytes)
+        if face_error:
+            return (
+                jsonify(
+                    {
+                        "success": False,
+                        "error": face_error,
+                        "message": _FACE_ERROR_MESSAGES.get(
+                            face_error, "Face verification failed. Please retake your photo."
+                        ),
+                    }
+                ),
+                422,
+            )
+        embeddings = {"front": embedding}
+        primary_embedding = embedding
+        primary_image_bytes = image_bytes
 
     # ------------------------------------------------------------------ #
-    # 6. Duplicate face check via FAISS                                    #
+    # 5. Duplicate face check via FAISS                                    #
     # ------------------------------------------------------------------ #
     dup_threshold = current_app.config.get("SELF_REGISTER_DUPLICATE_THRESHOLD", 0.60)
-    matched_id, similarity_score = _face_service.match_face(embedding, threshold=dup_threshold)
-    
+    matched_id, similarity_score, _second = _face_service.match_face(primary_embedding, threshold=dup_threshold)
+
     # Allow if matched face is the same student registering for another section
     if matched_id is not None and matched_id != id_number:
         current_app.logger.warning(
@@ -298,51 +342,54 @@ def self_register(token: str):
         )
 
     # ------------------------------------------------------------------ #
-    # 7. Persist photo (only for new students)                            #
+    # 6. Persist photo (only for new students)                             #
     # ------------------------------------------------------------------ #
     photo_path = None
     if not existing_student:
-        photo_path = _save_photo(image_bytes, id_number)
+        photo_path = _save_photo(primary_image_bytes, id_number)
 
     # ------------------------------------------------------------------ #
-    # 8. Create or update Student record                                   #
+    # 7. Create or update Student record + FaceEmbedding rows              #
     # ------------------------------------------------------------------ #
     try:
         if existing_student:
-            # Student already exists - just add them to this group
+            # Student already exists — add to this group and upsert pose embeddings
             db.session.execute(
                 db.text("""
                     INSERT INTO student_groups (student_id, group_id, created_at)
                     VALUES (:sid, :gid, NOW())
                 """),
-                {"sid": id_number, "gid": link.group_id}
-            )
-            db.session.commit()
-            
-            current_app.logger.info(
-                f"Self-registration: Added existing student {id_number!r} to group {group.name!r}"
+                {"sid": id_number, "gid": link.group_id},
             )
         else:
-            # New student - create record and add to group
             student = Student(
                 student_id=id_number,
                 name=name,
-                group_id=link.group_id,  # Legacy field for backward compatibility
+                group_id=link.group_id,
                 photo_path=photo_path,
             )
-            student.set_embedding(embedding)
+            # Store front embedding in legacy column for backward compat
+            student.set_embedding(embeddings["front"])
             db.session.add(student)
-            db.session.flush()  # Ensure student is created before adding to junction table
-            
-            # Add to student_groups junction table
+            db.session.flush()  # make student_id available for FK
+
             db.session.execute(
                 db.text("""
                     INSERT INTO student_groups (student_id, group_id, created_at)
                     VALUES (:sid, :gid, NOW())
                 """),
-                {"sid": id_number, "gid": link.group_id}
+                {"sid": id_number, "gid": link.group_id},
             )
-            db.session.commit()
+
+        # ---- Upsert FaceEmbedding rows (works for both new & existing students) ----
+        for pose, emb in embeddings.items():
+            fe = FaceEmbedding.query.filter_by(student_id=id_number, pose=pose).first()
+            if fe is None:
+                fe = FaceEmbedding(student_id=id_number, pose=pose)
+                db.session.add(fe)
+            fe.set_embedding(emb)
+
+        db.session.commit()
     except Exception as exc:
         db.session.rollback()
         current_app.logger.error(
@@ -356,13 +403,14 @@ def self_register(token: str):
         )
 
     # ------------------------------------------------------------------ #
-    # 9. Invalidate FAISS cache so the new student is searchable          #
+    # 8. Invalidate FAISS cache                                            #
     # ------------------------------------------------------------------ #
     _face_service.invalidate_cache()
 
     current_app.logger.info(
         f"Self-registration SUCCESS: student_id={id_number!r} name={name!r} "
-        f"group_id={link.group_id} group={group.name!r}"
+        f"group_id={link.group_id} group={group.name!r} "
+        f"poses={list(embeddings.keys())}"
     )
 
     return (
@@ -373,6 +421,7 @@ def self_register(token: str):
                 "student_id": id_number,
                 "name": name,
                 "group_name": group.name,
+                "poses_registered": list(embeddings.keys()),
             }
         ),
         201,
