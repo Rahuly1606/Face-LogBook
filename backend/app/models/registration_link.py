@@ -35,7 +35,7 @@ class RegistrationLink(db.Model):
     # Relationships
     group = db.relationship(
         "Group",
-        backref=db.backref("registration_links", lazy="dynamic"),
+        back_populates="registration_links",
     )
 
     def __repr__(self) -> str:

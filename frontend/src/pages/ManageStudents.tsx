@@ -4,8 +4,10 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
+import { Checkbox } from '@/components/ui/checkbox';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useNavigate } from 'react-router-dom';
-import { studentApi, Student } from '@/services/api';
+import { studentApi, Student, groupApi, Group } from '@/services/api';
 import { useToast } from '@/hooks/use-toast';
 import {
     AlertDialog,
@@ -26,12 +28,26 @@ export default function Students() {
     const [searchQuery, setSearchQuery] = useState('');
     const [loading, setLoading] = useState(true);
     const [students, setStudents] = useState<Student[]>([]);
+    const [groups, setGroups] = useState<Group[]>([]);
+    const [selectedGroupId, setSelectedGroupId] = useState<string>('all');
+    const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
     const [deleteId, setDeleteId] = useState<string | null>(null);
+    const [bulkDeleteMode, setBulkDeleteMode] = useState(false);
     const [currentPage, setCurrentPage] = useState(1);
 
     useEffect(() => {
         loadStudents();
+        loadGroups();
     }, []);
+
+    const loadGroups = async () => {
+        try {
+            const groupsData = await groupApi.getAll();
+            setGroups(groupsData || []);
+        } catch (error: any) {
+            console.error('Failed to load groups:', error);
+        }
+    };
 
     const loadStudents = async () => {
         setLoading(true);
@@ -67,11 +83,58 @@ export default function Students() {
         setDeleteId(null);
     };
 
+    const handleBulkDelete = async () => {
+        try {
+            const idsArray = Array.from(selectedIds);
+            await studentApi.bulkDelete(idsArray);
+            toast({
+                title: 'Success',
+                description: `Successfully deleted ${idsArray.length} student${idsArray.length > 1 ? 's' : ''}`,
+            });
+            setSelectedIds(new Set());
+            loadStudents();
+        } catch (error: any) {
+            toast({
+                title: 'Error',
+                description: error.message || 'Failed to delete students',
+                variant: 'destructive',
+            });
+        }
+        setBulkDeleteMode(false);
+    };
+
+    const toggleSelectAll = () => {
+        if (selectedIds.size === paginatedStudents.length) {
+            setSelectedIds(new Set());
+        } else {
+            const allIds = new Set(paginatedStudents.map(s => s.student_id));
+            setSelectedIds(allIds);
+        }
+    };
+
+    const toggleSelectStudent = (studentId: string) => {
+        const newSelected = new Set(selectedIds);
+        if (newSelected.has(studentId)) {
+            newSelected.delete(studentId);
+        } else {
+            newSelected.add(studentId);
+        }
+        setSelectedIds(newSelected);
+    };
+
     const filteredStudents = students
-        .filter((student) =>
-            student.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-            student.student_id.toLowerCase().includes(searchQuery.toLowerCase())
-        )
+        .filter((student) => {
+            // Filter by search query
+            const matchesSearch =
+                student.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                student.student_id.toLowerCase().includes(searchQuery.toLowerCase());
+
+            // Filter by group
+            const matchesGroup = selectedGroupId === 'all' ||
+                student.group_id?.toString() === selectedGroupId;
+
+            return matchesSearch && matchesGroup;
+        })
         .sort((a, b) => {
             const numA = parseInt(a.student_id);
             const numB = parseInt(b.student_id);
@@ -84,10 +147,11 @@ export default function Students() {
     const endIndex = startIndex + STUDENTS_PER_PAGE;
     const paginatedStudents = filteredStudents.slice(startIndex, endIndex);
 
-    // Reset to page 1 when search changes
+    // Reset to page 1 when search or group filter changes
     useEffect(() => {
         setCurrentPage(1);
-    }, [searchQuery]);
+        setSelectedIds(new Set()); // Clear selection when filter changes
+    }, [searchQuery, selectedGroupId]);
 
     const goToPage = (page: number) => {
         setCurrentPage(page);
@@ -110,24 +174,70 @@ export default function Students() {
                 </Button>
             </div>
 
-            {/* Search and Stats */}
+            {/* Search and Filters */}
             <Card className="p-4 bg-card-light border-0">
-                <div className="flex flex-col sm:flex-row gap-4 items-start sm:items-center justify-between">
-                    <div className="relative flex-1 w-full sm:w-auto">
-                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                        <Input
-                            type="text"
-                            placeholder="Search by name or student ID..."
-                            value={searchQuery}
-                            onChange={(e) => setSearchQuery(e.target.value)}
-                            className="pl-10"
-                        />
-                    </div>
-                    {!loading && filteredStudents.length > 0 && (
-                        <div className="text-sm text-muted-foreground whitespace-nowrap">
-                            Showing {startIndex + 1}-{Math.min(endIndex, filteredStudents.length)} of {filteredStudents.length}
+                <div className="flex flex-col gap-4">
+                    <div className="flex flex-col sm:flex-row gap-4 items-start sm:items-center">
+                        <div className="relative flex-1 w-full sm:w-auto">
+                            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                            <Input
+                                type="text"
+                                placeholder="Search by name or student ID..."
+                                value={searchQuery}
+                                onChange={(e) => setSearchQuery(e.target.value)}
+                                className="pl-10"
+                            />
                         </div>
-                    )}
+                        <div className="w-full sm:w-[200px]">
+                            <Select value={selectedGroupId} onValueChange={setSelectedGroupId}>
+                                <SelectTrigger>
+                                    <SelectValue placeholder="All Groups" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    <SelectItem value="all">All Groups</SelectItem>
+                                    {groups.map((group) => (
+                                        <SelectItem key={group.id} value={group.id.toString()}>
+                                            {group.name}
+                                        </SelectItem>
+                                    ))}
+                                </SelectContent>
+                            </Select>
+                        </div>
+                    </div>
+
+                    {/* Stats and Bulk Actions */}
+                    <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+                        <div className="flex items-center gap-4">
+                            {!loading && filteredStudents.length > 0 && (
+                                <>
+                                    <div className="flex items-center gap-2">
+                                        <Checkbox
+                                            id="select-all"
+                                            checked={paginatedStudents.length > 0 && selectedIds.size === paginatedStudents.length}
+                                            onCheckedChange={toggleSelectAll}
+                                        />
+                                        <label htmlFor="select-all" className="text-sm text-muted-foreground cursor-pointer">
+                                            Select All
+                                        </label>
+                                    </div>
+                                    <div className="text-sm text-muted-foreground">
+                                        Showing {startIndex + 1}-{Math.min(endIndex, filteredStudents.length)} of {filteredStudents.length}
+                                    </div>
+                                </>
+                            )}
+                        </div>
+                        {selectedIds.size > 0 && (
+                            <Button
+                                variant="destructive"
+                                size="sm"
+                                onClick={() => setBulkDeleteMode(true)}
+                                className="gap-2"
+                            >
+                                <Trash2 className="h-4 w-4" />
+                                Delete Selected ({selectedIds.size})
+                            </Button>
+                        )}
+                    </div>
                 </div>
             </Card>
 
@@ -160,6 +270,11 @@ export default function Students() {
                                 className="p-6 bg-card-dark text-card-foreground border-0 hover:shadow-lg transition-shadow"
                             >
                                 <div className="flex items-start gap-4">
+                                    <Checkbox
+                                        checked={selectedIds.has(student.student_id)}
+                                        onCheckedChange={() => toggleSelectStudent(student.student_id)}
+                                        className="mt-1"
+                                    />
                                     <div className="w-16 h-16 rounded-full bg-accent/20 flex items-center justify-center text-2xl font-bold text-black">
                                         {student.name.charAt(0)}
                                     </div>
@@ -282,6 +397,27 @@ export default function Students() {
                             className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
                         >
                             Delete
+                        </AlertDialogAction>
+                    </AlertDialogFooter>
+                </AlertDialogContent>
+            </AlertDialog>
+
+            {/* Bulk Delete Confirmation Dialog */}
+            <AlertDialog open={bulkDeleteMode} onOpenChange={setBulkDeleteMode}>
+                <AlertDialogContent>
+                    <AlertDialogHeader>
+                        <AlertDialogTitle>Delete Multiple Students?</AlertDialogTitle>
+                        <AlertDialogDescription>
+                            This action cannot be undone. This will permanently delete {selectedIds.size} student{selectedIds.size > 1 ? 's' : ''} from the system.
+                        </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                        <AlertDialogCancel>Cancel</AlertDialogCancel>
+                        <AlertDialogAction
+                            onClick={handleBulkDelete}
+                            className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                        >
+                            Delete {selectedIds.size} Student{selectedIds.size > 1 ? 's' : ''}
                         </AlertDialogAction>
                     </AlertDialogFooter>
                 </AlertDialogContent>

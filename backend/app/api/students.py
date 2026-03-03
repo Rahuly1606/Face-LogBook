@@ -72,7 +72,36 @@ def register_student():
         # Check if student already exists
         existing_student = Student.query.filter_by(student_id=student_id).first()
         if existing_student:
-            return jsonify({"error": f"Student with ID {student_id} already exists"}), 409
+            # Check if already in this group (if group_id is provided)
+            if group_id:
+                student_groups = db.session.execute(
+                    db.text("SELECT group_id FROM student_groups WHERE student_id = :sid"),
+                    {"sid": student_id}
+                ).fetchall()
+                existing_group_ids = [row[0] for row in student_groups]
+                
+                if group_id in existing_group_ids:
+                    return jsonify({"error": f"Student with ID {student_id} is already in this group"}), 409
+                
+                # Add existing student to new group
+                db.session.execute(
+                    db.text("""
+                        INSERT INTO student_groups (student_id, group_id, created_at)
+                        VALUES (:sid, :gid, NOW())
+                    """),
+                    {"sid": student_id, "gid": group_id}
+                )
+                db.session.commit()
+                
+                # Invalidate FAISS cache
+                face_service.invalidate_cache()
+                
+                return jsonify({
+                    "message": f"Student {student_id} added to group successfully",
+                    "student": existing_student.to_dict()
+                }), 200
+            else:
+                return jsonify({"error": f"Student with ID {student_id} already exists"}), 409
             
         # Create new student with basic info first
         new_student = Student(
@@ -171,6 +200,18 @@ def register_student():
         
         # Save the student to the database
         db.session.add(new_student)
+        db.session.flush()  # Ensure student exists before adding to junction table
+        
+        # Add to student_groups junction table if group_id is provided
+        if group_id:
+            db.session.execute(
+                db.text("""
+                    INSERT INTO student_groups (student_id, group_id, created_at)
+                    VALUES (:sid, :gid, NOW())
+                """),
+                {"sid": student_id, "gid": group_id}
+            )
+        
         db.session.commit()
         
         # Invalidate the face service cache since we added a new student

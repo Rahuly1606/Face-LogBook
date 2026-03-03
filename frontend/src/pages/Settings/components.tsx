@@ -1,9 +1,9 @@
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Clock, RefreshCw, BookOpen, Trash2, ShieldCheck, Save, Loader2 } from 'lucide-react';
+import { TimePicker } from '@/components/TimePicker';
 import type { AttendanceWindowSettings, WindowStatusResponse } from '@/services/api';
 
 interface GroupSelectorProps {
@@ -57,8 +57,7 @@ export function GroupSelector({
                     onClick={onSaveGroup}
                     disabled={savingGroup}
                     size="sm"
-                    variant="outline"
-                    title="Save as default section"
+                    variant="outline" className="text-black border-black hover:bg-black/10" title="Save as default section"
                 >
                     {savingGroup ? (
                         <Loader2 className="h-4 w-4 animate-spin" />
@@ -197,51 +196,29 @@ export function TimeWindowForm({ form, saving, isCustomForGroup, onFormChange, o
             <TimelinePreview form={form} />
 
             <div className="grid gap-4 sm:grid-cols-2">
-                <div>
-                    <Label htmlFor="window_start" className="text-foreground font-medium">
-                        Window Opens (On-time Start)
-                    </Label>
-                    <Input
-                        id="window_start"
-                        type="time"
-                        value={form.window_start}
-                        onChange={(e) => onFormChange({ ...form, window_start: e.target.value })}
-                        className="text-foreground mt-1"
-                    />
-                    <p className="text-xs text-muted-foreground mt-1">
-                        Students arriving from this time are marked <strong>Present</strong>
-                    </p>
-                </div>
+                <TimePicker
+                    id="window_start"
+                    label="Window Opens (On-time Start)"
+                    value={form.window_start}
+                    onChange={(value) => onFormChange({ ...form, window_start: value })}
+                    description="Students arriving from this time are marked Present"
+                />
 
-                <div>
-                    <Label htmlFor="window_end" className="text-foreground font-medium">
-                        On-time Window Ends
-                    </Label>
-                    <Input
-                        id="window_end"
-                        type="time"
-                        value={form.window_end}
-                        onChange={(e) => onFormChange({ ...form, window_end: e.target.value })}
-                        className="text-foreground mt-1"
-                    />
-                    <p className="text-xs text-muted-foreground mt-1">After this, policy below applies</p>
-                </div>
+                <TimePicker
+                    id="window_end"
+                    label="On-time Window Ends"
+                    value={form.window_end}
+                    onChange={(value) => onFormChange({ ...form, window_end: value })}
+                    description="After this, policy below applies"
+                />
 
-                <div>
-                    <Label htmlFor="late_end" className="text-foreground font-medium">
-                        Late Cutoff Time
-                    </Label>
-                    <Input
-                        id="late_end"
-                        type="time"
-                        value={form.late_end}
-                        onChange={(e) => onFormChange({ ...form, late_end: e.target.value })}
-                        className="text-foreground mt-1"
-                    />
-                    <p className="text-xs text-muted-foreground mt-1">
-                        After this time, <strong>no</strong> attendance is accepted
-                    </p>
-                </div>
+                <TimePicker
+                    id="late_end"
+                    label="Late Cutoff Time"
+                    value={form.late_end}
+                    onChange={(value) => onFormChange({ ...form, late_end: value })}
+                    description="After this time, no attendance is accepted"
+                />
 
                 <div>
                     <Label htmlFor="late_policy" className="text-foreground font-medium">

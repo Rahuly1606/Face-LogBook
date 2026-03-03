@@ -204,19 +204,29 @@ def self_register(token: str):
         return jsonify({"success": False, "message": "Photo is required."}), 400
 
     # ------------------------------------------------------------------ #
-    # 3. Duplicate ID check                                                #
+    # 3. Duplicate ID check (allow multi-section, but not same section)   #
     # ------------------------------------------------------------------ #
-    if Student.query.filter_by(student_id=id_number).first() is not None:
-        return (
-            jsonify(
-                {
-                    "success": False,
-                    "error": "duplicate_id",
-                    "message": "You have already registered with this ID number.",
-                }
-            ),
-            409,
-        )
+    existing_student = Student.query.filter_by(student_id=id_number).first()
+    if existing_student:
+        # Check if student is already in THIS group
+        student_groups = db.session.execute(
+            db.text("SELECT group_id FROM student_groups WHERE student_id = :sid"),
+            {"sid": id_number}
+        ).fetchall()
+        existing_group_ids = [row[0] for row in student_groups]
+        
+        if link.group_id in existing_group_ids:
+            return (
+                jsonify(
+                    {
+                        "success": False,
+                        "error": "already_in_group",
+                        "message": f"You are already registered in {group.name}.",
+                    }
+                ),
+                409,
+            )
+        # Student exists but not in this group - will add them to this group later
 
     # ------------------------------------------------------------------ #
     # 4. Decode & validate image                                           #
@@ -265,7 +275,9 @@ def self_register(token: str):
     # ------------------------------------------------------------------ #
     dup_threshold = current_app.config.get("SELF_REGISTER_DUPLICATE_THRESHOLD", 0.60)
     matched_id, similarity_score = _face_service.match_face(embedding, threshold=dup_threshold)
-    if matched_id is not None:
+    
+    # Allow if matched face is the same student registering for another section
+    if matched_id is not None and matched_id != id_number:
         current_app.logger.warning(
             "Self-registration BLOCKED — duplicate face: "
             f"submitted_id={id_number!r} matched_existing={matched_id!r} "
@@ -286,23 +298,51 @@ def self_register(token: str):
         )
 
     # ------------------------------------------------------------------ #
-    # 7. Persist photo                                                     #
+    # 7. Persist photo (only for new students)                            #
     # ------------------------------------------------------------------ #
-    photo_path = _save_photo(image_bytes, id_number)
+    photo_path = None
+    if not existing_student:
+        photo_path = _save_photo(image_bytes, id_number)
 
     # ------------------------------------------------------------------ #
-    # 8. Create Student record                                             #
+    # 8. Create or update Student record                                   #
     # ------------------------------------------------------------------ #
     try:
-        student = Student(
-            student_id=id_number,
-            name=name,
-            group_id=link.group_id,
-            photo_path=photo_path,
-        )
-        student.set_embedding(embedding)
-        db.session.add(student)
-        db.session.commit()
+        if existing_student:
+            # Student already exists - just add them to this group
+            db.session.execute(
+                db.text("""
+                    INSERT INTO student_groups (student_id, group_id, created_at)
+                    VALUES (:sid, :gid, NOW())
+                """),
+                {"sid": id_number, "gid": link.group_id}
+            )
+            db.session.commit()
+            
+            current_app.logger.info(
+                f"Self-registration: Added existing student {id_number!r} to group {group.name!r}"
+            )
+        else:
+            # New student - create record and add to group
+            student = Student(
+                student_id=id_number,
+                name=name,
+                group_id=link.group_id,  # Legacy field for backward compatibility
+                photo_path=photo_path,
+            )
+            student.set_embedding(embedding)
+            db.session.add(student)
+            db.session.flush()  # Ensure student is created before adding to junction table
+            
+            # Add to student_groups junction table
+            db.session.execute(
+                db.text("""
+                    INSERT INTO student_groups (student_id, group_id, created_at)
+                    VALUES (:sid, :gid, NOW())
+                """),
+                {"sid": id_number, "gid": link.group_id}
+            )
+            db.session.commit()
     except Exception as exc:
         db.session.rollback()
         current_app.logger.error(

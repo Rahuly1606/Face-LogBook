@@ -5,6 +5,9 @@ import numpy as np
 import pickle
 import os
 
+# Import student_groups association table (will be defined in __init__.py)
+# Note: This import happens after the table is defined in models/__init__.py
+
 class Student(db.Model):
     __tablename__ = 'students'
     
@@ -16,7 +19,8 @@ class Student(db.Model):
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     
     # Relationships
-    group = db.relationship('Group', back_populates='students')
+    group = db.relationship('Group', back_populates='students', foreign_keys=[group_id])  # Legacy single group relationship
+    groups = db.relationship('Group', secondary='student_groups', back_populates='enrolled_students', lazy='subquery', overlaps="group,students")  # New many-to-many relationship
     attendances = db.relationship('Attendance', back_populates='student', cascade='all, delete-orphan')
     camera_events = db.relationship('CameraEvent', back_populates='student', cascade='all, delete-orphan')
     
@@ -28,9 +32,24 @@ class Student(db.Model):
             data = {
                 'student_id': self.student_id,
                 'name': self.name,
-                'group_id': self.group_id,
+                'group_id': self.group_id,  # Legacy field for backward compatibility
                 'created_at': self.created_at.isoformat() if self.created_at else None
             }
+            
+            # Add group information (support both single and multiple groups)
+            if self.groups:
+                # New many-to-many relationship
+                data['groups'] = [{'id': g.id, 'name': g.name} for g in self.groups]
+                # For backward compatibility, set group_name to first group
+                if len(self.groups) > 0:
+                    data['group_name'] = self.groups[0].name
+            elif self.group:
+                # Legacy single group relationship
+                data['group_name'] = self.group.name
+                data['groups'] = [{'id': self.group.id, 'name': self.group.name}]
+            else:
+                data['group_name'] = None
+                data['groups'] = []
             
             # Safely handle photo path and URL
             if self.photo_path:
