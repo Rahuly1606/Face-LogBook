@@ -1,13 +1,53 @@
 import { useState, useEffect } from 'react';
-import { Users, FolderKanban, CheckCircle2, TrendingUp, Loader2, Calendar, Clock, Award, Activity, Sparkles } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
+import {
+  Users,
+  FolderKanban,
+  CheckCircle2,
+  TrendingUp,
+  Calendar,
+  Clock,
+  Award,
+  Video,
+  Upload,
+  ArrowRight,
+} from 'lucide-react';
+import {
+  ResponsiveContainer,
+  BarChart,
+  Bar,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip as RTooltip,
+  Cell,
+  PieChart,
+  Pie,
+} from 'recharts';
 import { StatCard } from '@/components/ui/stat-card';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
+import { Skeleton } from '@/components/ui/skeleton';
+import { PageHeader } from '@/components/layout/PageHeader';
 import { studentApi, groupApi, attendanceApi, AttendanceRecord } from '@/services/api';
 import { useToast } from '@/hooks/use-toast';
 
+interface GroupStat {
+  name: string;
+  attendance: number;
+  total: number;
+  rate: number;
+}
+
+const CHART = {
+  bar: 'hsl(214 90% 50%)',
+  present: 'hsl(142 62% 42%)',
+  remaining: 'hsl(214 16% 88%)',
+};
+
 export default function Dashboard() {
   const { toast } = useToast();
+  const navigate = useNavigate();
   const [loading, setLoading] = useState(true);
   const [stats, setStats] = useState({
     totalStudents: 0,
@@ -16,8 +56,7 @@ export default function Dashboard() {
     attendanceRate: 0,
   });
   const [recentAttendance, setRecentAttendance] = useState<AttendanceRecord[]>([]);
-  const [weeklyData, setWeeklyData] = useState<{ day: string; rate: number; count: number }[]>([]);
-  const [topGroups, setTopGroups] = useState<{ name: string; attendance: number; total: number }[]>([]);
+  const [groupStats, setGroupStats] = useState<GroupStat[]>([]);
 
   useEffect(() => {
     loadDashboardData();
@@ -32,74 +71,40 @@ export default function Dashboard() {
         attendanceApi.getToday().catch(() => ({ attendance: [] })),
       ]);
 
-      const totalStudents = studentsData.students?.length || 0;
-      const totalGroups = groupsData.length || 0;
-      // Count only students with status 'present' 
-      const todayAttendance = attendanceData.attendance?.filter((record: any) => record.status === 'present').length || 0;
+      const students = studentsData.students || [];
+      const records = attendanceData.attendance || [];
+      const totalStudents = students.length;
+      const totalGroups = groupsData.length;
+      const presentRecords = records.filter((r: AttendanceRecord) => r.status === 'present');
+      const todayAttendance = presentRecords.length;
       const attendanceRate = totalStudents > 0 ? (todayAttendance / totalStudents) * 100 : 0;
 
-      setStats({
-        totalStudents,
-        totalGroups,
-        todayAttendance,
-        attendanceRate,
-      });
+      setStats({ totalStudents, totalGroups, todayAttendance, attendanceRate });
+      setRecentAttendance([...presentRecords].reverse().slice(0, 6));
 
-      // Get last 5 attendance records that are present (not absent)
-      const presentRecords = attendanceData.attendance?.filter((record: any) => record.status === 'present') || [];
-      setRecentAttendance(presentRecords.slice(0, 5));
-
-      // Generate weekly data (mock data for visualization)
-      const days = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
-      const weekly = days.map((day, index) => ({
-        day,
-        rate: Math.max(60, Math.min(100, attendanceRate + (Math.random() * 20 - 10))),
-        count: Math.floor(totalStudents * (0.6 + Math.random() * 0.4))
-      }));
-      setWeeklyData(weekly);
-
-      // Calculate top groups by attendance
-      const groupStats = groupsData.map((group: any) => {
-        const groupStudents = studentsData.students?.filter((s: any) => s.group_id === group.id) || [];
-
-        // Debug: log group info
-        console.log('Group:', group.name, 'Students:', groupStudents.length);
-
-        // Count attendance by matching student_id (string) from attendance with student id or student_id
-        const groupAttendance = attendanceData.attendance?.filter((a: any) => {
-          if (a.status !== 'present') return false;
-
-          // Try to match attendance record with group students
-          // Check both a.student_id (string like "OSE001") and numeric IDs
-          const matched = groupStudents.some((s: any) => {
-            // Match by student_id (string identifier like "OSE001")
-            if (a.student_id && s.student_id && a.student_id === s.student_id) {
-              return true;
-            }
-            // Match by numeric id
-            if (a.student_id && s.id && String(a.student_id) === String(s.id)) {
-              return true;
-            }
-            return false;
+      // Real per-group attendance derived from actual students + today's records.
+      const computed: GroupStat[] = groupsData
+        .map((group) => {
+          const groupStudents = students.filter((s) => {
+            if (s.group_id === group.id) return true;
+            return s.groups?.some((g) => g.id === group.id) ?? false;
           });
+          const studentIds = new Set(groupStudents.map((s) => s.student_id));
+          const attendance = presentRecords.filter((r: AttendanceRecord) =>
+            studentIds.has(r.student_id),
+          ).length;
+          const total = groupStudents.length;
+          return {
+            name: group.name || 'Unknown',
+            attendance,
+            total,
+            rate: total > 0 ? (attendance / total) * 100 : 0,
+          };
+        })
+        .filter((g) => g.total > 0)
+        .sort((a, b) => b.rate - a.rate);
 
-          if (matched) {
-            console.log('Matched attendance:', a.student_id, 'to group:', group.name);
-          }
-
-          return matched;
-        }).length || 0;
-
-        console.log('Group attendance count:', groupAttendance);
-
-        return {
-          name: group.name || 'Unknown',
-          attendance: groupAttendance,
-          total: groupStudents.length
-        };
-      }).sort((a: any, b: any) => (b.attendance / b.total || 0) - (a.attendance / a.total || 0)).slice(0, 3);
-
-      setTopGroups(groupStats);
+      setGroupStats(computed);
     } catch (error: any) {
       console.error('Error loading dashboard:', error);
       toast({
@@ -112,189 +117,315 @@ export default function Dashboard() {
     }
   };
 
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center min-h-[400px]">
-        <Loader2 className="h-8 w-8 animate-spin text-accent" />
-      </div>
-    );
-  }
+  const today = new Date().toLocaleDateString('en-US', {
+    weekday: 'long',
+    month: 'long',
+    day: 'numeric',
+  });
+
+  if (loading) return <DashboardSkeleton />;
+
+  const notPresent = Math.max(stats.totalStudents - stats.todayAttendance, 0);
+  const donutData = [
+    { name: 'Present', value: stats.todayAttendance, fill: CHART.present },
+    { name: 'Not yet', value: notPresent, fill: CHART.remaining },
+  ];
+  const topGroups = groupStats.slice(0, 8);
 
   return (
-    <div className="space-y-6 animate-in fade-in duration-500">
-      {/* Header with greeting */}
-      <div className="relative overflow-hidden rounded-xl bg-gradient-to-r from-accent/20 via-primary/10 to-success/20 p-6 border border-accent/20">
-        <div className="relative z-10">
-          <div className="flex items-center gap-2 mb-2">
-            <Sparkles className="w-6 h-6 text-accent" />
-            <h1 className="text-3xl font-bold">Dashboard</h1>
+    <div className="space-y-6">
+      <PageHeader
+        title="Dashboard"
+        description={`Attendance overview for ${today}`}
+        actions={
+          <>
+            <Button variant="outline" onClick={() => navigate('/attendance/upload')}>
+              <Upload className="h-4 w-4" />
+              Upload Photo
+            </Button>
+            <Button variant="accent" onClick={() => navigate('/attendance/live')}>
+              <Video className="h-4 w-4" />
+              Live Attendance
+            </Button>
+          </>
+        }
+      />
+
+      {/* Stats */}
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        <StatCard
+          title="Total Students"
+          value={stats.totalStudents.toLocaleString()}
+          change="Registered"
+          icon={Users}
+          tone="info"
+        />
+        <StatCard
+          title="Total Groups"
+          value={stats.totalGroups.toString()}
+          change="Active sections"
+          icon={FolderKanban}
+          tone="accent"
+        />
+        <StatCard
+          title="Present Today"
+          value={stats.todayAttendance.toLocaleString()}
+          change={`of ${stats.totalStudents} students`}
+          icon={CheckCircle2}
+          tone="success"
+        />
+        <StatCard
+          title="Attendance Rate"
+          value={`${stats.attendanceRate.toFixed(1)}%`}
+          change={stats.attendanceRate >= 80 ? 'On track today' : 'Below target'}
+          changeType={stats.attendanceRate >= 80 ? 'positive' : 'neutral'}
+          icon={TrendingUp}
+          tone="warning"
+        />
+      </div>
+
+      {/* Charts */}
+      <div className="grid gap-6 lg:grid-cols-3">
+        {/* Attendance by group */}
+        <Card className="p-5 lg:col-span-2">
+          <div className="mb-4 flex items-center justify-between">
+            <div>
+              <h2 className="text-base font-semibold">Attendance by Group</h2>
+              <p className="text-sm text-muted-foreground">Present vs. registered, today</p>
+            </div>
+            <Award className="h-5 w-5 text-muted-foreground" />
           </div>
-          <p className="text-muted-foreground">Welcome back! Here's your attendance overview for {new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}.</p>
-        </div>
-        <div className="absolute right-0 top-0 w-64 h-64 bg-gradient-to-br from-accent/10 to-transparent rounded-full blur-3xl" />
-      </div>
-
-      {/* Stats Grid with enhanced animations */}
-      <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4">
-        <div className="animate-in slide-in-from-left duration-300">
-          <StatCard
-            title="Total Students"
-            value={stats.totalStudents.toLocaleString()}
-            change="Registered students"
-            changeType="neutral"
-            icon={Users}
-            variant="dark"
-          />
-        </div>
-        <div className="animate-in slide-in-from-left duration-500">
-          <StatCard
-            title="Total Groups"
-            value={stats.totalGroups.toString()}
-            change="Active groups"
-            changeType="neutral"
-            icon={FolderKanban}
-            variant="dark"
-          />
-        </div>
-        <div className="animate-in slide-in-from-right duration-500">
-          <StatCard
-            title="Today's Attendance"
-            value={stats.todayAttendance.toLocaleString()}
-            change={`${stats.attendanceRate.toFixed(1)}% attendance rate`}
-            changeType={stats.attendanceRate > 80 ? "positive" : "neutral"}
-            icon={CheckCircle2}
-            variant="dark"
-          />
-        </div>
-        <div className="animate-in slide-in-from-right duration-300">
-          <StatCard
-            title="Attendance Rate"
-            value={`${stats.attendanceRate.toFixed(1)}%`}
-            change="Today's rate"
-            changeType={stats.attendanceRate > 80 ? "positive" : "neutral"}
-            icon={TrendingUp}
-            variant="dark"
-          />
-        </div>
-      </div>
-
-      {/* Top Performing Groups */}
-      <Card className="p-6 bg-card-light border-0 shadow-lg animate-in slide-in-from-bottom duration-700">
-        <div className="flex items-center gap-2 mb-6">
-          <Award className="w-5 h-5 text-yellow-500" />
-          <h2 className="text-xl font-semibold">Top Groups</h2>
-        </div>
-        <div className="space-y-4">
           {topGroups.length === 0 ? (
-            <div className="text-center py-8 text-muted-foreground">
-              <Award className="w-12 h-12 mx-auto mb-2 opacity-50" />
-              <p className="text-sm">No group data available</p>
-            </div>
+            <EmptyState
+              icon={FolderKanban}
+              title="No group data yet"
+              hint="Register students into groups to see attendance breakdowns."
+            />
           ) : (
-            topGroups.map((group, index) => {
-              const rate = group.total > 0 ? (group.attendance / group.total) * 100 : 0;
-              const medals = ['🥇', '🥈', '🥉'];
-
-              return (
-                <div
-                  key={group.name}
-                  className="relative overflow-hidden p-4 rounded-lg bg-gradient-to-br from-background to-accent/5 border border-border hover:border-accent transition-all duration-200 hover:scale-[1.01]"
+            <div className="h-72 w-full">
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart
+                  data={topGroups}
+                  layout="vertical"
+                  margin={{ top: 4, right: 16, bottom: 4, left: 8 }}
                 >
-                  <div className="flex items-start justify-between">
-                    <div className="flex-1">
-                      <div className="flex items-center gap-2 mb-1">
-                        <span className="text-2xl">{medals[index]}</span>
-                        <h3 className="font-semibold text-foreground">{group.name}</h3>
-                      </div>
-                      <p className="text-sm text-muted-foreground">
-                        {group.attendance} / {group.total} students
-                      </p>
-                    </div>
-                    <div className="text-right">
-                      <div className={`text-2xl font-bold ${rate >= 90 ? 'text-green-500' :
-                        rate >= 75 ? 'text-blue-500' :
-                          'text-yellow-500'
-                        }`}>
-                        {rate.toFixed(0)}%
-                      </div>
-                    </div>
-                  </div>
-                  <div className="mt-2 h-1 bg-background rounded-full overflow-hidden">
-                    <div
-                      className="h-full bg-gradient-to-r from-accent to-primary transition-all duration-1000"
-                      style={{ width: `${rate}%` }}
-                    />
-                  </div>
-                </div>
-              );
-            })
-          )}
-        </div>
-      </Card>
-
-      {/* Recent Attendance - Enhanced */}
-      <Card className="p-6 bg-card-light border-0 shadow-lg animate-in slide-in-from-bottom duration-700">
-        <div className="flex items-center justify-between mb-6">
-          <div className="flex items-center gap-2">
-            <CheckCircle2 className="w-5 h-5 text-success" />
-            <h2 className="text-xl font-semibold">Recent Attendance</h2>
-          </div>
-          <div className="flex items-center gap-2">
-            <span className="text-sm text-muted-foreground">
-              <Calendar className="w-4 h-4 inline mr-1" />
-              Today
-            </span>
-          </div>
-        </div>
-        <div className="space-y-3">
-          {recentAttendance.length === 0 ? (
-            <div className="text-center py-12 text-muted-foreground">
-              <CheckCircle2 className="w-16 h-16 mx-auto mb-3 opacity-30" />
-              <p className="text-lg font-medium">No attendance records today</p>
-              <p className="text-sm mt-1">Start marking attendance to see records here</p>
+                  <CartesianGrid horizontal={false} stroke="hsl(214 16% 92%)" />
+                  <XAxis
+                    type="number"
+                    domain={[0, 100]}
+                    tickFormatter={(v) => `${v}%`}
+                    tick={{ fill: 'hsl(215 14% 42%)', fontSize: 12 }}
+                    axisLine={false}
+                    tickLine={false}
+                  />
+                  <YAxis
+                    type="category"
+                    dataKey="name"
+                    width={110}
+                    tick={{ fill: 'hsl(220 18% 20%)', fontSize: 12 }}
+                    axisLine={false}
+                    tickLine={false}
+                  />
+                  <RTooltip
+                    cursor={{ fill: 'hsl(214 16% 95%)' }}
+                    contentStyle={tooltipStyle}
+                    formatter={(value: number, _n, p: any) => [
+                      `${value.toFixed(0)}%  (${p.payload.attendance}/${p.payload.total})`,
+                      'Attendance',
+                    ]}
+                  />
+                  <Bar dataKey="rate" radius={[0, 4, 4, 0]} barSize={18} background={{ fill: 'hsl(214 16% 96%)', radius: 4 } as any}>
+                    {topGroups.map((g, i) => (
+                      <Cell
+                        key={i}
+                        fill={g.rate >= 80 ? CHART.present : g.rate >= 50 ? CHART.bar : 'hsl(38 92% 50%)'}
+                      />
+                    ))}
+                  </Bar>
+                </BarChart>
+              </ResponsiveContainer>
             </div>
+          )}
+        </Card>
+
+        {/* Today's split donut */}
+        <Card className="p-5">
+          <div className="mb-4">
+            <h2 className="text-base font-semibold">Today's Coverage</h2>
+            <p className="text-sm text-muted-foreground">Present vs. remaining</p>
+          </div>
+          {stats.totalStudents === 0 ? (
+            <EmptyState icon={Users} title="No students yet" hint="Register students to begin." />
           ) : (
-            recentAttendance.map((record, index) => (
-              <div
-                key={record.id}
-                className="group flex items-center justify-between p-4 rounded-lg bg-gradient-to-r from-background to-accent/5 border border-border hover:border-accent transition-all duration-200 animate-in slide-in-from-left"
-                style={{ animationDelay: `${index * 50}ms` }}
-              >
-                <div className="flex items-center gap-4 flex-1">
-                  <div className="w-12 h-12 rounded-full bg-gradient-to-br from-accent to-primary flex items-center justify-center text-white font-bold text-lg shadow-lg group-hover:scale-105 transition-transform duration-200">
-                    {((record as any).name || record.student_name || 'U').charAt(0).toUpperCase()}
-                  </div>
-                  <div className="flex-1">
-                    <h3 className="font-semibold text-foreground text-lg">
-                      {(record as any).name || record.student_name || 'Unknown'}
-                    </h3>
-                    <div className="flex items-center gap-3 mt-1">
-                      <span className="text-sm text-muted-foreground">ID: {record.student_id}</span>
-                      <span className="text-xs text-muted-foreground">•</span>
-                      <span className="text-sm text-muted-foreground">{record.group_name || 'No Group'}</span>
-                    </div>
-                    <p className="text-xs text-muted-foreground mt-1 flex items-center gap-1">
-                      <Clock className="w-3 h-3" />
-                      {record.in_time ? new Date(record.in_time).toLocaleTimeString() : 'Invalid Time'}
-                    </p>
-                  </div>
-                </div>
-                <div className="text-right">
-                  <div className="flex flex-col items-end gap-1">
-                    <div className={`text-2xl font-bold ${(record.confidence || 0) >= 0.9 ? 'text-green-500' :
-                      (record.confidence || 0) >= 0.75 ? 'text-blue-500' :
-                        'text-yellow-500'
-                      }`}>
-                      {record.confidence ? `${(record.confidence * 100).toFixed(1)}%` : 'N/A'}
-                    </div>
-                    <p className="text-xs text-muted-foreground">Confidence</p>
-                  </div>
+            <div className="flex flex-col items-center">
+              <div className="relative h-52 w-full">
+                <ResponsiveContainer width="100%" height="100%">
+                  <PieChart>
+                    <Pie
+                      data={donutData}
+                      dataKey="value"
+                      nameKey="name"
+                      innerRadius={62}
+                      outerRadius={88}
+                      paddingAngle={2}
+                      stroke="hsl(0 0% 100%)"
+                      strokeWidth={2}
+                    >
+                      {donutData.map((d, i) => (
+                        <Cell key={i} fill={d.fill} />
+                      ))}
+                    </Pie>
+                    <RTooltip contentStyle={tooltipStyle} />
+                  </PieChart>
+                </ResponsiveContainer>
+                <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center">
+                  <span className="text-3xl font-bold tnum">{stats.attendanceRate.toFixed(0)}%</span>
+                  <span className="text-xs text-muted-foreground">present</span>
                 </div>
               </div>
-            ))
+              <div className="mt-2 flex w-full items-center justify-center gap-5 text-sm">
+                <LegendDot color={CHART.present} label="Present" value={stats.todayAttendance} />
+                <LegendDot color={CHART.remaining} label="Not yet" value={notPresent} />
+              </div>
+            </div>
           )}
+        </Card>
+      </div>
+
+      {/* Recent attendance */}
+      <Card className="p-5">
+        <div className="mb-4 flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <CheckCircle2 className="h-5 w-5 text-success" />
+            <h2 className="text-base font-semibold">Recent Check-ins</h2>
+          </div>
+          <div className="flex items-center gap-3">
+            <span className="flex items-center gap-1 text-sm text-muted-foreground">
+              <Calendar className="h-4 w-4" />
+              Today
+            </span>
+            <Button variant="ghost" size="sm" onClick={() => navigate('/attendance/logs')}>
+              View all
+              <ArrowRight className="h-4 w-4" />
+            </Button>
+          </div>
         </div>
+
+        {recentAttendance.length === 0 ? (
+          <EmptyState
+            icon={CheckCircle2}
+            title="No check-ins today"
+            hint="Start a live session or upload a photo to mark attendance."
+          />
+        ) : (
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+            {recentAttendance.map((record) => {
+              const name = (record as any).name || record.student_name || 'Unknown';
+              const confidence = record.confidence ? record.confidence * 100 : null;
+              return (
+                <div
+                  key={record.id}
+                  className="flex items-center gap-3 rounded-xl border border-border bg-card p-3 transition-colors hover:border-accent/50"
+                >
+                  <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-accent/15 text-base font-semibold text-accent-foreground">
+                    {name.charAt(0).toUpperCase()}
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate font-medium text-foreground">{name}</p>
+                    <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                      <span className="font-mono">{record.student_id}</span>
+                      {record.in_time && (
+                        <>
+                          <span>·</span>
+                          <Clock className="h-3 w-3" />
+                          {new Date(record.in_time).toLocaleTimeString('en-US', {
+                            hour: '2-digit',
+                            minute: '2-digit',
+                          })}
+                        </>
+                      )}
+                    </p>
+                  </div>
+                  {confidence !== null && (
+                    <span
+                      className={`shrink-0 text-sm font-semibold tnum ${
+                        confidence >= 90
+                          ? 'text-success'
+                          : confidence >= 75
+                            ? 'text-info'
+                            : 'text-warning-foreground'
+                      }`}
+                    >
+                      {confidence.toFixed(0)}%
+                    </span>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        )}
       </Card>
+    </div>
+  );
+}
+
+const tooltipStyle = {
+  borderRadius: 10,
+  border: '1px solid hsl(214 16% 89%)',
+  boxShadow: '0 4px 12px -2px hsl(220 20% 20% / 0.12)',
+  fontSize: 12,
+} as const;
+
+function LegendDot({ color, label, value }: { color: string; label: string; value: number }) {
+  return (
+    <div className="flex items-center gap-1.5">
+      <span className="h-2.5 w-2.5 rounded-full" style={{ background: color }} />
+      <span className="text-muted-foreground">{label}</span>
+      <span className="font-semibold text-foreground tnum">{value}</span>
+    </div>
+  );
+}
+
+function EmptyState({
+  icon: Icon,
+  title,
+  hint,
+}: {
+  icon: typeof Users;
+  title: string;
+  hint: string;
+}) {
+  return (
+    <div className="flex flex-col items-center justify-center py-10 text-center">
+      <div className="mb-3 flex h-12 w-12 items-center justify-center rounded-full bg-muted">
+        <Icon className="h-6 w-6 text-muted-foreground" />
+      </div>
+      <p className="font-medium text-foreground">{title}</p>
+      <p className="mt-1 max-w-xs text-sm text-muted-foreground">{hint}</p>
+    </div>
+  );
+}
+
+function DashboardSkeleton() {
+  return (
+    <div className="space-y-6">
+      <div className="flex items-center justify-between">
+        <div className="space-y-2">
+          <Skeleton className="h-8 w-48" />
+          <Skeleton className="h-4 w-64" />
+        </div>
+        <Skeleton className="h-10 w-40" />
+      </div>
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        {Array.from({ length: 4 }).map((_, i) => (
+          <Skeleton key={i} className="h-28 rounded-xl" />
+        ))}
+      </div>
+      <div className="grid gap-6 lg:grid-cols-3">
+        <Skeleton className="h-80 rounded-xl lg:col-span-2" />
+        <Skeleton className="h-80 rounded-xl" />
+      </div>
+      <Skeleton className="h-48 rounded-xl" />
     </div>
   );
 }

@@ -1,8 +1,22 @@
-import { LayoutDashboard, Users, UserPlus, FolderKanban, Video, Upload, History, Settings } from 'lucide-react';
+import {
+  LayoutDashboard,
+  Users,
+  UserPlus,
+  FolderKanban,
+  Video,
+  Upload,
+  History,
+  Settings,
+  ScanFace,
+  Cctv,
+  Gauge,
+  Activity,
+} from 'lucide-react';
 import { NavLink } from 'react-router-dom';
 import {
   Sidebar,
   SidebarContent,
+  SidebarFooter,
   SidebarGroup,
   SidebarGroupContent,
   SidebarGroupLabel,
@@ -11,109 +25,120 @@ import {
   SidebarMenuItem,
   useSidebar,
 } from '@/components/ui/sidebar';
+import { cn } from '@/lib/utils';
 
-const mainItems = [
-  { title: 'Dashboard', url: '/', icon: LayoutDashboard },
+type NavItem = {
+  title: string;
+  url: string;
+  icon: typeof LayoutDashboard;
+  end?: boolean;
+  soon?: boolean;
+};
+
+const mainItems: NavItem[] = [
+  { title: 'Dashboard', url: '/', icon: LayoutDashboard, end: true },
   { title: 'Students', url: '/students', icon: Users },
   { title: 'Register Student', url: '/register', icon: UserPlus },
   { title: 'Groups', url: '/groups', icon: FolderKanban },
 ];
 
-const attendanceItems = [
+const attendanceItems: NavItem[] = [
   { title: 'Live Attendance', url: '/attendance/live', icon: Video },
   { title: 'Upload Photo', url: '/attendance/upload', icon: Upload },
   { title: 'Attendance Logs', url: '/attendance/logs', icon: History },
 ];
 
-const adminItems = [
+const insightsItems: NavItem[] = [
+  { title: 'Camera Events', url: '/camera-events', icon: Cctv, soon: true },
+  { title: 'Recognition Metrics', url: '/recognition-metrics', icon: Gauge, soon: true },
+  { title: 'System Health', url: '/system-health', icon: Activity, soon: true },
+];
+
+const adminItems: NavItem[] = [
   { title: 'Settings', url: '/settings', icon: Settings },
 ];
+
+function NavSection({ label, items }: { label: string; items: NavItem[] }) {
+  const linkClass = ({ isActive }: { isActive: boolean }) =>
+    cn(
+      'relative w-full rounded-lg transition-colors',
+      isActive
+        ? 'bg-sidebar-accent text-sidebar-accent-foreground font-medium before:absolute before:left-0 before:top-1/2 before:h-5 before:w-1 before:-translate-y-1/2 before:rounded-r-full before:bg-sidebar-primary'
+        : 'text-sidebar-foreground/80 hover:bg-sidebar-accent/60 hover:text-sidebar-accent-foreground',
+    );
+
+  return (
+    <SidebarGroup>
+      <SidebarGroupLabel className="text-sidebar-foreground/45 text-[11px] font-semibold uppercase tracking-wider">
+        {label}
+      </SidebarGroupLabel>
+      <SidebarGroupContent>
+        <SidebarMenu>
+          {items.map((item) => (
+            <SidebarMenuItem key={item.title}>
+              <SidebarMenuButton asChild tooltip={item.title}>
+                <NavLink to={item.url} end={item.end} className={linkClass}>
+                  <item.icon className="h-4 w-4 shrink-0" />
+                  <span className="flex-1 truncate">{item.title}</span>
+                  {item.soon && (
+                    <span className="ml-auto rounded-full bg-sidebar-primary/15 px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wide text-sidebar-primary group-data-[collapsible=icon]:hidden">
+                      Soon
+                    </span>
+                  )}
+                </NavLink>
+              </SidebarMenuButton>
+            </SidebarMenuItem>
+          ))}
+        </SidebarMenu>
+      </SidebarGroupContent>
+    </SidebarGroup>
+  );
+}
 
 export function AppSidebar() {
   const { state } = useSidebar();
   const isCollapsed = state === 'collapsed';
 
-  const getNavClass = ({ isActive }: { isActive: boolean }) =>
-    isActive
-      ? 'bg-sidebar-accent border-l-2 border-sidebar-primary font-medium'
-      : 'hover:bg-sidebar-accent/50';
-
   return (
-    <Sidebar className={isCollapsed ? 'w-14' : 'w-64'}>
-      <SidebarContent>
-        {/* Logo */}
-        <div className="px-4 py-6 border-b border-sidebar-border">
-          {!isCollapsed ? (
-            <div className="flex items-center gap-2">
-              <div className="w-8 h-8 rounded-lg bg-sidebar-primary flex items-center justify-center">
-                <span className="text-sidebar-primary-foreground font-bold text-sm">FL</span>
-              </div>
-              <span className="text-lg font-bold text-sidebar-foreground">FaceLogBook</span>
-            </div>
-          ) : (
-            <div className="w-8 h-8 rounded-lg bg-sidebar-primary flex items-center justify-center mx-auto">
-              <span className="text-sidebar-primary-foreground font-bold text-sm">FL</span>
-            </div>
-          )}
+    <Sidebar collapsible="icon" className="border-sidebar-border">
+      {/* Brand */}
+      <div className="flex h-16 items-center gap-2.5 border-b border-sidebar-border px-4">
+        <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-sidebar-primary shadow-glow">
+          <ScanFace className="h-5 w-5 text-sidebar-primary-foreground" />
         </div>
+        {!isCollapsed && (
+          <div className="min-w-0">
+            <p className="truncate text-sm font-bold leading-tight text-sidebar-foreground">FaceLogBook</p>
+            <p className="truncate text-[11px] leading-tight text-sidebar-foreground/45">Attendance Platform</p>
+          </div>
+        )}
+      </div>
 
-        {/* Main Navigation */}
-        <SidebarGroup>
-          {!isCollapsed && <SidebarGroupLabel>Main</SidebarGroupLabel>}
-          <SidebarGroupContent>
-            <SidebarMenu>
-              {mainItems.map((item) => (
-                <SidebarMenuItem key={item.title}>
-                  <SidebarMenuButton asChild>
-                    <NavLink to={item.url} end className={getNavClass}>
-                      <item.icon className="h-4 w-4" />
-                      {!isCollapsed && <span>{item.title}</span>}
-                    </NavLink>
-                  </SidebarMenuButton>
-                </SidebarMenuItem>
-              ))}
-            </SidebarMenu>
-          </SidebarGroupContent>
-        </SidebarGroup>
-
-        {/* Attendance */}
-        <SidebarGroup>
-          {!isCollapsed && <SidebarGroupLabel>Attendance</SidebarGroupLabel>}
-          <SidebarGroupContent>
-            <SidebarMenu>
-              {attendanceItems.map((item) => (
-                <SidebarMenuItem key={item.title}>
-                  <SidebarMenuButton asChild>
-                    <NavLink to={item.url} className={getNavClass}>
-                      <item.icon className="h-4 w-4" />
-                      {!isCollapsed && <span>{item.title}</span>}
-                    </NavLink>
-                  </SidebarMenuButton>
-                </SidebarMenuItem>
-              ))}
-            </SidebarMenu>
-          </SidebarGroupContent>
-        </SidebarGroup>
-
-        {/* Admin */}
-        <SidebarGroup>
-          {!isCollapsed && <SidebarGroupLabel>Admin</SidebarGroupLabel>}
-          <SidebarGroupContent>
-            <SidebarMenu>
-              {adminItems.map((item) => (
-                <SidebarMenuItem key={item.title}>
-                  <SidebarMenuButton asChild>
-                    <NavLink to={item.url} className={getNavClass}>
-                      <item.icon className="h-4 w-4" />
-                      {!isCollapsed && <span>{item.title}</span>}
-                    </NavLink>
-                  </SidebarMenuButton>
-                </SidebarMenuItem>
-              ))}
-            </SidebarMenu>
-          </SidebarGroupContent>
-        </SidebarGroup>
+      <SidebarContent className="gap-0 px-2 py-2">
+        <NavSection label="Main" items={mainItems} />
+        <NavSection label="Attendance" items={attendanceItems} />
+        <NavSection label="Insights" items={insightsItems} />
+        <NavSection label="Admin" items={adminItems} />
       </SidebarContent>
+
+      <SidebarFooter className="border-t border-sidebar-border p-3">
+        {!isCollapsed ? (
+          <div className="flex items-center gap-2 rounded-lg bg-sidebar-accent/50 px-3 py-2">
+            <span className="relative flex h-2 w-2">
+              <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-success opacity-60" />
+              <span className="relative inline-flex h-2 w-2 rounded-full bg-success" />
+            </span>
+            <span className="text-[11px] font-medium text-sidebar-foreground/70">System operational</span>
+          </div>
+        ) : (
+          <div className="flex justify-center">
+            <span className="relative flex h-2 w-2">
+              <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-success opacity-60" />
+              <span className="relative inline-flex h-2 w-2 rounded-full bg-success" />
+            </span>
+          </div>
+        )}
+      </SidebarFooter>
     </Sidebar>
   );
 }

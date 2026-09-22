@@ -3,10 +3,12 @@ import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useToast } from '@/hooks/use-toast';
-import { Calendar, Download, Filter, Search, Loader2 } from 'lucide-react';
+import { Calendar, Download, Filter, Search, Loader2, History, CheckCircle2, Clock, XCircle } from 'lucide-react';
 import { attendanceApi, groupApi, AttendanceRecord, Group } from '@/services/api';
+import { PageHeader } from '@/components/layout/PageHeader';
 import {
     Table,
     TableBody,
@@ -15,6 +17,19 @@ import {
     TableHeader,
     TableRow,
 } from '@/components/ui/table';
+
+function StatusBadge({ status }: { status: string }) {
+    if (status === 'present') {
+        return <Badge variant="success"><CheckCircle2 className="h-3 w-3" />On Time</Badge>;
+    }
+    if (status === 'late') {
+        return <Badge variant="warning"><Clock className="h-3 w-3" />Late</Badge>;
+    }
+    if (status === 'absent') {
+        return <Badge variant="destructive"><XCircle className="h-3 w-3" />Absent</Badge>;
+    }
+    return <Badge variant="muted">{status.charAt(0).toUpperCase() + status.slice(1)}</Badge>;
+}
 
 export default function AttendanceLogs() {
     const { toast } = useToast();
@@ -121,36 +136,45 @@ export default function AttendanceLogs() {
 
     return (
         <div className="space-y-6">
-            <div>
-                <h1 className="text-3xl font-bold">Attendance Logs</h1>
-                <p className="text-muted-foreground mt-1">View and export attendance records</p>
-            </div>
+            <PageHeader
+                title="Attendance Logs"
+                description="View, filter and export attendance records"
+                icon={History}
+                actions={
+                    <Button
+                        onClick={handleExport}
+                        variant="outline"
+                        disabled={filteredAttendance.length === 0}
+                    >
+                        <Download className="h-4 w-4" />
+                        Export CSV
+                    </Button>
+                }
+            />
 
             {/* Filters */}
-            <Card className="p-6 bg-card-light border-0">
-                <div className="grid gap-4 md:grid-cols-4">
-                    <div>
-                        <Label htmlFor="startDate" className="text-foreground font-medium">Start Date</Label>
+            <Card className="p-5">
+                <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+                    <div className="space-y-1.5">
+                        <Label htmlFor="startDate">Start Date</Label>
                         <Input
                             id="startDate"
                             type="date"
                             value={filters.startDate}
                             onChange={(e) => setFilters({ ...filters, startDate: e.target.value })}
-                            className="text-foreground"
                         />
                     </div>
-                    <div>
-                        <Label htmlFor="endDate" className="text-foreground font-medium">End Date</Label>
+                    <div className="space-y-1.5">
+                        <Label htmlFor="endDate">End Date</Label>
                         <Input
                             id="endDate"
                             type="date"
                             value={filters.endDate}
                             onChange={(e) => setFilters({ ...filters, endDate: e.target.value })}
-                            className="text-foreground"
                         />
                     </div>
-                    <div>
-                        <Label htmlFor="group" className="text-foreground font-medium">Filter by Group</Label>
+                    <div className="space-y-1.5">
+                        <Label htmlFor="group">Filter by Group</Label>
                         <Select value={filters.groupId} onValueChange={(value) => setFilters({ ...filters, groupId: value })}>
                             <SelectTrigger>
                                 <SelectValue placeholder="All Groups" />
@@ -165,72 +189,65 @@ export default function AttendanceLogs() {
                             </SelectContent>
                         </Select>
                     </div>
-                    <div>
-                        <Label htmlFor="search" className="text-foreground font-medium">Search</Label>
+                    <div className="space-y-1.5">
+                        <Label htmlFor="search">Search</Label>
                         <div className="relative">
-                            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-black" />
+                            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
                             <Input
                                 id="search"
                                 placeholder="Student ID or Name"
                                 value={filters.searchQuery}
                                 onChange={(e) => setFilters({ ...filters, searchQuery: e.target.value })}
-                                className="pl-9 text-foreground"
+                                className="pl-9"
                             />
                         </div>
                     </div>
                 </div>
-                <div className="flex gap-4 mt-4">
-                    <Button onClick={loadAttendance} disabled={loading} className="bg-accent hover:bg-accent/90 text-black font-semibold">
+                <div className="mt-4 flex flex-wrap gap-3">
+                    <Button onClick={loadAttendance} disabled={loading} variant="accent">
                         {loading ? (
-                            <>
-                                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                                Loading...
-                            </>
+                            <><Loader2 className="h-4 w-4 animate-spin" />Loading…</>
                         ) : (
-                            <>
-                                <Filter className="mr-2 h-4 w-4" />
-                                Apply Filters
-                            </>
+                            <><Filter className="h-4 w-4" />Apply Filters</>
                         )}
-                    </Button>
-                    <Button onClick={handleExport} variant="outline" disabled={filteredAttendance.length === 0} className="text-black border-black hover:bg-black/10 font-semibold">
-                        <Download className="mr-2 h-4 w-4" />
-                        Export CSV
                     </Button>
                 </div>
             </Card>
 
             {/* Results */}
-            <Card className="p-6 bg-card-dark border-0">
-                <div className="flex items-center justify-between mb-4">
-                    <h2 className="text-lg font-semibold text-foreground">
-                        Attendance Records ({filteredAttendance.length})
-                    </h2>
+            <Card className="overflow-hidden">
+                <div className="flex items-center justify-between border-b border-border px-5 py-4">
+                    <h2 className="text-base font-semibold text-foreground">Records</h2>
+                    <Badge variant="secondary" className="tnum">{filteredAttendance.length}</Badge>
                 </div>
 
                 {loading ? (
-                    <div className="flex items-center justify-center py-12">
+                    <div className="flex items-center justify-center py-16">
                         <Loader2 className="h-8 w-8 animate-spin text-accent" />
                     </div>
                 ) : filteredAttendance.length === 0 ? (
-                    <div className="text-center py-12 text-muted-foreground">
-                        <Calendar className="w-12 h-12 mx-auto mb-2 opacity-50" />
-                        <p>No attendance records found</p>
-                        <p className="text-sm mt-1">Try adjusting your filters</p>
+                    <div className="flex flex-col items-center justify-center px-6 py-16 text-center">
+                        <div className="mb-4 flex h-14 w-14 items-center justify-center rounded-full bg-muted">
+                            <Calendar className="h-7 w-7 text-muted-foreground" />
+                        </div>
+                        <h3 className="text-lg font-semibold">No records found</h3>
+                        <p className="mt-1 max-w-sm text-sm text-muted-foreground">
+                            Try adjusting your date range, group, or search filters.
+                        </p>
                     </div>
                 ) : (
                     <div className="overflow-x-auto">
                         <Table>
                             <TableHeader>
                                 <TableRow>
-                                    <TableHead className="text-foreground font-semibold">Student ID</TableHead>
-                                    <TableHead className="text-foreground font-semibold">Name</TableHead>
-                                    <TableHead className="text-foreground font-semibold">Group</TableHead>
-                                    <TableHead className="text-foreground font-semibold">Date</TableHead>
-                                    <TableHead className="text-foreground font-semibold">Status</TableHead>
-                                    <TableHead className="text-foreground font-semibold">In Time</TableHead>
-                                    <TableHead className="text-foreground font-semibold">Out Time</TableHead>
-                                    <TableHead className="text-right text-foreground font-semibold">Confidence</TableHead>
+                                    <TableHead>Student ID</TableHead>
+                                    <TableHead>Name</TableHead>
+                                    <TableHead>Group</TableHead>
+                                    <TableHead>Date</TableHead>
+                                    <TableHead>Status</TableHead>
+                                    <TableHead>In Time</TableHead>
+                                    <TableHead>Out Time</TableHead>
+                                    <TableHead className="text-right">Confidence</TableHead>
                                 </TableRow>
                             </TableHeader>
                             <TableBody>
@@ -240,36 +257,22 @@ export default function AttendanceLogs() {
                                         <TableRow key={record.id}>
                                             <TableCell className="font-mono text-foreground">{record.student_id}</TableCell>
                                             <TableCell className="font-medium text-foreground">{(record as any).name || record.student_name || 'N/A'}</TableCell>
-                                            <TableCell className="text-foreground">{record.group_name || 'N/A'}</TableCell>
-                                            <TableCell className="text-foreground">{record.date}</TableCell>
-                                            <TableCell>
-                                                <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${status === 'present'
-                                                    ? 'bg-green-100 text-green-800 border border-green-200'
-                                                    : status === 'absent'
-                                                        ? 'bg-red-100 text-red-800 border border-red-200'
-                                                        : status === 'late'
-                                                            ? 'bg-orange-100 text-orange-800 border border-orange-200'
-                                                            : 'bg-yellow-100 text-yellow-800 border border-yellow-200'
-                                                    }`}>
-                                                    {status === 'present' ? '✅ On Time'
-                                                        : status === 'late' ? '⏰ Late'
-                                                            : status === 'absent' ? '❌ Absent'
-                                                                : status.charAt(0).toUpperCase() + status.slice(1)}
-                                                </span>
+                                            <TableCell className="text-muted-foreground">{record.group_name || '—'}</TableCell>
+                                            <TableCell className="text-muted-foreground tnum">{record.date}</TableCell>
+                                            <TableCell><StatusBadge status={status} /></TableCell>
+                                            <TableCell className="text-muted-foreground tnum">
+                                                {record.in_time ? new Date(record.in_time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '—'}
                                             </TableCell>
-                                            <TableCell className="text-foreground">
-                                                {record.in_time ? new Date(record.in_time).toLocaleTimeString() : '-'}
-                                            </TableCell>
-                                            <TableCell className="text-foreground">
-                                                {record.out_time ? new Date(record.out_time).toLocaleTimeString() : '-'}
+                                            <TableCell className="text-muted-foreground tnum">
+                                                {record.out_time ? new Date(record.out_time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '—'}
                                             </TableCell>
                                             <TableCell className="text-right">
                                                 {record.confidence ? (
-                                                    <span className="text-success font-medium">
+                                                    <span className="font-semibold tnum text-success">
                                                         {(record.confidence * 100).toFixed(1)}%
                                                     </span>
                                                 ) : (
-                                                    <span className="text-foreground">N/A</span>
+                                                    <span className="text-muted-foreground">—</span>
                                                 )}
                                             </TableCell>
                                         </TableRow>

@@ -6,8 +6,9 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useToast } from '@/hooks/use-toast';
-import { UserPlus, Loader2 } from 'lucide-react';
+import { UserPlus, Loader2, User, Upload as UploadIcon, RotateCcw } from 'lucide-react';
 import { studentApi, groupApi, Group } from '@/services/api';
+import { PageHeader } from '@/components/layout/PageHeader';
 import BulkImport from '@/components/BulkImport';
 import PoseCaptureFlow, { PoseCaptureResult, Pose } from '@/components/PoseCaptureFlow';
 
@@ -111,19 +112,26 @@ export default function RegisterStudent() {
 
     return (
         <div className="space-y-6">
-            <div>
-                <h1 className="text-3xl font-bold">Register Student</h1>
-                <p className="text-muted-foreground mt-1">Add students individually or in bulk</p>
-            </div>
+            <PageHeader
+                title="Register Student"
+                description="Add students individually or import in bulk"
+                icon={UserPlus}
+            />
 
             <Tabs defaultValue="single" className="w-full">
                 <TabsList className="grid w-full max-w-md grid-cols-2">
-                    <TabsTrigger value="single">Single Student</TabsTrigger>
-                    <TabsTrigger value="bulk">Bulk Import</TabsTrigger>
+                    <TabsTrigger value="single" className="gap-1.5">
+                        <User className="h-4 w-4" />
+                        Single Student
+                    </TabsTrigger>
+                    <TabsTrigger value="bulk" className="gap-1.5">
+                        <UploadIcon className="h-4 w-4" />
+                        Bulk Import
+                    </TabsTrigger>
                 </TabsList>
 
                 <TabsContent value="single">
-                    <Card className="p-6 bg-card-light border-0">
+                    <Card className="p-6">
                         <form onSubmit={handleSubmit} className="space-y-6">
                             <div className="grid gap-6 md:grid-cols-2">
                                 {/* Left Column */}
@@ -194,11 +202,10 @@ export default function RegisterStudent() {
                                 </div>
                             </div>
 
-                            <div className="flex justify-end gap-4">
+                            <div className="flex justify-end gap-3 border-t border-border pt-6">
                                 <Button
                                     type="button"
                                     variant="outline"
-                                    className="bg-red-50 text-red-700 border-red-200 hover:bg-red-100 hover:text-red-800"
                                     onClick={() => {
                                         setFormData({
                                             student_id: '',
@@ -211,19 +218,14 @@ export default function RegisterStudent() {
                                         setFlowKey(k => k + 1);
                                     }}
                                 >
+                                    <RotateCcw className="h-4 w-4" />
                                     Reset
                                 </Button>
-                                <Button type="submit" disabled={loading} className="bg-accent hover:bg-accent/90 text-black">
+                                <Button type="submit" disabled={loading} variant="accent">
                                     {loading ? (
-                                        <>
-                                            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                                            Registering...
-                                        </>
+                                        <><Loader2 className="h-4 w-4 animate-spin" />Registering…</>
                                     ) : (
-                                        <>
-                                            <UserPlus className="mr-2 h-4 w-4" />
-                                            Register Student
-                                        </>
+                                        <><UserPlus className="h-4 w-4" />Register Student</>
                                     )}
                                 </Button>
                             </div>

@@ -1,4 +1,4 @@
-"""recognition_logs: add actual_student_id + float timing columns + metrics indexes
+w"""recognition_logs: add actual_student_id + float timing columns + metrics indexes
 
 • actual_student_id (VARCHAR 50, FK → students.student_id, indexed)
   Stores ground-truth identity for evaluation / test mode so precision /

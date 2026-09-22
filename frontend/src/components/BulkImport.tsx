@@ -356,26 +356,26 @@ export default function BulkImport({ groupId: propGroupId, onSuccess }: BulkImpo
     };
 
     return (
-        <Card className="w-full bg-card-dark border-0">
-            <CardHeader className="bg-card-dark">
-                <CardTitle className="flex items-center gap-2 text-foreground">
-                    <FileSpreadsheet className="h-5 w-5 text-foreground" />
+        <Card className="w-full">
+            <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                    <FileSpreadsheet className="h-5 w-5 text-accent-foreground" />
                     Bulk Import Students
                 </CardTitle>
-                <CardDescription className="text-muted-foreground">
+                <CardDescription>
                     Upload a CSV file with student information and Google Drive links to photos
                 </CardDescription>
             </CardHeader>
-            <CardContent className="bg-card-dark">
-                <Alert className="mb-6 bg-background border-border">
-                    <AlertCircle className="h-4 w-4 text-foreground" />
-                    <AlertTitle className="text-foreground">CSV Format Requirements</AlertTitle>
+            <CardContent>
+                <Alert className="mb-6">
+                    <AlertCircle className="h-4 w-4" />
+                    <AlertTitle>CSV Format Requirements</AlertTitle>
                     <AlertDescription>
-                        <p className="text-foreground">Upload CSV file with header: <strong>student_id,name,drive_link</strong></p>
-                        <p className="text-foreground">The service account must have access to the Google Drive files.</p>
+                        <p>Upload CSV file with header: <strong>student_id,name,drive_link</strong></p>
+                        <p>The service account must have access to the Google Drive files.</p>
                         <Button
                             variant="link"
-                            className="p-0 h-auto font-normal text-accent underline hover:text-accent/80"
+                            className="h-auto p-0 font-normal text-accent-foreground underline"
                             onClick={downloadTemplate}
                         >
                             Download CSV Template
@@ -391,16 +391,15 @@ export default function BulkImport({ groupId: propGroupId, onSuccess }: BulkImpo
                             onChange={handleFileChange}
                             ref={fileInputRef}
                             className="block w-full text-sm text-foreground
-                                file:mr-4 file:py-2 file:px-4
-                                file:rounded-md file:border-0
-                                file:text-sm file:font-semibold
-                                file:bg-accent file:text-black
+                                file:mr-4 file:rounded-md file:border-0
+                                file:bg-accent file:px-4 file:py-2
+                                file:text-sm file:font-semibold file:text-accent-foreground
                                 hover:file:bg-accent/90"
                         />
                     </div>
 
                     <div className="mt-4">
-                        <label className="block text-sm font-medium mb-2 text-foreground">Select Group:</label>
+                        <label className="mb-2 block text-sm font-medium">Select Group:</label>
                         <Select
                             value={selectedGroupId?.toString()}
                             onValueChange={(value) => setSelectedGroupId(Number(value))}
@@ -430,7 +429,7 @@ export default function BulkImport({ groupId: propGroupId, onSuccess }: BulkImpo
                             checked={useAsyncImport}
                             onCheckedChange={setUseAsyncImport}
                         />
-                        <Label htmlFor="async-import" className="font-medium text-foreground">
+                        <Label htmlFor="async-import" className="font-medium">
                             Background processing
                         </Label>
                         <div className="text-sm text-muted-foreground ml-2">
@@ -444,7 +443,7 @@ export default function BulkImport({ groupId: propGroupId, onSuccess }: BulkImpo
                             checked={isDryRun}
                             onCheckedChange={setIsDryRun}
                         />
-                        <Label htmlFor="dry-run" className="font-medium text-foreground">
+                        <Label htmlFor="dry-run" className="font-medium">
                             Validation mode (dry run)
                         </Label>
                         <div className="text-sm text-muted-foreground ml-2">
@@ -454,13 +453,13 @@ export default function BulkImport({ groupId: propGroupId, onSuccess }: BulkImpo
 
                     {previewData.length > 0 && (
                         <div className="mt-4">
-                            <h3 className="text-sm font-medium mb-2 text-foreground">Preview (first {Math.min(previewData.length, 10)} rows):</h3>
-                            <div className="border border-border rounded-md overflow-x-auto bg-card-dark">
+                            <h3 className="mb-2 text-sm font-medium">Preview (first {Math.min(previewData.length, 10)} rows):</h3>
+                            <div className="overflow-x-auto rounded-md border border-border">
                                 <Table>
                                     <TableHeader>
                                         <TableRow>
                                             {previewData[0].map((header, idx) => (
-                                                <TableHead key={idx} className="text-foreground font-semibold">{header}</TableHead>
+                                                <TableHead key={idx}>{header}</TableHead>
                                             ))}
                                         </TableRow>
                                     </TableHeader>
@@ -468,7 +467,7 @@ export default function BulkImport({ groupId: propGroupId, onSuccess }: BulkImpo
                                         {previewData.slice(1, 11).map((row, rowIdx) => (
                                             <TableRow key={rowIdx}>
                                                 {row.map((cell, cellIdx) => (
-                                                    <TableCell key={cellIdx} className="text-foreground">{cell}</TableCell>
+                                                    <TableCell key={cellIdx}>{cell}</TableCell>
                                                 ))}
                                             </TableRow>
                                         ))}
@@ -479,28 +478,28 @@ export default function BulkImport({ groupId: propGroupId, onSuccess }: BulkImpo
                     )}
 
                     {totalRows > 100 && (
-                        <Alert className="mt-4 bg-red-50 border-red-200">
-                            <AlertTriangle className="h-4 w-4 text-red-600" />
-                            <AlertTitle className="text-red-800">Large Import Detected</AlertTitle>
-                            <AlertDescription className="text-red-700">
+                        <Alert className="mt-4 border-warning/30 bg-warning/10">
+                            <AlertTriangle className="h-4 w-4 text-warning-foreground" />
+                            <AlertTitle className="text-warning-foreground">Large Import Detected</AlertTitle>
+                            <AlertDescription className="text-warning-foreground">
                                 You're about to import {totalRows} students. Large imports may take several minutes.
                             </AlertDescription>
                         </Alert>
                     )}
 
                     {validationErrors.length > 0 && (
-                        <Alert className="mt-4 bg-red-50 border-red-200">
-                            <AlertCircle className="h-4 w-4 text-red-600" />
-                            <AlertTitle className="text-red-800">Validation Errors</AlertTitle>
+                        <Alert variant="destructive" className="mt-4">
+                            <AlertCircle className="h-4 w-4" />
+                            <AlertTitle>Validation Errors</AlertTitle>
                             <AlertDescription>
-                                <ul className="list-disc list-inside mt-2">
+                                <ul className="mt-2 list-inside list-disc">
                                     {validationErrors.slice(0, 5).map((error, idx) => (
-                                        <li key={idx} className="text-red-700">
+                                        <li key={idx}>
                                             Row {error.row}: {error.message}
                                         </li>
                                     ))}
                                     {validationErrors.length > 5 && (
-                                        <li className="text-red-700">... and {validationErrors.length - 5} more errors</li>
+                                        <li>... and {validationErrors.length - 5} more errors</li>
                                     )}
                                 </ul>
                             </AlertDescription>
@@ -509,11 +508,11 @@ export default function BulkImport({ groupId: propGroupId, onSuccess }: BulkImpo
 
                     {(isLoading || isValidating || progress > 0) && (
                         <div className="mt-4 space-y-2">
-                            <div className="flex justify-between text-sm text-foreground font-medium">
+                            <div className="flex justify-between text-sm font-medium">
                                 <span>{isValidating ? 'Validating' : 'Importing'}...</span>
-                                <span>{progress}%</span>
+                                <span className="tnum">{progress}%</span>
                             </div>
-                            <Progress value={progress} className="w-full bg-background" />
+                            <Progress value={progress} className="w-full" />
                         </div>
                     )}
 
@@ -522,32 +521,22 @@ export default function BulkImport({ groupId: propGroupId, onSuccess }: BulkImpo
                             variant="outline"
                             onClick={resetForm}
                             disabled={isLoading || isValidating}
-                            className="border-border text-foreground hover:bg-background"
                         >
                             Reset
                         </Button>
                         <Button
                             onClick={handleSubmit}
                             disabled={!selectedFile || isLoading || isValidating}
-                            className="flex items-center gap-2 bg-accent hover:bg-accent/90 text-black font-semibold"
+                            variant="accent"
                         >
                             {isValidating ? (
-                                <>
-                                    <Loader2 className="h-4 w-4 animate-spin" />
-                                    Validating...
-                                </>
+                                <><Loader2 className="h-4 w-4 animate-spin" />Validating...</>
                             ) : isLoading ? (
-                                <>
-                                    <Loader2 className="h-4 w-4 animate-spin" />
-                                    Importing...
-                                </>
+                                <><Loader2 className="h-4 w-4 animate-spin" />Importing...</>
                             ) : isDryRun ? (
                                 <>Validate Only</>
                             ) : (
-                                <>
-                                    Upload and Import
-                                    <Upload className="h-4 w-4" />
-                                </>
+                                <>Upload and Import<Upload className="h-4 w-4" /></>
                             )}
                         </Button>
                     </div>
@@ -555,33 +544,28 @@ export default function BulkImport({ groupId: propGroupId, onSuccess }: BulkImpo
 
                 {/* Import Results Dialog */}
                 <Dialog open={showResultDialog} onOpenChange={setShowResultDialog}>
-                    <DialogContent className="max-w-4xl max-h-[80vh] overflow-y-auto bg-background border-border">
+                    <DialogContent className="max-h-[80vh] max-w-4xl overflow-y-auto">
                         <DialogHeader>
-                            <DialogTitle className="text-foreground">Import Results</DialogTitle>
+                            <DialogTitle>Import Results</DialogTitle>
                         </DialogHeader>
 
                         {importResult && (
                             <div className="space-y-6">
-                                <div className="flex justify-between items-center">
+                                <div className="flex items-center justify-between">
                                     <div className="space-y-1">
-                                        <p className="text-sm text-foreground">
-                                            <CheckCircle2 className="inline h-4 w-4 text-green-600 mr-1" />
+                                        <p className="flex items-center gap-1.5 text-sm">
+                                            <CheckCircle2 className="h-4 w-4 text-success" />
                                             Successful: <strong>{importResult.successes?.length || 0}</strong>
                                         </p>
-                                        <p className="text-sm text-foreground">
-                                            <AlertCircle className="inline h-4 w-4 text-red-600 mr-1" />
+                                        <p className="flex items-center gap-1.5 text-sm">
+                                            <AlertCircle className="h-4 w-4 text-destructive" />
                                             Failed: <strong>{importResult.failures?.length || 0}</strong>
                                         </p>
                                     </div>
 
                                     {importResult.failures && importResult.failures.length > 0 && (
-                                        <Button
-                                            onClick={downloadFailuresAsCSV}
-                                            variant="outline"
-                                            size="sm"
-                                            className="border-border text-foreground hover:bg-card-dark"
-                                        >
-                                            <Download className="h-4 w-4 mr-2" />
+                                        <Button onClick={downloadFailuresAsCSV} variant="outline" size="sm">
+                                            <Download className="h-4 w-4" />
                                             Download Failures
                                         </Button>
                                     )}
@@ -589,22 +573,22 @@ export default function BulkImport({ groupId: propGroupId, onSuccess }: BulkImpo
 
                                 {importResult.successes && importResult.successes.length > 0 && (
                                     <div>
-                                        <h3 className="font-semibold text-green-700 mb-2">Successfully Imported</h3>
-                                        <div className="border border-border rounded-md max-h-60 overflow-y-auto bg-card-dark">
+                                        <h3 className="mb-2 font-semibold text-success">Successfully Imported</h3>
+                                        <div className="max-h-60 overflow-y-auto rounded-md border border-border">
                                             <Table>
                                                 <TableHeader>
                                                     <TableRow>
-                                                        <TableHead className="text-foreground font-semibold">Student ID</TableHead>
-                                                        <TableHead className="text-foreground font-semibold">Name</TableHead>
-                                                        <TableHead className="text-foreground font-semibold">Status</TableHead>
+                                                        <TableHead>Student ID</TableHead>
+                                                        <TableHead>Name</TableHead>
+                                                        <TableHead>Status</TableHead>
                                                     </TableRow>
                                                 </TableHeader>
                                                 <TableBody>
                                                     {importResult.successes.map((student, idx) => (
                                                         <TableRow key={idx}>
-                                                            <TableCell className="text-foreground">{student.student_id}</TableCell>
-                                                            <TableCell className="text-foreground">{student.name}</TableCell>
-                                                            <TableCell className="text-green-700 font-medium">{student.message}</TableCell>
+                                                            <TableCell>{student.student_id}</TableCell>
+                                                            <TableCell>{student.name}</TableCell>
+                                                            <TableCell className="font-medium text-success">{student.message}</TableCell>
                                                         </TableRow>
                                                     ))}
                                                 </TableBody>
@@ -615,22 +599,22 @@ export default function BulkImport({ groupId: propGroupId, onSuccess }: BulkImpo
 
                                 {importResult.failures && importResult.failures.length > 0 && (
                                     <div>
-                                        <h3 className="font-semibold text-red-700 mb-2">Failed Imports</h3>
-                                        <div className="border border-border rounded-md max-h-60 overflow-y-auto bg-card-dark">
+                                        <h3 className="mb-2 font-semibold text-destructive">Failed Imports</h3>
+                                        <div className="max-h-60 overflow-y-auto rounded-md border border-border">
                                             <Table>
                                                 <TableHeader>
                                                     <TableRow>
-                                                        <TableHead className="text-foreground font-semibold">Row</TableHead>
-                                                        <TableHead className="text-foreground font-semibold">Student ID</TableHead>
-                                                        <TableHead className="text-foreground font-semibold">Error</TableHead>
+                                                        <TableHead>Row</TableHead>
+                                                        <TableHead>Student ID</TableHead>
+                                                        <TableHead>Error</TableHead>
                                                     </TableRow>
                                                 </TableHeader>
                                                 <TableBody>
                                                     {importResult.failures.map((failure, idx) => (
                                                         <TableRow key={idx}>
-                                                            <TableCell className="text-foreground">{failure.row || '-'}</TableCell>
-                                                            <TableCell className="text-foreground">{failure.student_id || '-'}</TableCell>
-                                                            <TableCell className="text-red-700 font-medium">{failure.message}</TableCell>
+                                                            <TableCell>{failure.row || '-'}</TableCell>
+                                                            <TableCell>{failure.student_id || '-'}</TableCell>
+                                                            <TableCell className="font-medium text-destructive">{failure.message}</TableCell>
                                                         </TableRow>
                                                     ))}
                                                 </TableBody>
@@ -643,6 +627,7 @@ export default function BulkImport({ groupId: propGroupId, onSuccess }: BulkImpo
 
                         <DialogFooter>
                             <Button
+                                variant="accent"
                                 onClick={() => {
                                     setShowResultDialog(false);
                                     if (importResult && importResult.successes.length > 0 && onSuccess) {
@@ -650,7 +635,6 @@ export default function BulkImport({ groupId: propGroupId, onSuccess }: BulkImpo
                                     }
                                     resetForm();
                                 }}
-                                className="bg-accent hover:bg-accent/90 text-black font-semibold"
                             >
                                 Close
                             </Button>

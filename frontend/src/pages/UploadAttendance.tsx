@@ -1,10 +1,13 @@
 import { useState, useEffect } from 'react';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
 import { useToast } from '@/hooks/use-toast';
-import { Upload, Loader2, CheckCircle2, Users, Image as ImageIcon, BookOpen, Clock } from 'lucide-react';
+import { Upload, Loader2, CheckCircle2, Users, Image as ImageIcon, BookOpen, Clock, AlertTriangle } from 'lucide-react';
 import { attendanceApi, groupApi, settingsApi, type WindowStatusResponse } from '@/services/api';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { PageHeader } from '@/components/layout/PageHeader';
+import { WindowStatusBanner } from '@/components/WindowStatusBanner';
 
 export default function UploadAttendance() {
     const { toast } = useToast();
@@ -174,20 +177,21 @@ export default function UploadAttendance() {
 
     return (
         <div className="space-y-6">
-            <div>
-                <h1 className="text-3xl font-bold">Upload Attendance</h1>
-                <p className="text-muted-foreground mt-1">Upload a group photo to mark attendance</p>
-            </div>
+            <PageHeader
+                title="Upload Attendance"
+                description="Upload a group photo to mark attendance in bulk"
+                icon={Upload}
+            />
 
             {/* Section/Group Selection */}
-            <Card className="p-4 bg-card-light border-0">
-                <div className="flex items-center gap-4">
-                    <div className="flex items-center gap-2 flex-shrink-0">
-                        <BookOpen className="h-5 w-5 text-accent" />
-                        <label className="font-medium">Select Section:</label>
+            <Card className="p-4">
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+                    <div className="flex flex-shrink-0 items-center gap-2">
+                        <BookOpen className="h-5 w-5 text-accent-foreground" />
+                        <label className="text-sm font-medium">Select Section</label>
                     </div>
                     <Select value={selectedGroupId} onValueChange={setSelectedGroupId} disabled={loadingGroups}>
-                        <SelectTrigger className="w-full max-w-xs">
+                        <SelectTrigger className="w-full sm:max-w-xs">
                             <SelectValue placeholder={loadingGroups ? "Loading sections..." : "Choose a section/group"} />
                         </SelectTrigger>
                         <SelectContent>
@@ -198,61 +202,16 @@ export default function UploadAttendance() {
                             ))}
                         </SelectContent>
                     </Select>
-                    {selectedGroupId && (
-                        <span className="text-sm text-muted-foreground">
-                            Selected: {groups.find(g => String(g.id) === selectedGroupId)?.name}
-                        </span>
-                    )}
                 </div>
             </Card>
 
             {/* Attendance Window Status Banner */}
-            {windowStatus && (
-                <Card className={`p-4 border-0 ${windowStatus.status === 'on_time'
-                    ? 'bg-green-50 dark:bg-green-950/30 border-l-4 !border-l-green-500'
-                    : windowStatus.status === 'late'
-                        ? 'bg-yellow-50 dark:bg-yellow-950/30 border-l-4 !border-l-yellow-500'
-                        : windowStatus.status === 'early'
-                            ? 'bg-blue-50 dark:bg-blue-950/30 border-l-4 !border-l-blue-500'
-                            : 'bg-red-50 dark:bg-red-950/30 border-l-4 !border-l-red-500'
-                    }`}>
-                    <div className="flex items-center justify-between flex-wrap gap-2">
-                        <div className="flex items-center gap-3">
-                            <Clock className={`h-5 w-5 ${windowStatus.status === 'on_time' ? 'text-green-600' :
-                                windowStatus.status === 'late' ? 'text-yellow-600' :
-                                    windowStatus.status === 'early' ? 'text-blue-600' :
-                                        'text-red-600'
-                                }`} />
-                            <div>
-                                <p className={`font-semibold text-sm ${windowStatus.status === 'on_time' ? 'text-green-700 dark:text-green-400' :
-                                    windowStatus.status === 'late' ? 'text-yellow-700 dark:text-yellow-400' :
-                                        windowStatus.status === 'early' ? 'text-blue-700 dark:text-blue-400' :
-                                            'text-red-700 dark:text-red-400'
-                                    }`}>
-                                    {windowStatus.status === 'on_time' && '✅ Window Open — On Time'}
-                                    {windowStatus.status === 'late' && '⚠️ Late Window — Attendance will be marked as LATE'}
-                                    {windowStatus.status === 'early' && '🕐 Window Not Open Yet'}
-                                    {windowStatus.status === 'rejected' && '🚫 Late Entries Rejected'}
-                                    {windowStatus.status === 'closed' && '🔒 Attendance Window Closed'}
-                                </p>
-                                <p className="text-xs text-muted-foreground mt-0.5">
-                                    {windowStatus.message}
-                                </p>
-                            </div>
-                        </div>
-                        <div className="text-xs text-muted-foreground text-right">
-                            <span className="font-medium">On-time:</span> {windowStatus.window.window_start} – {windowStatus.window.window_end} &nbsp;|&nbsp;
-                            <span className="font-medium">Late until:</span> {windowStatus.window.late_end} &nbsp;|&nbsp;
-                            <span className="font-medium">Now:</span> {windowStatus.window.current_time} IST
-                        </div>
-                    </div>
-                </Card>
-            )}
+            {windowStatus && <WindowStatusBanner windowStatus={windowStatus} />}
 
             <div className="grid gap-6 lg:grid-cols-3">
                 {/* Upload Section */}
                 <div className="lg:col-span-2">
-                    <Card className="p-6 bg-card-light border-0">
+                    <Card className="p-6">
                         <div className="space-y-6">
                             {/* Image Upload */}
                             <div>
@@ -299,7 +258,8 @@ export default function UploadAttendance() {
                                         <Button
                                             onClick={handleUpload}
                                             disabled={loading || !selectedGroupId || (windowStatus != null && windowStatus.status !== 'on_time' && windowStatus.status !== 'late')}
-                                            className="flex-1 bg-accent hover:bg-accent/90 text-black disabled:opacity-50 disabled:cursor-not-allowed"
+                                            variant="accent"
+                                            className="flex-1"
                                         >
                                             {loading ? (
                                                 <>
@@ -337,18 +297,18 @@ export default function UploadAttendance() {
 
                             {/* Instructions */}
                             {!selectedFile && (
-                                <Card className="p-4 bg-background border-border">
-                                    <h3 className="font-semibold mb-2 flex items-center gap-2">
-                                        <ImageIcon className="w-4 h-4" />
+                                <div className="rounded-xl border border-border bg-muted/40 p-4">
+                                    <h3 className="mb-2 flex items-center gap-2 text-sm font-semibold">
+                                        <ImageIcon className="h-4 w-4 text-accent-foreground" />
                                         Tips for best results
                                     </h3>
-                                    <ul className="text-sm text-muted-foreground space-y-1">
-                                        <li>• Ensure faces are clearly visible and well-lit</li>
-                                        <li>• Avoid blurry or low-quality images</li>
-                                        <li>• Include multiple students in a single frame</li>
-                                        <li>• Face the camera directly for better recognition</li>
+                                    <ul className="space-y-1.5 text-sm text-muted-foreground">
+                                        <li className="flex gap-2"><span className="text-accent-foreground">•</span> Ensure faces are clearly visible and well-lit</li>
+                                        <li className="flex gap-2"><span className="text-accent-foreground">•</span> Avoid blurry or low-quality images</li>
+                                        <li className="flex gap-2"><span className="text-accent-foreground">•</span> Include multiple students in a single frame</li>
+                                        <li className="flex gap-2"><span className="text-accent-foreground">•</span> Face the camera directly for better recognition</li>
                                     </ul>
-                                </Card>
+                                </div>
                             )}
                         </div>
                     </Card>
@@ -356,88 +316,73 @@ export default function UploadAttendance() {
 
                 {/* Results Section */}
                 <div>
-                    <Card className="p-6 bg-card-dark border-0">
-                        <div className="flex items-center gap-2 mb-4">
-                            <Users className="h-5 w-5" />
-                            <h2 className="text-lg font-semibold">Detection Results</h2>
+                    <Card className="p-5">
+                        <div className="mb-4 flex items-center gap-2">
+                            <Users className="h-5 w-5 text-accent-foreground" />
+                            <h2 className="text-base font-semibold">Detection Results</h2>
                         </div>
 
                         {!results ? (
-                            <div className="text-center py-8 text-muted-foreground">
-                                <Users className="w-12 h-12 mx-auto mb-2 opacity-50" />
-                                <p>No results yet</p>
-                                <p className="text-sm mt-1">Upload an image to see detected students</p>
+                            <div className="flex flex-col items-center justify-center py-10 text-center">
+                                <div className="mb-3 flex h-12 w-12 items-center justify-center rounded-full bg-muted">
+                                    <Users className="h-6 w-6 text-muted-foreground" />
+                                </div>
+                                <p className="font-medium text-foreground">No results yet</p>
+                                <p className="mt-1 text-sm text-muted-foreground">Upload an image to see detected students</p>
                             </div>
                         ) : (
                             <div className="space-y-4">
-                                <div className="p-4 rounded-lg bg-success/10 border border-success/20">
-                                    <div className="text-center">
-                                        <div className="text-3xl font-bold text-success">{results.detected_count || 0}</div>
-                                        <div className="text-sm text-muted-foreground">Students Detected</div>
-                                    </div>
+                                <div className="rounded-xl border border-success/20 bg-success/8 p-4 text-center">
+                                    <div className="text-3xl font-bold tnum text-success">{results.detected_count || 0}</div>
+                                    <div className="text-sm text-muted-foreground">Students Detected</div>
                                 </div>
 
-                                <div className="space-y-2 max-h-96 overflow-y-auto">
+                                <div className="max-h-96 space-y-2 overflow-y-auto">
                                     {results.students && results.students.length > 0 ? (
                                         results.students.map((student, index) => (
                                             <div
                                                 key={index}
-                                                className="p-3 rounded-lg bg-green-50 dark:bg-green-950/20 border border-green-200 dark:border-green-900"
+                                                className="flex items-center justify-between rounded-lg border border-success/20 bg-success/5 p-3"
                                             >
-                                                <div className="flex items-center justify-between">
-                                                    <div className="flex-1">
-                                                        <h3 className="font-semibold text-sm text-green-900 dark:text-green-100">
-                                                            {student.name}
-                                                        </h3>
-                                                    </div>
-                                                    <span className="text-xs px-2 py-1 rounded-full font-medium bg-green-200 dark:bg-green-900 text-green-800 dark:text-green-200">
-                                                        In-Time
-                                                    </span>
+                                                <div className="flex items-center gap-2.5">
+                                                    <CheckCircle2 className="h-4 w-4 shrink-0 text-success" />
+                                                    <h3 className="text-sm font-medium text-foreground">{student.name}</h3>
                                                 </div>
+                                                <Badge variant="success">In-Time</Badge>
                                             </div>
                                         ))
                                     ) : (
-                                        <div className="text-center py-8 text-muted-foreground">
-                                            <p>No students detected in this image</p>
-                                        </div>
+                                        <p className="py-8 text-center text-sm text-muted-foreground">
+                                            No students detected in this image
+                                        </p>
                                     )}
                                 </div>
 
-                                {/* Wrong Section Students Warning - Compact */}
+                                {/* Wrong Section Students Warning */}
                                 {results.wrong_section_students && results.wrong_section_students.length > 0 && (
-                                    <div className="mt-4 p-3 rounded-lg bg-yellow-50 dark:bg-yellow-950/20 border border-yellow-200 dark:border-yellow-900">
-                                        <div className="flex items-center justify-between mb-2">
-                                            <h3 className="text-sm font-semibold text-yellow-800 dark:text-yellow-300 flex items-center gap-2">
-                                                <Users className="w-4 h-4" />
+                                    <div className="rounded-xl border border-warning/25 bg-warning/8 p-3">
+                                        <div className="mb-2 flex items-center justify-between">
+                                            <h3 className="flex items-center gap-1.5 text-sm font-semibold text-warning-foreground">
+                                                <AlertTriangle className="h-4 w-4" />
                                                 Wrong Section
                                             </h3>
-                                            <span className="text-xs text-yellow-600 dark:text-yellow-500">
-                                                {results.wrong_section_students.length} student{results.wrong_section_students.length > 1 ? 's' : ''}
-                                            </span>
+                                            <Badge variant="warning">{results.wrong_section_students.length}</Badge>
                                         </div>
-                                        <div className="space-y-2 max-h-48 overflow-y-auto">
+                                        <div className="max-h-48 space-y-1.5 overflow-y-auto">
                                             {results.wrong_section_students.map((student, index) => (
                                                 <div
                                                     key={index}
-                                                    className="p-2 rounded bg-white dark:bg-yellow-950/30 border border-yellow-300 dark:border-yellow-800"
+                                                    className="flex items-center justify-between gap-2 rounded-lg border border-border bg-card p-2"
                                                 >
-                                                    <div className="flex items-center justify-between">
-                                                        <div className="flex-1">
-                                                            <h4 className="font-medium text-sm text-yellow-900 dark:text-yellow-200">
-                                                                {student.name}
-                                                            </h4>
-                                                            {student.group_name && (
-                                                                <p className="text-xs text-yellow-600 dark:text-yellow-500">
-                                                                    → {student.group_name}
-                                                                </p>
-                                                            )}
-                                                        </div>
-                                                    </div>
+                                                    <h4 className="text-sm font-medium text-foreground">{student.name}</h4>
+                                                    {student.group_name && (
+                                                        <span className="shrink-0 text-xs text-muted-foreground">→ {student.group_name}</span>
+                                                    )}
                                                 </div>
                                             ))}
                                         </div>
-                                        <p className="text-xs text-yellow-700 dark:text-yellow-400 mt-2 text-center">
-                                            ⚠️ Not marked - Different section
+                                        <p className="mt-2 text-center text-xs text-warning-foreground/80">
+                                            Not marked — different section
                                         </p>
                                     </div>
                                 )}

@@ -325,7 +325,7 @@ export default function PoseCaptureFlow({
                                 <Button
                                     variant="outline"
                                     size="sm"
-                                    className="h-7 px-2 text-xs text-black border-black"
+                                    className="h-7 px-2 text-xs"
                                     onClick={() => handleRetakePose(pose)}
                                     disabled={disabled}
                                 >
@@ -341,9 +341,10 @@ export default function PoseCaptureFlow({
                 <Button
                     onClick={handleConfirmAll}
                     disabled={!allCaptured || disabled}
-                    className="w-full bg-accent hover:bg-accent/90 text-black font-semibold"
+                    variant="accent"
+                    className="w-full"
                 >
-                    <CheckCircle2 className="h-4 w-4 mr-2" />
+                    <CheckCircle2 className="h-4 w-4" />
                     Confirm All 3 Photos &amp; Submit
                 </Button>
 
@@ -371,7 +372,7 @@ export default function PoseCaptureFlow({
                                 className={`flex items-center justify-center w-7 h-7 rounded-full text-xs font-bold border-2 transition-colors ${done
                                     ? 'bg-green-500 border-green-500 text-white'
                                     : active
-                                        ? 'bg-accent border-accent text-black'
+                                        ? 'bg-accent border-accent text-accent-foreground'
                                         : 'bg-background border-muted-foreground text-muted-foreground'
                                     }`}
                             >
@@ -404,7 +405,7 @@ export default function PoseCaptureFlow({
                         type="button"
                         onClick={() => handleSwitchMode('camera')}
                         className={`flex-1 flex items-center justify-center gap-1.5 py-2 text-xs font-medium transition-colors ${inputMode === 'camera'
-                            ? 'bg-accent text-black'
+                            ? 'bg-accent text-accent-foreground'
                             : 'bg-background text-muted-foreground hover:bg-muted'
                             }`}
                     >
@@ -415,7 +416,7 @@ export default function PoseCaptureFlow({
                         type="button"
                         onClick={() => handleSwitchMode('upload')}
                         className={`flex-1 flex items-center justify-center gap-1.5 py-2 text-xs font-medium transition-colors ${inputMode === 'upload'
-                            ? 'bg-accent text-black'
+                            ? 'bg-accent text-accent-foreground'
                             : 'bg-background text-muted-foreground hover:bg-muted'
                             }`}
                     >
@@ -550,7 +551,8 @@ export default function PoseCaptureFlow({
                     <div className="flex flex-col items-center gap-2">
                         <Button
                             size="lg"
-                            className="w-full max-w-sm bg-accent hover:bg-accent/90 text-black font-semibold"
+                            variant="accent"
+                            className="w-full max-w-sm"
                             disabled={camState !== 'streaming'}
                             onClick={handleCapture}
                         >
@@ -583,10 +585,11 @@ export default function PoseCaptureFlow({
                     /* Upload mode idle */
                     <Button
                         size="lg"
-                        className="w-full max-w-sm bg-accent hover:bg-accent/90 text-black font-semibold mx-auto"
+                        variant="accent"
+                        className="mx-auto w-full max-w-sm"
                         onClick={() => fileInputRef.current?.click()}
                     >
-                        <Upload className="h-5 w-5 mr-2" />
+                        <Upload className="h-5 w-5" />
                         Select Photo
                     </Button>
                 )
@@ -596,15 +599,16 @@ export default function PoseCaptureFlow({
                     <Button
                         size="lg"
                         variant="outline"
-                        className="flex-1 text-black border-black hover:bg-black/10"
+                        className="flex-1"
                         onClick={handleRetakeCurrent}
                     >
-                        <RotateCcw className="h-4 w-4 mr-2" />
+                        <RotateCcw className="h-4 w-4" />
                         Retake
                     </Button>
                     <Button
                         size="lg"
-                        className="flex-1 bg-accent hover:bg-accent/90 text-black font-semibold"
+                        variant="accent"
+                        className="flex-1"
                         onClick={handleAccept}
                     >
                         <CheckCircle2 className="h-4 w-4 mr-2" />

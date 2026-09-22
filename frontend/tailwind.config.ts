@@ -44,6 +44,14 @@ export default {
           DEFAULT: "hsl(var(--success))",
           foreground: "hsl(var(--success-foreground))",
         },
+        warning: {
+          DEFAULT: "hsl(var(--warning))",
+          foreground: "hsl(var(--warning-foreground))",
+        },
+        info: {
+          DEFAULT: "hsl(var(--info))",
+          foreground: "hsl(var(--info-foreground))",
+        },
         popover: {
           DEFAULT: "hsl(var(--popover))",
           foreground: "hsl(var(--popover-foreground))",
@@ -53,6 +61,8 @@ export default {
           foreground: "hsl(var(--card-foreground))",
           light: "hsl(var(--card-light))",
           "light-foreground": "hsl(var(--card-light-foreground))",
+          dark: "hsl(var(--card-dark))",
+          "dark-foreground": "hsl(var(--card-dark-foreground))",
         },
         gray: {
           50: "hsl(var(--gray-50))",
@@ -81,7 +91,12 @@ export default {
         sans: ['Inter', 'system-ui', 'sans-serif'],
       },
       boxShadow: {
-        'glow': '0 0 20px hsl(var(--accent) / 0.3)',
+        'xs': 'var(--shadow-xs)',
+        'sm': 'var(--shadow-sm)',
+        'md': 'var(--shadow-md)',
+        'lg': 'var(--shadow-lg)',
+        'xl': 'var(--shadow-xl)',
+        'glow': 'var(--shadow-glow)',
         'glow-lg': '0 0 40px hsl(var(--accent) / 0.4)',
       },
       borderRadius: {
@@ -116,6 +131,14 @@ export default {
           "0%": { transform: "translateX(60px)", opacity: "0" },
           "100%": { transform: "translateX(0px)", opacity: "1" },
         },
+        "fade-in": {
+          "0%": { opacity: "0" },
+          "100%": { opacity: "1" },
+        },
+        "fade-in-up": {
+          "0%": { opacity: "0", transform: "translateY(8px)" },
+          "100%": { opacity: "1", transform: "translateY(0)" },
+        },
       },
       animation: {
         "accordion-down": "accordion-down 0.2s ease-out",
@@ -124,6 +147,8 @@ export default {
         "float-up": "float-up 3.5s ease-out forwards",
         "pulse-glow-green": "pulse-glow-green 2s ease-in-out infinite",
         "slide-in-right": "slide-in-right 0.35s cubic-bezier(0.22,1,0.36,1) forwards",
+        "fade-in": "fade-in 0.3s ease-out",
+        "fade-in-up": "fade-in-up 0.4s cubic-bezier(0.22,1,0.36,1)",
       },
     },
   },

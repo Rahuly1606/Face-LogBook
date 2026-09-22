@@ -1,7 +1,8 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useToast } from '@/hooks/use-toast';
-import { Loader2 } from 'lucide-react';
+import { Loader2, SlidersHorizontal } from 'lucide-react';
 import { settingsApi, attendanceApi, groupApi, type AttendanceWindowSettings, type WindowStatusResponse } from '@/services/api';
+import { PageHeader } from '@/components/layout/PageHeader';
 import { GroupSelector, WindowStatusCard, TimeWindowCard } from './Settings/components';
 import { validateTimeWindow, getEffectiveGroupId } from './Settings/utils';
 
@@ -172,13 +173,12 @@ export default function Settings() {
     const selectedGroup = groups.find(g => String(g.id) === effectiveGroupId);
 
     return (
-        <div className="space-y-6 max-w-2xl">
-            <div>
-                <h1 className="text-3xl font-bold">Settings</h1>
-                <p className="text-muted-foreground mt-1">
-                    Configure attendance time window and policies per section
-                </p>
-            </div>
+        <div className="max-w-2xl space-y-6">
+            <PageHeader
+                title="Settings"
+                description="Configure attendance time window and policies per section"
+                icon={SlidersHorizontal}
+            />
 
             <GroupSelector
                 selectedGroupId={selectedGroupId}

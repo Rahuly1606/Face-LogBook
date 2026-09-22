@@ -214,7 +214,7 @@ export default function SelfRegister() {
             {/* Header */}
             <div className="w-full max-w-md mb-6 text-center">
                 <div className="flex items-center justify-center gap-2 mb-2">
-                    <UserPlus className="h-7 w-7 text-accent" />
+                    <UserPlus className="h-7 w-7 text-accent-foreground" />
                     <h1 className="text-2xl font-bold">Student Registration</h1>
                 </div>
                 {tokenInfo && (
@@ -235,7 +235,7 @@ export default function SelfRegister() {
 
             {/* ── Invalid / Expired token ── */}
             {pageState === 'invalid' && (
-                <Card className="w-full max-w-md p-8 text-center border-0 bg-card-dark shadow-lg">
+                <Card className="w-full max-w-md p-8 text-center shadow-lg">
                     <AlertTriangle className="h-12 w-12 text-destructive mx-auto mb-4" />
                     <h2 className="text-xl font-semibold mb-2">Link Unavailable</h2>
                     <p className="text-muted-foreground text-sm">{invalidMessage}</p>
@@ -244,8 +244,8 @@ export default function SelfRegister() {
 
             {/* ── Already registered (localStorage) ── */}
             {pageState === 'already_done' && (
-                <Card className="w-full max-w-md p-8 text-center border-0 bg-card-dark shadow-lg">
-                    <ShieldAlert className="h-12 w-12 text-yellow-500 mx-auto mb-4" />
+                <Card className="w-full max-w-md p-8 text-center shadow-lg">
+                    <ShieldAlert className="h-12 w-12 text-warning mx-auto mb-4" />
                     <h2 className="text-xl font-semibold mb-2">Already Registered</h2>
                     <p className="text-muted-foreground text-sm">
                         It looks like you have already completed registration on this device.
@@ -256,8 +256,8 @@ export default function SelfRegister() {
 
             {/* ── Success ── */}
             {pageState === 'success' && (
-                <Card className="w-full max-w-md p-8 text-center border-0 bg-card-dark shadow-lg">
-                    <CheckCircle2 className="h-14 w-14 text-green-500 mx-auto mb-4" />
+                <Card className="w-full max-w-md p-8 text-center shadow-lg">
+                    <CheckCircle2 className="h-14 w-14 text-success mx-auto mb-4" />
                     <h2 className="text-2xl font-bold mb-2">Registration Successful!</h2>
                     <p className="text-muted-foreground text-sm mb-1">
                         Welcome, <span className="font-semibold text-foreground">{successName}</span>!
@@ -281,10 +281,10 @@ export default function SelfRegister() {
 
             {/* ── Registration form ── */}
             {(pageState === 'form' || pageState === 'submitting') && (
-                <Card className="w-full max-w-md p-6 border-0 bg-card-dark shadow-lg space-y-6">
+                <Card className="w-full max-w-md p-6 shadow-lg space-y-6">
                     {/* Name */}
                     <div className="space-y-2">
-                        <Label htmlFor="reg-name" className="text-black font-medium">
+                        <Label htmlFor="reg-name" className="font-medium">
                             Full Name <span className="text-destructive">*</span>
                         </Label>
                         <Input
@@ -300,7 +300,7 @@ export default function SelfRegister() {
 
                     {/* ID Number */}
                     <div className="space-y-2">
-                        <Label htmlFor="reg-id" className="text-black font-medium">
+                        <Label htmlFor="reg-id" className="font-medium">
                             ID Number <span className="text-destructive">*</span>
                         </Label>
                         <Input
@@ -316,7 +316,7 @@ export default function SelfRegister() {
 
                     {/* 3-Pose Camera */}
                     <div className="space-y-2">
-                        <Label className="text-black font-medium">
+                        <Label className="font-medium">
                             Face Photos <span className="text-destructive">*</span>
                         </Label>
                         <p className="text-xs text-muted-foreground">
@@ -336,8 +336,8 @@ export default function SelfRegister() {
                             </div>
                         )}
                         {posesConfirmed && !isSubmitting && (
-                            <p className="text-xs text-green-500 text-center">
-                                ✓ All 3 photos confirmed — ready to submit
+                            <p className="flex items-center justify-center gap-1 text-xs text-success">
+                                <CheckCircle2 className="h-3.5 w-3.5" /> All 3 photos confirmed — ready to submit
                             </p>
                         )}
                     </div>
@@ -353,14 +353,12 @@ export default function SelfRegister() {
                     <Button
                         onClick={handleSubmit}
                         disabled={isSubmitting || !posesConfirmed}
-                        className="w-full bg-accent hover:bg-accent/90 text-black font-semibold"
+                        variant="accent"
+                        className="w-full"
                         size="lg"
                     >
                         {isSubmitting ? (
-                            <>
-                                <Loader2 className="h-5 w-5 mr-2 animate-spin" />
-                                Registering…
-                            </>
+                            <><Loader2 className="h-5 w-5 animate-spin" />Registering…</>
                         ) : (
                             'Submit Registration'
                         )}

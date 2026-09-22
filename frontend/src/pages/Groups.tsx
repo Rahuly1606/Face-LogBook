@@ -1,10 +1,12 @@
-﻿import { useState, useEffect } from 'react';
-import { Plus, Users, Loader2, Trash2, Link2, Check, Share2 } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { Plus, Users, Loader2, Trash2, Link2, Check, Share2, FolderKanban } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { Skeleton } from '@/components/ui/skeleton';
+import { PageHeader } from '@/components/layout/PageHeader';
 import { groupApi, Group, registrationLinkApi } from '@/services/api';
 import { useToast } from '@/hooks/use-toast';
 import {
@@ -15,6 +17,16 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 
 export default function Groups() {
   const { toast } = useToast();
@@ -23,6 +35,8 @@ export default function Groups() {
   const [showCreateDialog, setShowCreateDialog] = useState(false);
   const [newGroup, setNewGroup] = useState({ name: '' });
   const [creating, setCreating] = useState(false);
+  const [deleteTarget, setDeleteTarget] = useState<Group | null>(null);
+  const [deleting, setDeleting] = useState(false);
 
   // Per-group link copy/share state
   const [loadingLinkGroupId, setLoadingLinkGroupId] = useState<number | null>(null);
@@ -47,13 +61,13 @@ export default function Groups() {
   };
 
   const handleCreateGroup = async () => {
-    if (!newGroup.name) {
+    if (!newGroup.name.trim()) {
       toast({ title: 'Validation Error', description: 'Please provide a group name', variant: 'destructive' });
       return;
     }
     setCreating(true);
     try {
-      await groupApi.create(newGroup);
+      await groupApi.create({ name: newGroup.name.trim() });
       toast({ title: 'Success', description: 'Group created successfully' });
       setShowCreateDialog(false);
       setNewGroup({ name: '' });
@@ -65,18 +79,20 @@ export default function Groups() {
     }
   };
 
-  const handleDeleteGroup = async (id: number, name: string) => {
-    if (!confirm(`Are you sure you want to delete group "${name}"?`)) return;
+  const handleDeleteGroup = async () => {
+    if (!deleteTarget) return;
+    setDeleting(true);
     try {
-      await groupApi.delete(id);
+      await groupApi.delete(deleteTarget.id);
       toast({ title: 'Success', description: 'Group deleted successfully' });
+      setDeleteTarget(null);
       loadGroups();
     } catch (error: any) {
       toast({ title: 'Error', description: error.message || 'Failed to delete group', variant: 'destructive' });
+    } finally {
+      setDeleting(false);
     }
   };
-
-  // â”€â”€ Link management â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
   // One-click: reuse existing active link or create new, then copy / share
   const handleCopyGroupLink = async (group: Group) => {
@@ -100,7 +116,7 @@ export default function Groups() {
         await navigator.clipboard.writeText(url);
         setCopiedLinkGroupId(group.id);
         setTimeout(() => setCopiedLinkGroupId(null), 2000);
-        toast({ title: 'Link copied!', description: url });
+        toast({ title: 'Link copied', description: url });
       }
     } catch (error: any) {
       if (error?.name !== 'AbortError')
@@ -110,94 +126,88 @@ export default function Groups() {
     }
   };
 
-  // â”€â”€ Render â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-3xl font-bold">Groups</h1>
-          <p className="text-muted-foreground mt-1">Manage student groups and classes</p>
-        </div>
-        <Button
-          onClick={() => setShowCreateDialog(true)}
-          className="bg-accent hover:bg-accent/90 text-black font-semibold"
-        >
-          <Plus className="h-4 w-4 mr-2" />
-          Create Group
-        </Button>
-      </div>
+      <PageHeader
+        title="Groups"
+        description="Organize students into sections and classes"
+        icon={FolderKanban}
+        actions={
+          <Button variant="accent" onClick={() => setShowCreateDialog(true)}>
+            <Plus className="h-4 w-4" />
+            Create Group
+          </Button>
+        }
+      />
 
       {loading ? (
-        <div className="flex items-center justify-center py-12">
-          <Loader2 className="h-8 w-8 animate-spin text-accent" />
+        <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
+          {Array.from({ length: 6 }).map((_, i) => (
+            <Skeleton key={i} className="h-40 rounded-xl" />
+          ))}
         </div>
       ) : groups.length === 0 ? (
-        <Card className="p-12 text-center bg-card-light border-0">
-          <p className="text-muted-foreground">No groups created yet</p>
-          <Button
-            onClick={() => setShowCreateDialog(true)}
-            className="mt-4 bg-accent hover:bg-accent/90 text-black"
-          >
-            <Plus className="h-4 w-4 mr-2" />
+        <Card className="flex flex-col items-center justify-center px-6 py-16 text-center">
+          <div className="mb-4 flex h-14 w-14 items-center justify-center rounded-full bg-muted">
+            <FolderKanban className="h-7 w-7 text-muted-foreground" />
+          </div>
+          <h3 className="text-lg font-semibold">No groups yet</h3>
+          <p className="mt-1 max-w-sm text-sm text-muted-foreground">
+            Create your first group to start organizing students into sections.
+          </p>
+          <Button variant="accent" className="mt-5" onClick={() => setShowCreateDialog(true)}>
+            <Plus className="h-4 w-4" />
             Create First Group
           </Button>
         </Card>
       ) : (
-        <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
+        <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
           {groups.map((group) => (
             <Card
               key={group.id}
-              className="p-6 bg-card-dark text-card-foreground border-0 shadow-md hover:shadow-xl transition-all duration-300"
+              className="group flex flex-col p-5 transition-all duration-300 hover:-translate-y-0.5 hover:shadow-lg"
             >
-              <div className="space-y-4">
-                <div className="flex items-start justify-between">
-                  <div className="flex-1">
-                    <h3 className="font-semibold text-xl text-foreground mb-2">{group.name}</h3>
-                    <Badge variant="secondary" className="bg-accent/20 text-black font-semibold text-sm px-3 py-1">
-                      ID: {group.id}
-                    </Badge>
-                  </div>
-                  <div className="p-2 rounded-lg bg-accent/20">
-                    <Users className="h-5 w-5 text-black" />
-                  </div>
+              <div className="flex items-start justify-between">
+                <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-accent/15 text-accent-foreground transition-transform duration-300 group-hover:scale-105">
+                  <Users className="h-5 w-5" />
                 </div>
+                <Badge variant="muted" className="font-mono">ID {group.id}</Badge>
+              </div>
 
-                <div className="flex items-center justify-between pt-4 border-t border-border">
-                  <div>
-                    <p className="text-sm text-muted-foreground font-medium">Students</p>
-                    <p className="font-mono text-base text-foreground font-semibold mt-1">{group.student_count || 0}</p>
-                  </div>
-                  <div className="flex items-center gap-1">
-                    {/* Copy / Share registration link */}
-                    <Button
-                      size="sm"
-                      variant="ghost"
-                      onClick={() => handleCopyGroupLink(group)}
-                      disabled={loadingLinkGroupId === group.id}
-                      title={navigator.share ? 'Share registration link' : 'Copy registration link'}
-                      className="hover:bg-accent/10"
-                    >
-                      {loadingLinkGroupId === group.id ? (
-                        <Loader2 className="h-4 w-4 animate-spin text-black" />
-                      ) : copiedLinkGroupId === group.id ? (
-                        <Check className="h-4 w-4 text-green-500" />
-                      ) : navigator.share ? (
-                        <Share2 className="h-4 w-4 text-black" />
-                      ) : (
-                        <Link2 className="h-4 w-4 text-accent" />
-                      )}
-                    </Button>
-                    {/* Delete group */}
-                    <Button
-                      size="sm"
-                      variant="ghost"
-                      onClick={() => handleDeleteGroup(group.id, group.name)}
-                      className="hover:bg-destructive/10"
-                    >
-                      <Trash2 className="h-4 w-4 text-destructive" />
-                    </Button>
-                  </div>
+              <h3 className="mt-4 truncate text-lg font-semibold text-foreground">{group.name}</h3>
+
+              <div className="mt-4 flex items-end justify-between border-t border-border pt-4">
+                <div>
+                  <p className="text-xs font-medium text-muted-foreground">Students</p>
+                  <p className="mt-0.5 text-2xl font-bold tnum text-foreground">{group.student_count || 0}</p>
+                </div>
+                <div className="flex items-center gap-1">
+                  <Button
+                    size="icon"
+                    variant="ghost"
+                    onClick={() => handleCopyGroupLink(group)}
+                    disabled={loadingLinkGroupId === group.id}
+                    title={navigator.share ? 'Share registration link' : 'Copy registration link'}
+                  >
+                    {loadingLinkGroupId === group.id ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : copiedLinkGroupId === group.id ? (
+                      <Check className="h-4 w-4 text-success" />
+                    ) : navigator.share ? (
+                      <Share2 className="h-4 w-4" />
+                    ) : (
+                      <Link2 className="h-4 w-4" />
+                    )}
+                  </Button>
+                  <Button
+                    size="icon"
+                    variant="ghost"
+                    onClick={() => setDeleteTarget(group)}
+                    title="Delete group"
+                    className="text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
+                  >
+                    <Trash2 className="h-4 w-4" />
+                  </Button>
                 </div>
               </div>
             </Card>
@@ -205,36 +215,58 @@ export default function Groups() {
         </div>
       )}
 
-      {/* â”€â”€ Create Group Dialog â”€â”€ */}
+      {/* Create Group Dialog */}
       <Dialog open={showCreateDialog} onOpenChange={setShowCreateDialog}>
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Create New Group</DialogTitle>
-            <DialogDescription>Add a new group to organize students</DialogDescription>
+            <DialogDescription>Add a new section to organize students.</DialogDescription>
           </DialogHeader>
-          <div className="space-y-4 py-4">
-            <div>
-              <Label htmlFor="group-name">Group Name</Label>
-              <Input
-                id="group-name"
-                placeholder="e.g., Computer Science Year 1"
-                value={newGroup.name}
-                onChange={(e) => setNewGroup({ ...newGroup, name: e.target.value })}
-              />
-            </div>
+          <div className="space-y-2 py-2">
+            <Label htmlFor="group-name">Group Name</Label>
+            <Input
+              id="group-name"
+              placeholder="e.g., Computer Science Year 1"
+              value={newGroup.name}
+              onChange={(e) => setNewGroup({ name: e.target.value })}
+              onKeyDown={(e) => e.key === 'Enter' && handleCreateGroup()}
+              autoFocus
+            />
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setShowCreateDialog(false)}>Cancel</Button>
-            <Button
-              onClick={handleCreateGroup}
-              disabled={creating}
-              className="bg-accent hover:bg-accent/90 text-black"
-            >
-              {creating ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Creatingâ€¦</> : 'Create Group'}
+            <Button onClick={handleCreateGroup} disabled={creating} variant="accent">
+              {creating ? <><Loader2 className="h-4 w-4 animate-spin" />Creating…</> : 'Create Group'}
             </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Delete confirmation */}
+      <AlertDialog open={!!deleteTarget} onOpenChange={(open) => !open && setDeleteTarget(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete "{deleteTarget?.name}"?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This permanently deletes the group. Students in it are not deleted, but they will be
+              unassigned from this group. This action cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={deleting}>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={(e) => {
+                e.preventDefault();
+                handleDeleteGroup();
+              }}
+              disabled={deleting}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              {deleting ? <><Loader2 className="h-4 w-4 animate-spin" />Deleting…</> : 'Delete Group'}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

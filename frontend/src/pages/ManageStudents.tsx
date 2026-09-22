@@ -1,12 +1,14 @@
 import { useState, useEffect } from 'react';
-import { Plus, Search, Loader2, Trash2, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Plus, Search, Loader2, Trash2, ChevronLeft, ChevronRight, Users } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Checkbox } from '@/components/ui/checkbox';
+import { Skeleton } from '@/components/ui/skeleton';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useNavigate } from 'react-router-dom';
+import { PageHeader } from '@/components/layout/PageHeader';
 import { studentApi, Student, groupApi, Group } from '@/services/api';
 import { useToast } from '@/hooks/use-toast';
 import {
@@ -160,22 +162,20 @@ export default function Students() {
 
     return (
         <div className="space-y-6">
-            <div className="flex items-center justify-between">
-                <div>
-                    <h1 className="text-3xl font-bold">Students</h1>
-                    <p className="text-muted-foreground mt-1">Manage registered students</p>
-                </div>
-                <Button
-                    onClick={() => navigate('/register')}
-                    className="bg-accent hover:bg-accent/90 text-black font-semibold"
-                >
-                    <Plus className="h-4 w-4 mr-2" />
-                    Register Student
-                </Button>
-            </div>
+            <PageHeader
+                title="Students"
+                description="Manage registered students and their groups"
+                icon={Users}
+                actions={
+                    <Button variant="accent" onClick={() => navigate('/register')}>
+                        <Plus className="h-4 w-4" />
+                        Register Student
+                    </Button>
+                }
+            />
 
             {/* Search and Filters */}
-            <Card className="p-4 bg-card-light border-0">
+            <Card className="p-4">
                 <div className="flex flex-col gap-4">
                     <div className="flex flex-col sm:flex-row gap-4 items-start sm:items-center">
                         <div className="relative flex-1 w-full sm:w-auto">
@@ -243,20 +243,27 @@ export default function Students() {
 
             {/* Students Grid */}
             {loading ? (
-                <div className="flex items-center justify-center py-12">
-                    <Loader2 className="h-8 w-8 animate-spin text-accent" />
+                <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+                    {Array.from({ length: 6 }).map((_, i) => (
+                        <Skeleton key={i} className="h-36 rounded-xl" />
+                    ))}
                 </div>
             ) : filteredStudents.length === 0 ? (
-                <Card className="p-12 text-center bg-card-light border-0">
-                    <p className="text-muted-foreground">
-                        {students.length === 0 ? 'No students registered yet' : 'No students found matching your search'}
+                <Card className="flex flex-col items-center justify-center px-6 py-16 text-center">
+                    <div className="mb-4 flex h-14 w-14 items-center justify-center rounded-full bg-muted">
+                        <Users className="h-7 w-7 text-muted-foreground" />
+                    </div>
+                    <h3 className="text-lg font-semibold">
+                        {students.length === 0 ? 'No students registered yet' : 'No matching students'}
+                    </h3>
+                    <p className="mt-1 max-w-sm text-sm text-muted-foreground">
+                        {students.length === 0
+                            ? 'Register your first student to get started.'
+                            : 'Try adjusting your search or group filter.'}
                     </p>
                     {students.length === 0 && (
-                        <Button
-                            onClick={() => navigate('/register')}
-                            className="mt-4 bg-accent hover:bg-accent/90 text-black"
-                        >
-                            <Plus className="h-4 w-4 mr-2" />
+                        <Button variant="accent" className="mt-5" onClick={() => navigate('/register')}>
+                            <Plus className="h-4 w-4" />
                             Register First Student
                         </Button>
                     )}
@@ -264,76 +271,82 @@ export default function Students() {
             ) : (
                 <>
                     <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-                        {paginatedStudents.map((student) => (
-                            <Card
-                                key={student.student_id}
-                                className="p-6 bg-card-dark text-card-foreground border-0 hover:shadow-lg transition-shadow"
-                            >
-                                <div className="flex items-start gap-4">
-                                    <Checkbox
-                                        checked={selectedIds.has(student.student_id)}
-                                        onCheckedChange={() => toggleSelectStudent(student.student_id)}
-                                        className="mt-1"
-                                    />
-                                    <div className="w-16 h-16 rounded-full bg-accent/20 flex items-center justify-center text-2xl font-bold text-black">
-                                        {student.name.charAt(0)}
+                        {paginatedStudents.map((student) => {
+                            const selected = selectedIds.has(student.student_id);
+                            return (
+                                <Card
+                                    key={student.student_id}
+                                    className={`group p-5 transition-all duration-200 hover:shadow-md ${
+                                        selected ? 'border-accent ring-1 ring-accent/40' : ''
+                                    }`}
+                                >
+                                    <div className="flex items-start gap-3">
+                                        <Checkbox
+                                            checked={selected}
+                                            onCheckedChange={() => toggleSelectStudent(student.student_id)}
+                                            className="mt-1"
+                                            aria-label={`Select ${student.name}`}
+                                        />
+                                        <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-full bg-accent/15 text-xl font-bold text-accent-foreground">
+                                            {student.name.charAt(0).toUpperCase()}
+                                        </div>
+                                        <div className="min-w-0 flex-1">
+                                            <h3 className="truncate text-base font-semibold text-foreground">{student.name}</h3>
+                                            <p className="truncate font-mono text-sm text-muted-foreground">{student.student_id}</p>
+                                            {(student.groups && student.groups.length > 0) ? (
+                                                <div className="mt-2 flex flex-wrap gap-1">
+                                                    {student.groups.map((g) => (
+                                                        <Badge key={g.id} variant="secondary" className="text-xs">
+                                                            {g.name}
+                                                        </Badge>
+                                                    ))}
+                                                </div>
+                                            ) : student.group_name ? (
+                                                <Badge variant="secondary" className="mt-2 text-xs">
+                                                    {student.group_name}
+                                                </Badge>
+                                            ) : (
+                                                <Badge variant="muted" className="mt-2 text-xs">No group</Badge>
+                                            )}
+                                        </div>
                                     </div>
-                                    <div className="flex-1 min-w-0">
-                                        <h3 className="font-semibold text-lg truncate text-foreground">{student.name}</h3>
-                                        <p className="text-sm text-muted-foreground truncate">{student.student_id}</p>
-                                        {(student.groups && student.groups.length > 0) ? (
-                                            <div className="flex flex-wrap gap-1 mt-2">
-                                                {student.groups.map((g) => (
-                                                    <Badge key={g.id} variant="secondary" className="text-xs">
-                                                        {g.name}
-                                                    </Badge>
-                                                ))}
-                                            </div>
-                                        ) : student.group_name ? (
-                                            <Badge variant="secondary" className="text-xs mt-2">
-                                                {student.group_name}
-                                            </Badge>
-                                        ) : null}
+                                    <div className="mt-4 flex gap-2 border-t border-border pt-4">
+                                        <Button
+                                            size="sm"
+                                            variant="ghost"
+                                            className="flex-1 text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
+                                            onClick={() => setDeleteId(student.student_id)}
+                                        >
+                                            <Trash2 className="h-3.5 w-3.5" />
+                                            Delete
+                                        </Button>
                                     </div>
-                                </div>
-                                <div className="flex gap-2 mt-4">
-                                    <Button
-                                        size="sm"
-                                        variant="outline"
-                                        className="flex-1 text-black hover:text-black border-black hover:bg-black/10"
-                                        onClick={() => setDeleteId(student.student_id)}
-                                    >
-                                        <Trash2 className="h-3 w-3 mr-1 text-black" />
-                                        Delete
-                                    </Button>
-                                </div>
-                            </Card>
-                        ))}
+                                </Card>
+                            );
+                        })}
                     </div>
 
                     {/* Pagination */}
                     {totalPages > 1 && (
-                        <Card className="p-4 bg-card-light border-0">
-                            <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
+                        <Card className="p-3">
+                            <div className="flex flex-col items-center justify-between gap-3 sm:flex-row">
                                 <div className="text-sm text-muted-foreground">
-                                    Page {currentPage} of {totalPages}
+                                    Page <span className="font-medium text-foreground">{currentPage}</span> of {totalPages}
                                 </div>
-                                <div className="flex items-center gap-2">
+                                <div className="flex items-center gap-1">
                                     <Button
                                         variant="outline"
                                         size="sm"
                                         onClick={() => goToPage(currentPage - 1)}
                                         disabled={currentPage === 1}
-                                        className="text-black border-black hover:bg-black/10 disabled:opacity-50 disabled:cursor-not-allowed"
                                     >
-                                        <ChevronLeft className="h-4 w-4 mr-1" />
+                                        <ChevronLeft className="h-4 w-4" />
                                         Previous
                                     </Button>
 
                                     {/* Page Numbers */}
                                     <div className="flex gap-1">
                                         {Array.from({ length: totalPages }, (_, i) => i + 1).map((page) => {
-                                            // Show first page, last page, current page, and pages around current
                                             const showPage =
                                                 page === 1 ||
                                                 page === totalPages ||
@@ -345,8 +358,8 @@ export default function Students() {
 
                                             if (showEllipsis) {
                                                 return (
-                                                    <div key={page} className="px-2 py-1 text-muted-foreground">
-                                                        ...
+                                                    <div key={page} className="px-2 py-1 text-sm text-muted-foreground">
+                                                        …
                                                     </div>
                                                 );
                                             }
@@ -356,14 +369,10 @@ export default function Students() {
                                             return (
                                                 <Button
                                                     key={page}
-                                                    variant={currentPage === page ? "default" : "outline"}
-                                                    size="sm"
+                                                    variant={currentPage === page ? 'accent' : 'ghost'}
+                                                    size="icon"
+                                                    className="h-9 w-9"
                                                     onClick={() => goToPage(page)}
-                                                    className={
-                                                        currentPage === page
-                                                            ? "bg-accent hover:bg-accent/90 text-black font-semibold"
-                                                            : "text-black border-black hover:bg-black/10"
-                                                    }
                                                 >
                                                     {page}
                                                 </Button>
@@ -376,10 +385,9 @@ export default function Students() {
                                         size="sm"
                                         onClick={() => goToPage(currentPage + 1)}
                                         disabled={currentPage === totalPages}
-                                        className="text-black border-black hover:bg-black/10 disabled:opacity-50 disabled:cursor-not-allowed"
                                     >
                                         Next
-                                        <ChevronRight className="h-4 w-4 ml-1" />
+                                        <ChevronRight className="h-4 w-4" />
                                     </Button>
                                 </div>
                             </div>

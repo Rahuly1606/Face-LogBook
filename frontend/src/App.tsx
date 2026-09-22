@@ -16,6 +16,9 @@ import Settings from "./pages/Settings";
 import Login from "./pages/Login";
 import NotFound from "./pages/NotFound";
 import SelfRegister from "./pages/SelfRegister";
+import CameraEvents from "./pages/CameraEvents";
+import RecognitionMetrics from "./pages/RecognitionMetrics";
+import SystemHealth from "./pages/SystemHealth";
 
 const queryClient = new QueryClient();
 
@@ -109,6 +112,30 @@ const App = () => (
               element={
                 <ProtectedRoute>
                   <Settings />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/camera-events"
+              element={
+                <ProtectedRoute>
+                  <CameraEvents />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/recognition-metrics"
+              element={
+                <ProtectedRoute>
+                  <RecognitionMetrics />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/system-health"
+              element={
+                <ProtectedRoute>
+                  <SystemHealth />
                 </ProtectedRoute>
               }
             />

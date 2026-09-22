@@ -1,0 +1,630 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8">
+    <title>FaceLogBook | Interview System Design</title>
+    <style>
+        @page {
+            size: A4;
+            margin: 13mm 14mm 14mm;
+        }
+
+        :root {
+            --ink: #17202a;
+            --muted: #53606d;
+            --line: #d8e0e7;
+            --blue: #145da0;
+            --teal: #087f8c;
+            --gold: #b56a00;
+            --pale: #f3f7fa;
+            --red: #a94442;
+        }
+
+        * {
+            box-sizing: border-box;
+        }
+
+        body {
+            margin: 0;
+            color: var(--ink);
+            font: 9.2pt/1.35 "Segoe UI", Arial, sans-serif;
+        }
+
+        h1,
+        h2,
+        h3 {
+            margin: 0;
+            font-family: Georgia, "Times New Roman", serif;
+            letter-spacing: 0;
+        }
+
+        h1 {
+            font-size: 27pt;
+            line-height: 1.02;
+            color: var(--blue);
+        }
+
+        h2 {
+            margin: 15px 0 7px;
+            padding-bottom: 3px;
+            border-bottom: 2px solid var(--teal);
+            font-size: 16pt;
+            color: var(--blue);
+        }
+
+        h3 {
+            margin: 8px 0 4px;
+            font-size: 11pt;
+            color: var(--teal);
+        }
+
+        p {
+            margin: 4px 0 7px;
+        }
+
+        ul {
+            margin: 4px 0 7px 17px;
+            padding: 0;
+        }
+
+        li {
+            margin: 2px 0;
+        }
+
+        .cover {
+            min-height: 250mm;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+            page-break-after: always;
+        }
+
+        .kicker {
+            margin-top: 23mm;
+            color: var(--teal);
+            font-weight: 700;
+            letter-spacing: 1.5px;
+            text-transform: uppercase;
+        }
+
+        .subtitle {
+            margin-top: 9px;
+            font-size: 14pt;
+            color: var(--muted);
+            max-width: 500px;
+        }
+
+        .tagline {
+            margin-top: 20px;
+            padding: 11px 14px;
+            border-left: 5px solid var(--gold);
+            background: var(--pale);
+            font-size: 11pt;
+            max-width: 520px;
+        }
+
+        .meta {
+            border-top: 1px solid var(--line);
+            padding-top: 10px;
+            color: var(--muted);
+        }
+
+        .grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 9px 16px;
+        }
+
+        .grid3 {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 8px;
+        }
+
+        .panel {
+            border: 1px solid var(--line);
+            padding: 8px 10px;
+            background: #fff;
+        }
+
+        .panel.soft {
+            background: var(--pale);
+        }
+
+        .label {
+            display: inline-block;
+            padding: 2px 6px;
+            border-radius: 2px;
+            font-size: 7.5pt;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: .5px;
+            background: #e6f1f8;
+            color: var(--blue);
+        }
+
+        .label.warn {
+            background: #fff1d9;
+            color: var(--gold);
+        }
+
+        .label.risk {
+            background: #fbe9e8;
+            color: var(--red);
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 5px 0 8px;
+            font-size: 8.4pt;
+        }
+
+        th {
+            text-align: left;
+            background: var(--blue);
+            color: white;
+            padding: 5px 6px;
+        }
+
+        td {
+            vertical-align: top;
+            border-bottom: 1px solid var(--line);
+            padding: 5px 6px;
+        }
+
+        tr:nth-child(even) td {
+            background: #f8fafb;
+        }
+
+        .small {
+            font-size: 8pt;
+            color: var(--muted);
+        }
+
+        .flow {
+            border: 1px solid var(--line);
+            background: #fbfcfd;
+            padding: 7px;
+            margin: 6px 0;
+        }
+
+        .flow svg {
+            display: block;
+            width: 100%;
+            height: auto;
+        }
+
+        .avoid-break {
+            break-inside: avoid;
+        }
+
+        .page-break {
+            page-break-before: always;
+        }
+
+        .q {
+            font-weight: 700;
+            color: var(--blue);
+            margin-top: 7px;
+        }
+
+        .answer {
+            margin: 2px 0 5px 12px;
+        }
+
+        .footer {
+            margin-top: 10px;
+            color: var(--muted);
+            font-size: 7.5pt;
+            border-top: 1px solid var(--line);
+            padding-top: 5px;
+        }
+
+        @media screen {
+            body {
+                max-width: 900px;
+                margin: 24px auto;
+                padding: 0 20px;
+            }
+
+            .cover {
+                min-height: 700px;
+            }
+        }
+    </style>
+</head>
+
+<body>
+    <section class="cover">
+        <div>
+            <div class="kicker">Interview system design brief</div>
+            <h1>FaceLogBook</h1>
+            <div class="subtitle">AI-assisted, contactless attendance for classes, sections, and organizations.</div>
+            <div class="tagline"><b>One-line design:</b> React captures an image, Flask validates the attendance window,
+                InsightFace produces a face embedding, FAISS/NumPy finds the nearest enrolled pose, and SQL records the
+                attendance plus an audit trail.</div>
+            <h2>Project Snapshot</h2>
+            <div class="grid">
+                <div class="panel"><span class="label">Frontend</span>
+                    <p>React 18 + TypeScript, Vite, React Router, React Query, Tailwind/shadcn UI.</p>
+                </div>
+                <div class="panel"><span class="label">Backend</span>
+                    <p>Flask blueprints, SQLAlchemy/Alembic, JWT, rate limiting, CORS, Gunicorn-ready.</p>
+                </div>
+                <div class="panel"><span class="label">AI path</span>
+                    <p>InsightFace detection/embeddings, three pose vectors per student, FAISS with NumPy fallback.</p>
+                </div>
+                <div class="panel"><span class="label">Persistence</span>
+                    <p>MySQL-compatible relational database, local uploads, optional Google Drive integration.</p>
+                </div>
+            </div>
+        </div>
+        <div class="meta"><b>Revision guide:</b> Use the blue labels for implemented concepts, amber for assumptions or
+            recommended evolution, and red for current hardening risks.<br>Source basis: repository code and README
+            reviewed August 2026. Claims such as 97% accuracy and sub-100ms latency are documented targets, not
+            independently verified here.</div>
+    </section>
+
+    <h2>1. Features & Requirements</h2>
+    <div class="grid">
+        <div class="panel">
+            <h3>Key features</h3>
+            <ul>
+                <li>Live webcam and uploaded-photo recognition</li>
+                <li>On-time/late windows by group, with debounce</li>
+                <li>Student registration, multi-pose capture, CSV import</li>
+                <li>Groups/sections, bulk assignment, expiring public links</li>
+                <li>Attendance logs, camera in/out events, analytics</li>
+                <li>Recognition metrics, unrecognized-face review, settings</li>
+            </ul>
+        </div>
+        <div class="panel">
+            <h3>Functional requirements</h3>
+            <ul>
+                <li>Authenticate operators and protect admin workflows.</li>
+                <li>Recognize one or more faces and return confidence/outcome.</li>
+                <li>Reject faces outside the selected group.</li>
+                <li>Mark check-in/out idempotently within configured windows.</li>
+                <li>Persist evidence for reporting and evaluation.</li>
+                <li>Allow controlled self-registration through expiring links.</li>
+            </ul>
+        </div>
+    </div>
+    <h3>Non-functional requirements</h3>
+    <table>
+        <tr>
+            <th>Quality</th>
+            <th>Design response</th>
+            <th>Interview framing</th>
+        </tr>
+        <tr>
+            <td>Performance</td>
+            <td>Resize input, 320x320 detector, cached embeddings, FAISS/NumPy search, timing logs.</td>
+            <td>Recognition is CPU-bound; measure p95 end-to-end latency, not only search time.</td>
+        </tr>
+        <tr>
+            <td>Reliability</td>
+            <td>DB pool pre-ping/recycle, transactions, graceful model-init failure, health endpoints.</td>
+            <td>Model availability and database availability are separate failure domains.</td>
+        </tr>
+        <tr>
+            <td>Scalability</td>
+            <td>Stateless HTTP API shape; vector index cached in process; async import jobs.</td>
+            <td>Horizontal scale needs shared index refresh/versioning and external job workers.</td>
+        </tr>
+        <tr>
+            <td>Security</td>
+            <td>JWT, CORS allowlist, rate limiting, upload validation, expiring registration tokens.</td>
+            <td>Biometric data and authentication require stronger production controls than current dev defaults.</td>
+        </tr>
+    </table>
+
+    <h2>2. High-Level Architecture</h2>
+    <div class="flow"><svg viewBox="0 0 760 240" role="img" aria-label="High level architecture diagram">
+            <defs>
+                <marker id="a" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto">
+                    <path d="M0,0 L8,4 L0,8 z" fill="#145da0" />
+                </marker>
+            </defs>
+            <rect x="18" y="78" width="135" height="64" rx="4" fill="#e6f1f8" stroke="#145da0" /><text x="85" y="104"
+                text-anchor="middle" font-weight="bold">React web app</text><text x="85" y="121" text-anchor="middle"
+                font-size="11">camera / upload / logs</text>
+            <rect x="207" y="55" width="155" height="110" rx="4" fill="#e3f4f1" stroke="#087f8c" /><text x="284" y="81"
+                text-anchor="middle" font-weight="bold">Flask API</text><text x="284" y="100" text-anchor="middle"
+                font-size="11">auth + blueprints</text><text x="284" y="118" text-anchor="middle"
+                font-size="11">validation + services</text><text x="284" y="136" text-anchor="middle"
+                font-size="11">rate limit + CORS</text>
+            <rect x="424" y="15" width="140" height="62" rx="4" fill="#fff1d9" stroke="#b56a00" /><text x="494" y="40"
+                text-anchor="middle" font-weight="bold">Recognition</text><text x="494" y="57" text-anchor="middle"
+                font-size="11">InsightFace + FAISS</text>
+            <rect x="424" y="96" width="140" height="62" rx="4" fill="#f3f7fa" stroke="#53606d" /><text x="494" y="121"
+                text-anchor="middle" font-weight="bold">Domain services</text><text x="494" y="138" text-anchor="middle"
+                font-size="11">attendance / camera / import</text>
+            <rect x="625" y="55" width="115" height="110" rx="4" fill="#e6f1f8" stroke="#145da0" /><text x="682" y="83"
+                text-anchor="middle" font-weight="bold">MySQL</text><text x="682" y="101" text-anchor="middle"
+                font-size="11">students + groups</text><text x="682" y="119" text-anchor="middle"
+                font-size="11">attendance + logs</text><text x="682" y="137" text-anchor="middle"
+                font-size="11">settings + jobs</text>
+            <line x1="153" y1="110" x2="207" y2="110" stroke="#145da0" stroke-width="2" marker-end="url(#a)" />
+            <line x1="362" y1="100" x2="424" y2="47" stroke="#145da0" stroke-width="2" marker-end="url(#a)" />
+            <line x1="362" y1="122" x2="424" y2="127" stroke="#145da0" stroke-width="2" marker-end="url(#a)" />
+            <line x1="564" y1="48" x2="625" y2="86" stroke="#145da0" stroke-width="2" marker-end="url(#a)" />
+            <line x1="564" y1="130" x2="625" y2="130" stroke="#145da0" stroke-width="2" marker-end="url(#a)" />
+        </svg></div>
+    <div class="grid3">
+        <div class="panel soft"><b>Request path</b><br>Browser -> JWT/CORS -> blueprint -> service -> DB.</div>
+        <div class="panel soft"><b>Stateful edge</b><br>Per-process model, embeddings cache, FAISS index,
+            recent-recognition debounce.</div>
+        <div class="panel soft"><b>External state</b><br>Database, uploads, optional Drive. These need shared storage
+            for multi-instance deployment.</div>
+    </div>
+
+    <h2>3. Recognition Data Flow</h2>
+    <div class="flow"><svg viewBox="0 0 760 128" role="img" aria-label="Recognition data flow diagram">
+            <defs>
+                <marker id="b" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto">
+                    <path d="M0,0 L8,4 L0,8 z" fill="#087f8c" />
+                </marker>
+            </defs>
+            <g font-size="12" text-anchor="middle">
+                <rect x="10" y="38" width="105" height="48" fill="#e6f1f8" stroke="#145da0" /><text x="62" y="58">Frame
+                    / photo</text><text x="62" y="74">+ group_id</text>
+                <rect x="145" y="38" width="105" height="48" fill="#e3f4f1" stroke="#087f8c" /><text x="197"
+                    y="58">Time-window</text><text x="197" y="74">gate</text>
+                <rect x="280" y="38" width="105" height="48" fill="#fff1d9" stroke="#b56a00" /><text x="332"
+                    y="58">Detect +</text><text x="332" y="74">embed</text>
+                <rect x="415" y="38" width="105" height="48" fill="#fff1d9" stroke="#b56a00" /><text x="467"
+                    y="58">Top-k vector</text><text x="467" y="74">match</text>
+                <rect x="550" y="38" width="95" height="48" fill="#e3f4f1" stroke="#087f8c" /><text x="597" y="58">Group
+                    +</text><text x="597" y="74">threshold</text>
+                <rect x="675" y="38" width="75" height="48" fill="#e6f1f8" stroke="#145da0" /><text x="712" y="58">Mark
+                    +</text><text x="712" y="74">log</text>
+            </g>
+            <g stroke="#087f8c" stroke-width="2" marker-end="url(#b)">
+                <line x1="115" y1="62" x2="145" y2="62" />
+                <line x1="250" y1="62" x2="280" y2="62" />
+                <line x1="385" y1="62" x2="415" y2="62" />
+                <line x1="520" y1="62" x2="550" y2="62" />
+                <line x1="645" y1="62" x2="675" y2="62" />
+            </g>
+        </svg></div>
+    <p class="small">Implemented behavior: live/upload endpoints gate by IST window, require a selected group, process
+        recognized faces, reject wrong-section matches, then update attendance. RecognitionLog stores score, second-best
+        score, confidence ratio, timing breakdown, threshold, source, and result.</p>
+
+    <div class="page-break"></div>
+    <h2>4. Database / Schema Design</h2>
+    <div class="flow"><svg viewBox="0 0 760 230" role="img" aria-label="Database relationship diagram">
+            <g font-size="11">
+                <rect x="15" y="15" width="150" height="62" fill="#e6f1f8" stroke="#145da0" /><text x="25" y="35"
+                    font-weight="bold">students</text><text x="25" y="52">student_id, name, photo</text><text x="25"
+                    y="67">legacy group_id</text>
+                <rect x="220" y="15" width="150" height="62" fill="#e6f1f8" stroke="#145da0" /><text x="230" y="35"
+                    font-weight="bold">groups</text><text x="230" y="52">id, unique name</text><text x="230"
+                    y="67">attendance windows</text>
+                <rect x="425" y="15" width="150" height="62" fill="#f3f7fa" stroke="#53606d" /><text x="435" y="35"
+                    font-weight="bold">student_groups</text><text x="435" y="52">student_id, group_id</text><text
+                    x="435" y="67">many-to-many</text>
+                <rect x="630" y="15" width="115" height="62" fill="#fff1d9" stroke="#b56a00" /><text x="640" y="35"
+                    font-weight="bold">face_embeddings</text><text x="640" y="52">student_id + pose</text><text x="640"
+                    y="67">512-d vector</text>
+                <rect x="15" y="140" width="150" height="62" fill="#e3f4f1" stroke="#087f8c" /><text x="25" y="160"
+                    font-weight="bold">attendance</text><text x="25" y="177">student + group + date</text><text x="25"
+                    y="192">in/out + status</text>
+                <rect x="220" y="140" width="150" height="62" fill="#f3f7fa" stroke="#53606d" /><text x="230" y="160"
+                    font-weight="bold">camera_events</text><text x="230" y="177">in/out audit events</text><text x="230"
+                    y="192">local date + reason</text>
+                <rect x="425" y="140" width="150" height="62" fill="#f3f7fa" stroke="#53606d" /><text x="435" y="160"
+                    font-weight="bold">recognition_logs</text><text x="435" y="177">scores + timings</text><text x="435"
+                    y="192">outcome + source</text>
+                <rect x="630" y="140" width="115" height="62" fill="#f3f7fa" stroke="#53606d" /><text x="640" y="160"
+                    font-weight="bold">import_jobs</text><text x="640" y="177">progress + errors</text><text x="640"
+                    y="192">async imports</text>
+            </g>
+            <g stroke="#145da0" stroke-width="1.5">
+                <line x1="165" y1="46" x2="220" y2="46" />
+                <line x1="370" y1="46" x2="425" y2="46" />
+                <line x1="575" y1="46" x2="630" y2="46" />
+                <line x1="90" y1="77" x2="90" y2="140" />
+                <line x1="90" y1="77" x2="295" y2="140" />
+                <line x1="90" y1="77" x2="500" y2="140" />
+                <line x1="295" y1="77" x2="295" y2="140" />
+            </g>
+        </svg></div>
+    <table>
+        <tr>
+            <th>Table</th>
+            <th>Role / key constraints</th>
+        </tr>
+        <tr>
+            <td><b>students</b> / <b>groups</b></td>
+            <td>Core identity and enrollment. A legacy one-to-many group_id coexists with student_groups many-to-many;
+                migrations/callers must handle both.</td>
+        </tr>
+        <tr>
+            <td><b>face_embeddings</b></td>
+            <td>Unique per student + pose (front/left/right), normalized serialized vector. Best match is mapped back to
+                student.</td>
+        </tr>
+        <tr>
+            <td><b>attendance</b> / <b>camera_events</b></td>
+            <td>Daily business summary versus event-level in/out audit trail. Indexed by student/date and local
+                date/timestamp.</td>
+        </tr>
+        <tr>
+            <td><b>recognition_logs</b></td>
+            <td>Observability and evaluation: score distribution, TP/FP/FN, latency, threshold, source.</td>
+        </tr>
+        <tr>
+            <td><b>registration_links</b> / <b>import_jobs</b> / <b>settings</b></td>
+            <td>Controlled onboarding, long-running import progress, and runtime attendance policy.</td>
+        </tr>
+    </table>
+
+    <h2>5. API & Service Design</h2>
+    <table>
+        <tr>
+            <th>Surface</th>
+            <th>Representative endpoints</th>
+            <th>Owner</th>
+        </tr>
+        <tr>
+            <td>Auth</td>
+            <td><b>/api/v1/auth</b>/login, /refresh</td>
+            <td>JWT identity and role claims</td>
+        </tr>
+        <tr>
+            <td>Recognition</td>
+            <td><b>/api/v1/attendance</b>/live, /upload, logs, window-status</td>
+            <td>Attendance API + FaceService + AttendanceService</td>
+        </tr>
+        <tr>
+            <td>Operations</td>
+            <td><b>/api/v1/students</b>, <b>/groups</b>, /settings</td>
+            <td>CRUD, enrollment, CSV/import jobs, policies</td>
+        </tr>
+        <tr>
+            <td>Audit / insight</td>
+            <td><b>/camera-events</b>, <b>/metrics</b>, <b>/health</b></td>
+            <td>Event history, model timing, health/debug checks</td>
+        </tr>
+        <tr>
+            <td>Public onboarding</td>
+            <td><b>/public/register/&lt;token&gt;</b></td>
+            <td>Token validation, image checks, student registration</td>
+        </tr>
+    </table>
+    <div class="grid">
+        <div class="panel">
+            <h3>Service boundaries</h3>
+            <ul>
+                <li><b>FaceService:</b> decode, resize, detect, embed, index/search, cache.</li>
+                <li><b>AttendanceService:</b> IST windows, late policy, debounce, daily reset.</li>
+                <li><b>CameraEventService:</b> alternating in/out events and audit metadata.</li>
+                <li><b>ImportJobProcessor:</b> batch CSV work outside the request path.</li>
+            </ul>
+        </div>
+        <div class="panel">
+            <h3>Consistency rule</h3>
+            <p>Recognition is probabilistic, but marking attendance must be deterministic: validate group, threshold,
+                window, and debounce before the transaction commits.</p>
+            <p class="small">Assumption: clients treat API responses as authoritative and retries may occur.</p>
+        </div>
+    </div>
+
+    <h2>6. Scale, Reliability, Security, Performance</h2>
+    <div class="grid">
+        <div class="panel">
+            <h3>Scale & performance</h3>
+            <ul>
+                <li>Cache embeddings/index for fast repeated reads.</li>
+                <li>Use one vector per pose for pose robustness.</li>
+                <li>Batch imports and move them to a durable queue at scale.</li>
+                <li>Partition/archive recognition_logs as volume grows.</li>
+                <li>For multiple API replicas, externalize index snapshots/cache invalidation.</li>
+            </ul>
+        </div>
+        <div class="panel">
+            <h3>Reliability</h3>
+            <ul>
+                <li>Keep attendance write and event/log writes transactional where possible.</li>
+                <li>Use health checks for DB, model, memory, and cache state.</li>
+                <li>Store uploads in object storage with backups and lifecycle rules.</li>
+                <li>Make import jobs resumable and idempotent.</li>
+                <li>Use UTC storage plus explicit IST presentation consistently.</li>
+            </ul>
+        </div>
+    </div>
+    <div class="grid">
+        <div class="panel">
+            <h3>Security baseline</h3>
+            <ul>
+                <li>HTTPS, short-lived JWTs, role checks, strict CORS.</li>
+                <li>Hash passwords with Argon2/bcrypt; rotate secrets.</li>
+                <li>Encrypt biometric vectors and images at rest; restrict access.</li>
+                <li>Remove debug token endpoints and avoid returning raw exceptions.</li>
+                <li>Validate MIME, size, content, and image count; rate-limit public registration.</li>
+            </ul>
+        </div>
+        <div class="panel">
+            <h3>Current risks to mention honestly</h3>
+            <p><span class="label risk">Hardening</span> Source currently compares passwords directly, has development
+                secret fallbacks, and exposes a debug token-check route.</p>
+            <p><span class="label warn">Assumption</span> README benchmark numbers need a controlled dataset, hardware
+                profile, and p50/p95 measurement before being used as an SLO.</p>
+        </div>
+    </div>
+
+    <div class="page-break"></div>
+    <h2>7. Design Decisions & Trade-offs</h2>
+    <table>
+        <tr>
+            <th>Decision</th>
+            <th>Why</th>
+            <th>Trade-off</th>
+        </tr>
+        <tr>
+            <td>Three pose embeddings</td>
+            <td>Better robustness to head angle than averaging vectors.</td>
+            <td>~3x vector storage and index entries.</td>
+        </tr>
+        <tr>
+            <td>FAISS with NumPy fallback</td>
+            <td>Fast local similarity search while preserving developer portability.</td>
+            <td>Fallback may be slower; index state is process-local.</td>
+        </tr>
+        <tr>
+            <td>Attendance + camera events</td>
+            <td>Summary queries are simple; raw events preserve auditability.</td>
+            <td>Two representations require reconciliation rules.</td>
+        </tr>
+        <tr>
+            <td>Group time windows</td>
+            <td>Matches classroom policy and supports late marking.</td>
+            <td>Time zone and configuration edge cases need tests.</td>
+        </tr>
+        <tr>
+            <td>Async import jobs</td>
+            <td>Keeps large CSV work from blocking HTTP requests.</td>
+            <td>In-process thread is not durable across restarts; use a queue for production.</td>
+        </tr>
+        <tr>
+            <td>Relational DB for vectors</td>
+            <td>Simple enrollment lifecycle and transactional metadata.</td>
+            <td>Dedicated vector DB/object store may fit much larger biometric workloads.</td>
+        </tr>
+    </table>
+
+    <h2>8. Interview Questions & Short Answers</h2>
+    <div class="q">Why is the system not just CRUD?</div>
+    <div class="answer">Recognition is a probabilistic, CPU-heavy pipeline. The design separates detection/matching from
+        deterministic policy enforcement and persistence.</div>
+    <div class="q">How do you prevent duplicate marks?</div>
+    <div class="answer">AttendanceService applies a configurable debounce and updates the existing daily record; camera
+        events are also guarded by an event debounce.</div>
+    <div class="q">How do you handle a wrong class?</div>
+    <div class="answer">The selected group is validated after identity matching. A recognized student outside that group
+        is returned as wrong-section and is not marked.</div>
+    <div class="q">What is the scaling bottleneck?</div>
+    <div class="answer">Model inference and vector index memory, followed by log volume. Scale inference separately,
+        share/version the index, and archive or partition logs.</div>
+    <div class="q">What happens if the model is unavailable?</div>
+    <div class="answer">Startup logs the failure and the recognition endpoint returns a service-unavailable response;
+        health checks should surface this for orchestration.</div>
+    <div class="q">Why keep recognition logs?</div>
+    <div class="answer">They provide latency breakdowns, threshold tuning data, confidence margins, and TP/FP/FN
+        evaluation evidence.</div>
+    <div class="q">What would you fix before production?</div>
+    <div class="answer">Hash credentials, remove secret fallbacks/debug disclosure, secure biometric storage,
+        externalize jobs/cache/uploads, and add p95/load/security tests.</div>
+    <div class="q">What assumption matters most?</div>
+    <div class="answer">The deployment is initially modest and single-process enough for an in-memory index. A
+        multi-replica design needs explicit index synchronization and shared storage.</div>
+
+    <div class="footer">FaceLogBook interview architecture brief | Source-grounded summary | Keep this HTML beside the
+        PDF as the revision source.</div>
+</body>
+
+</html>

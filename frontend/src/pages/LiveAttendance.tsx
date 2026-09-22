@@ -3,10 +3,12 @@ import { AnimatePresence, motion } from 'framer-motion';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/hooks/use-toast';
-import { Camera, CameraOff, Loader2, Check, Users, Play, Pause, BookOpen, AlertCircle, Clock } from 'lucide-react';
+import { Camera, CameraOff, Loader2, Check, Users, Play, Pause, BookOpen, AlertCircle, Video } from 'lucide-react';
 import { attendanceApi, groupApi, settingsApi, type WindowStatusResponse } from '@/services/api';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { UnrecognizedCarousel, type UnrecognizedFace } from '@/components/UnrecognizedCarousel';
+import { PageHeader } from '@/components/layout/PageHeader';
+import { WindowStatusBanner } from '@/components/WindowStatusBanner';
 
 // #10 — unified entry type (replaces separate detectedQueue + OverlayEntry)
 interface DetectionEntry {
@@ -534,126 +536,69 @@ export default function LiveAttendance() {
 
     return (
         <div className="space-y-6">
-            <div>
-                <h1 className="text-3xl font-bold">Live Attendance</h1>
-                <p className="text-muted-foreground mt-1">Capture attendance using live camera feed</p>
-            </div>
-
-            {/* Section/Group Selection */}
-            <Card className="p-4 bg-card-light border-0">
-                <div className="flex items-center gap-4">
-                    <div className="flex items-center gap-2 flex-shrink-0">
-                        <BookOpen className="h-5 w-5 text-accent" />
-                        <label className="font-medium">Select Section:</label>
+            <PageHeader
+                title="Live Attendance"
+                description="Capture attendance from a live camera feed"
+                icon={Video}
+                actions={
+                    <div className="flex items-center gap-2 rounded-lg border border-border bg-card px-3 py-2">
+                        <BookOpen className="h-4 w-4 shrink-0 text-accent-foreground" />
+                        <Select value={selectedGroupId} onValueChange={setSelectedGroupId} disabled={loadingGroups || capturing}>
+                            <SelectTrigger className="h-8 w-44 border-0 shadow-none focus:ring-0">
+                                <SelectValue placeholder={loadingGroups ? "Loading…" : "Select section"} />
+                            </SelectTrigger>
+                            <SelectContent>
+                                {groups.map((group) => (
+                                    <SelectItem key={group.id} value={String(group.id)}>
+                                        {group.name} ({group.id})
+                                    </SelectItem>
+                                ))}
+                            </SelectContent>
+                        </Select>
                     </div>
-                    <Select value={selectedGroupId} onValueChange={setSelectedGroupId} disabled={loadingGroups || capturing}>
-                        <SelectTrigger className="w-full max-w-xs">
-                            <SelectValue placeholder={loadingGroups ? "Loading sections..." : "Choose a section/group"} />
-                        </SelectTrigger>
-                        <SelectContent>
-                            {groups.map((group) => (
-                                <SelectItem key={group.id} value={String(group.id)}>
-                                    {group.name} ({group.id})
-                                </SelectItem>
-                            ))}
-                        </SelectContent>
-                    </Select>
-                    {selectedGroupId && (
-                        <span className="text-sm text-muted-foreground">
-                            Selected: {groups.find(g => String(g.id) === selectedGroupId)?.name}
-                        </span>
-                    )}
-                </div>
-            </Card>
+                }
+            />
 
             {/* Attendance Window Status Banner */}
-            {windowStatus && (
-                <Card className={`p-4 border-0 ${windowStatus.status === 'on_time'
-                    ? 'bg-green-50 dark:bg-green-950/30 border-l-4 !border-l-green-500'
-                    : windowStatus.status === 'late'
-                        ? 'bg-yellow-50 dark:bg-yellow-950/30 border-l-4 !border-l-yellow-500'
-                        : windowStatus.status === 'early'
-                            ? 'bg-blue-50 dark:bg-blue-950/30 border-l-4 !border-l-blue-500'
-                            : 'bg-red-50 dark:bg-red-950/30 border-l-4 !border-l-red-500'
-                    }`}>
-                    <div className="flex items-center justify-between flex-wrap gap-2">
-                        <div className="flex items-center gap-3">
-                            <Clock className={`h-5 w-5 ${windowStatus.status === 'on_time' ? 'text-green-600' :
-                                windowStatus.status === 'late' ? 'text-yellow-600' :
-                                    windowStatus.status === 'early' ? 'text-blue-600' :
-                                        'text-red-600'
-                                }`} />
-                            <div>
-                                <p className={`font-semibold text-sm ${windowStatus.status === 'on_time' ? 'text-green-700 dark:text-green-400' :
-                                    windowStatus.status === 'late' ? 'text-yellow-700 dark:text-yellow-400' :
-                                        windowStatus.status === 'early' ? 'text-blue-700 dark:text-blue-400' :
-                                            'text-red-700 dark:text-red-400'
-                                    }`}>
-                                    {windowStatus.status === 'on_time' && '✅ Window Open — On Time'}
-                                    {windowStatus.status === 'late' && '⚠️ Late Window — Attendance will be marked as LATE'}
-                                    {windowStatus.status === 'early' && '🕐 Window Not Open Yet'}
-                                    {windowStatus.status === 'rejected' && '🚫 Late Entries Rejected'}
-                                    {windowStatus.status === 'closed' && '🔒 Attendance Window Closed'}
-                                </p>
-                                <p className="text-xs text-muted-foreground mt-0.5">
-                                    {windowStatus.message}
-                                </p>
-                            </div>
-                        </div>
-                        <div className="text-xs text-muted-foreground text-right">
-                            <span className="font-medium">On-time:</span> {windowStatus.window.window_start} – {windowStatus.window.window_end} &nbsp;|&nbsp;
-                            <span className="font-medium">Late until:</span> {windowStatus.window.late_end} &nbsp;|&nbsp;
-                            <span className="font-medium">Now:</span> {windowStatus.window.current_time} IST
-                        </div>
-                    </div>
-                </Card>
-            )}
+            {windowStatus && <WindowStatusBanner windowStatus={windowStatus} />}
 
             {/* Live Stats */}
-            <div className="grid gap-2 grid-cols-2 lg:grid-cols-4">
-                <Card className="p-2 bg-card-light border-0">
-                    <div className="flex items-center justify-between">
-                        <div>
-                            <p className="text-xs text-muted-foreground">In Frame</p>
-                            <p className="text-lg font-bold text-foreground">{liveStats.totalInFrame}</p>
-                        </div>
-                        <Users className="h-5 w-5 text-accent" />
+            <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+                <Card className="flex items-center justify-between p-3">
+                    <div>
+                        <p className="text-xs text-muted-foreground">In Frame</p>
+                        <p className="text-xl font-bold tnum text-foreground">{liveStats.totalInFrame}</p>
                     </div>
+                    <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-info/12"><Users className="h-4 w-4 text-info" /></div>
                 </Card>
-                <Card className="p-2 bg-card-light border-0">
-                    <div className="flex items-center justify-between">
-                        <div>
-                            <p className="text-xs text-muted-foreground">Recognized</p>
-                            <p className="text-lg font-bold text-green-600">{liveStats.recognizedCount}</p>
-                        </div>
-                        <Check className="h-5 w-5 text-green-600" />
+                <Card className="flex items-center justify-between p-3">
+                    <div>
+                        <p className="text-xs text-muted-foreground">Recognized</p>
+                        <p className="text-xl font-bold tnum text-success">{liveStats.recognizedCount}</p>
                     </div>
+                    <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-success/12"><Check className="h-4 w-4 text-success" /></div>
                 </Card>
-                <Card className="p-2 bg-card-light border-0">
-                    <div className="flex items-center justify-between">
-                        <div>
-                            <p className="text-xs text-muted-foreground">Unknown</p>
-                            <p className="text-lg font-bold text-orange-600">{liveStats.unrecognizedCount}</p>
-                        </div>
-                        <Users className="h-5 w-5 text-orange-600" />
+                <Card className="flex items-center justify-between p-3">
+                    <div>
+                        <p className="text-xs text-muted-foreground">Unknown</p>
+                        <p className="text-xl font-bold tnum text-warning-foreground">{liveStats.unrecognizedCount}</p>
                     </div>
+                    <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-warning/15"><Users className="h-4 w-4 text-warning-foreground" /></div>
                 </Card>
-                <Card className="p-2 bg-card-light border-0">
-                    <div className="flex items-center justify-between">
-                        <div>
-                            <p className="text-xs text-muted-foreground">Present</p>
-                            <p className="text-lg font-bold text-foreground">{presentStudents.length}</p>
-                        </div>
-                        <Check className="h-5 w-5 text-accent" />
+                <Card className="flex items-center justify-between p-3">
+                    <div>
+                        <p className="text-xs text-muted-foreground">Present</p>
+                        <p className="text-xl font-bold tnum text-foreground">{presentStudents.length}</p>
                     </div>
+                    <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-accent/15"><Check className="h-4 w-4 text-accent-foreground" /></div>
                 </Card>
             </div>
 
             <div className="grid gap-4 lg:gap-6 lg:grid-cols-3">
                 {/* Camera Feed */}
                 <div className="lg:col-span-2">
-                    <Card className="p-4 sm:p-6 bg-card-dark border-0">
-                        <div className="h-[400px] sm:h-[500px] bg-black rounded-lg overflow-hidden relative">
+                    <Card className="p-4 sm:p-6">
+                        <div className="relative h-[400px] overflow-hidden rounded-xl bg-gray-900 sm:h-[500px]">
                             {capturing ? (
                                 <video
                                     ref={videoRef}
@@ -703,7 +648,8 @@ export default function LiveAttendance() {
                                     onClick={startCamera}
                                     disabled={!selectedGroupId || (windowStatus != null && windowStatus.status !== 'on_time' && windowStatus.status !== 'late')}
                                     size="sm"
-                                    className="w-full sm:flex-1 bg-accent hover:bg-accent/90 text-black font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+                                    variant="accent"
+                                    className="w-full sm:flex-1"
                                 >
                                     <Camera className="mr-2 h-3.5 w-3.5" />
                                     <span className="text-sm">
@@ -722,8 +668,9 @@ export default function LiveAttendance() {
                                         onClick={handleCapture}
                                         disabled={!videoReady || loading || continuousMode}
                                         size="sm"
+                                        variant="accent"
                                         aria-label="Capture frame (Space)"
-                                        className="flex-1 bg-accent hover:bg-accent/90 text-black font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+                                        className="flex-1"
                                     >
                                         {!videoReady ? (
                                             <>
@@ -748,7 +695,7 @@ export default function LiveAttendance() {
                                             disabled={!videoReady}
                                             size="sm"
                                             variant="outline"
-                                            className="w-full sm:flex-1 text-black border-black hover:bg-black/10 disabled:opacity-50 disabled:cursor-not-allowed"
+                                            className="w-full sm:flex-1"
                                         >
                                             <Play className="mr-2 h-3.5 w-3.5" />
                                             <span className="text-sm">Live</span>
@@ -758,7 +705,7 @@ export default function LiveAttendance() {
                                             onClick={stopContinuousCapture}
                                             size="sm"
                                             variant="outline"
-                                            className="w-full sm:flex-1 text-black border-black hover:bg-black/10"
+                                            className="w-full sm:flex-1"
                                         >
                                             <Pause className="mr-2 h-3.5 w-3.5" />
                                             <span className="text-sm">Stop Live</span>
@@ -768,7 +715,7 @@ export default function LiveAttendance() {
                                         onClick={stopCamera}
                                         size="sm"
                                         variant="outline"
-                                        className="w-full sm:flex-1 text-black border-black hover:bg-black/10"
+                                        className="w-full sm:flex-1"
                                     >
                                         <CameraOff className="mr-2 h-3.5 w-3.5" />
                                         <span className="text-sm">Stop Camera</span>
@@ -782,7 +729,7 @@ export default function LiveAttendance() {
                 {/* Detection Results & Present Students */}
                 <div className="space-y-3">
                     {/* Live Recognition Feed with Present Count */}
-                    <Card className="p-3 bg-card-light border-0">
+                    <Card className="p-3">
                         {/* Header: title + live indicator */}
                         <div className="flex items-center justify-between mb-3">
                             <div className="flex items-center gap-1.5">
@@ -964,7 +911,7 @@ export default function LiveAttendance() {
                     )}
 
                     {/* Recent Present Students */}
-                    <Card className="p-3 bg-card-light border-0">
+                    <Card className="p-3">
                         <div className="flex items-center justify-between mb-2">
                             <div className="flex items-center gap-1.5">
                                 <Users className="h-4 w-4" />
